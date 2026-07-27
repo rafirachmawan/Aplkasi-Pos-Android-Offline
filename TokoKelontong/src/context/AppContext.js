@@ -6,6 +6,7 @@ export const AppContext = createContext();
 const initialState = {
   cart: [],
   storeName: 'Toko Kelontong',
+  storeLogo: null,
   printerAddress: null,
 };
 
@@ -43,6 +44,8 @@ const reducer = (state, action) => {
       return { ...state, cart: [] };
     case 'SET_STORE_NAME':
       return { ...state, storeName: action.payload };
+    case 'SET_STORE_LOGO':
+      return { ...state, storeLogo: action.payload };
     case 'SET_PRINTER_ADDRESS':
       return { ...state, printerAddress: action.payload };
     case 'LOAD_SETTINGS':
@@ -60,11 +63,13 @@ export const AppProvider = ({ children }) => {
     const loadSettings = async () => {
       try {
         const storeName = await AsyncStorage.getItem('storeName');
+        const storeLogo = await AsyncStorage.getItem('storeLogo');
         const printerAddress = await AsyncStorage.getItem('printerAddress');
         dispatch({
           type: 'LOAD_SETTINGS',
           payload: {
             storeName: storeName || 'Toko Kelontong',
+            storeLogo: storeLogo || null,
             printerAddress: printerAddress || null,
           }
         });

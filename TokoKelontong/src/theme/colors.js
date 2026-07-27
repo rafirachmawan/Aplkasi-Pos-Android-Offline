@@ -1,12 +1,12 @@
 export const colors = {
-  primary: '#10B981', // Hijau Emerald
-  primaryContainer: '#D1FAE5',
-  secondary: '#3B82F6',
-  background: '#F9FAFB',
+  primary: '#4F46E5', // Indigo 600
+  primaryContainer: '#E0E7FF',
+  secondary: '#0EA5E9', // Sky 500
+  background: '#F8FAFC', // Slate 50
   surface: '#FFFFFF',
   error: '#EF4444',
   warning: '#F59E0B',
-  text: '#111827',
-  textSecondary: '#6B7280',
-  border: '#E5E7EB',
+  text: '#0F172A', // Slate 900
+  textSecondary: '#64748B', // Slate 500
+  border: '#E2E8F0', // Slate 200
 };

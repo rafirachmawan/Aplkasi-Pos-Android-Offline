@@ -63,7 +63,7 @@ const DashboardScreen = ({ navigation }) => {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24 }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24, flexGrow: 1 }}>
       {/* Greeting */}
       <View style={styles.greeting}>
         <View>
@@ -72,7 +72,7 @@ const DashboardScreen = ({ navigation }) => {
             {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
           </Text>
         </View>
-        <MaterialCommunityIcons name="chart-line" size={32} color="#fff" />
+        <MaterialCommunityIcons name="chart-line" size={32} color={colors.primary} />
       </View>
 
       {/* Stat Cards */}
@@ -165,12 +165,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
   greeting: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.background,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 16,
+    paddingHorizontal: 24, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  greetSub: { fontSize: 12, color: '#A7F3D0', fontWeight: '500' },
-  greetDate: { fontSize: 16, fontWeight: 'bold', color: '#fff', marginTop: 2 },
+  greetSub: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+  greetDate: { fontSize: 18, fontWeight: '800', color: colors.text, marginTop: 4 },
 
   statsRow: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 12, gap: 10 },
   statCard: {

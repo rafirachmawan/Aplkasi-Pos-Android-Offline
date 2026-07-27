@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import {
   View,
   Text,
@@ -7,31 +7,33 @@ import {
   SafeAreaView,
   StatusBar,
   ScrollView,
+  Image,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { AppContext } from '../context/AppContext';
 import { colors } from '../theme/colors';
 
 const menuItems = [
   {
     name: 'Dashboard',
     icon: 'view-dashboard',
-    color: '#10B981',
-    bg: '#D1FAE5',
+    color: '#4F46E5', // Indigo
+    bg: '#E0E7FF',
     desc: 'Ringkasan & Statistik',
     screen: 'Dashboard',
   },
   {
     name: 'Kasir',
     icon: 'cart',
-    color: '#3B82F6',
-    bg: '#DBEAFE',
+    color: '#0EA5E9', // Sky
+    bg: '#E0F2FE',
     desc: 'Transaksi & POS',
     screen: 'Kasir',
   },
   {
     name: 'Gudang',
     icon: 'package-variant-closed',
-    color: '#8B5CF6',
+    color: '#8B5CF6', // Violet
     bg: '#EDE9FE',
     desc: 'Stok & Produk',
     screen: 'Gudang',
@@ -39,7 +41,7 @@ const menuItems = [
   {
     name: 'Laporan',
     icon: 'chart-box',
-    color: '#F59E0B',
+    color: '#F59E0B', // Amber
     bg: '#FEF3C7',
     desc: 'Laporan Penjualan',
     screen: 'Laporan',
@@ -47,14 +49,15 @@ const menuItems = [
   {
     name: 'Pengaturan',
     icon: 'cog',
-    color: '#EF4444',
-    bg: '#FEE2E2',
+    color: '#EC4899', // Pink
+    bg: '#FCE7F3',
     desc: 'Konfigurasi Toko',
     screen: 'Pengaturan',
   },
 ];
 
 const HomeScreen = ({ navigation }) => {
+  const { state } = useContext(AppContext);
   const today = new Date().toLocaleDateString('id-ID', {
     weekday: 'long',
     year: 'numeric',
@@ -64,17 +67,21 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar backgroundColor={colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor={colors.background} barStyle="dark-content" />
 
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.headerGreeting}>Selamat Datang 👋</Text>
-          <Text style={styles.headerTitle}>Toko Kelontong</Text>
+          <Text style={styles.headerTitle}>{state.storeName || 'Toko Kelontong'}</Text>
           <Text style={styles.headerDate}>{today}</Text>
         </View>
         <View style={styles.headerIcon}>
-          <MaterialCommunityIcons name="store" size={38} color="#fff" />
+          {state.storeLogo ? (
+            <Image source={{ uri: state.storeLogo }} style={styles.storeLogoImage} />
+          ) : (
+            <MaterialCommunityIcons name="store" size={34} color={colors.primary} />
+          )}
         </View>
       </View>
 
@@ -116,48 +123,48 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 24,
+    backgroundColor: colors.background,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    elevation: 6,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
   },
   headerLeft: {
     flex: 1,
   },
   headerGreeting: {
-    fontSize: 13,
-    color: '#A7F3D0',
+    fontSize: 14,
+    color: colors.textSecondary,
     fontWeight: '500',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
-    letterSpacing: 0.4,
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: 0.2,
   },
   headerDate: {
-    fontSize: 11,
-    color: '#D1FAE5',
-    marginTop: 4,
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
+    marginTop: 6,
   },
   headerIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primaryContainer,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  storeLogoImage: {
+    width: '100%', height: '100%', borderRadius: 30,
   },
   body: {
     padding: 20,
@@ -179,17 +186,17 @@ const styles = StyleSheet.create({
   card: {
     width: '47%',
     backgroundColor: colors.surface,
-    borderRadius: 18,
+    borderRadius: 20,
     paddingVertical: 24,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 6,
+    shadowRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(0,0,0,0.02)',
   },
   iconCircle: {
     width: 72,

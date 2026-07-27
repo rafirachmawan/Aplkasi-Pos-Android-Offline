@@ -16,9 +16,15 @@ import { colors } from '../theme/colors';
 const Stack = createStackNavigator();
 
 const defaultHeaderOptions = {
-  headerStyle: { backgroundColor: colors.primary },
-  headerTintColor: '#fff',
-  headerTitleStyle: { fontWeight: 'bold' },
+  headerStyle: { 
+    backgroundColor: colors.background, 
+    elevation: 0, 
+    shadowOpacity: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border
+  },
+  headerTintColor: colors.text,
+  headerTitleStyle: { fontWeight: '700' },
 };
 
 export default function AppNavigator() {

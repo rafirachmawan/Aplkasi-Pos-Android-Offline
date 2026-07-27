@@ -125,6 +125,7 @@ const AddProductScreen = ({ navigation, route }) => {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
+      contentContainerStyle={{ flexGrow: 1 }}
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.formContainer}>

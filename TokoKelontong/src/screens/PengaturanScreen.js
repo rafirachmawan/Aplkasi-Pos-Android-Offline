@@ -9,8 +9,10 @@ import {
   Alert,
   Switch,
   Platform,
+  Image,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppContext } from '../context/AppContext';
 import { colors } from '../theme/colors';
@@ -31,13 +33,32 @@ const PengaturanScreen = () => {
   const { state, dispatch } = useContext(AppContext);
   const [storeNameInput, setStoreNameInput] = useState(state.storeName);
   const [printerInput, setPrinterInput] = useState(state.printerAddress || '');
+  const [logoUri, setLogoUri] = useState(state.storeLogo);
   const [autoSync, setAutoSync] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setStoreNameInput(state.storeName);
     setPrinterInput(state.printerAddress || '');
-  }, [state.storeName, state.printerAddress]);
+    setLogoUri(state.storeLogo);
+  }, [state.storeName, state.printerAddress, state.storeLogo]);
+
+  const handlePickLogo = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setLogoUri(result.assets[0].uri);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Gagal membuka galeri');
+    }
+  };
 
   const handleSave = async () => {
     if (!storeNameInput.trim()) {
@@ -47,8 +68,16 @@ const PengaturanScreen = () => {
     try {
       await AsyncStorage.setItem('storeName', storeNameInput.trim());
       await AsyncStorage.setItem('printerAddress', printerInput.trim());
+      if (logoUri) {
+        await AsyncStorage.setItem('storeLogo', logoUri);
+      } else {
+        await AsyncStorage.removeItem('storeLogo');
+      }
+      
       dispatch({ type: 'SET_STORE_NAME', payload: storeNameInput.trim() });
       dispatch({ type: 'SET_PRINTER_ADDRESS', payload: printerInput.trim() || null });
+      dispatch({ type: 'SET_STORE_LOGO', payload: logoUri || null });
+      
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -80,13 +109,32 @@ const PengaturanScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+      keyboardShouldPersistTaps="handled"
+    >
       {/* Header Info Toko */}
       <View style={styles.headerCard}>
-        <View style={styles.storeAvatar}>
-          <MaterialCommunityIcons name="store" size={36} color={colors.primary} />
+        <View style={{ position: 'relative' }}>
+          <TouchableOpacity style={styles.storeAvatar} onPress={handlePickLogo}>
+            {logoUri ? (
+              <Image source={{ uri: logoUri }} style={styles.storeLogoImage} />
+            ) : (
+              <MaterialCommunityIcons name="camera-plus" size={30} color={colors.primaryContainer} />
+            )}
+          </TouchableOpacity>
+          {logoUri && (
+            <TouchableOpacity 
+              style={styles.removeLogoBtn} 
+              onPress={() => setLogoUri(null)}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="close-circle" size={24} color="#EF4444" />
+            </TouchableOpacity>
+          )}
         </View>
-        <View>
+        <View style={styles.headerTextContainer}>
           <Text style={styles.storeName}>{state.storeName}</Text>
           <Text style={styles.storeSubtitle}>Aplikasi Kasir & Stok Offline</Text>
         </View>
@@ -177,17 +225,35 @@ const styles = StyleSheet.create({
   headerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary,
-    padding: 20,
-    gap: 14,
+    backgroundColor: colors.background,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    gap: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   storeAvatar: {
-    width: 60, height: 60, borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: colors.primaryContainer,
     alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)',
   },
-  storeName: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  storeSubtitle: { fontSize: 12, color: '#A7F3D0', marginTop: 2 },
+  storeLogoImage: {
+    width: '100%', height: '100%', borderRadius: 32,
+  },
+  removeLogoBtn: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+  },
+  storeName: { fontSize: 24, fontWeight: '800', color: colors.text },
+  storeSubtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 4 },
 
   sectionTitle: {
     fontSize: 12, fontWeight: '700', color: colors.textSecondary,
