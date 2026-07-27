@@ -1,0 +1,108 @@
+import React, { useState, useCallback } from 'react';
+import { View, FlatList, StyleSheet, Alert } from 'react-native';
+import { Searchbar, FAB, useTheme, Text } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
+import ProductRepository from '../database/productRepository';
+import ProductCard from '../components/ProductCard';
+
+const GudangScreen = ({ navigation }) => {
+  const theme = useTheme();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [products, setProducts] = useState([]);
+
+  const fetchProducts = useCallback(() => {
+    try {
+      let data = [];
+      if (searchQuery.trim() === '') {
+        data = ProductRepository.getAllProducts();
+      } else {
+        data = ProductRepository.searchProductByName(searchQuery);
+      }
+      setProducts(data);
+    } catch (error) {
+      console.error("Failed to fetch products:", error);
+    }
+  }, [searchQuery]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProducts();
+    }, [fetchProducts])
+  );
+
+  const handleDelete = (id) => {
+    Alert.alert(
+      "Hapus Barang",
+      "Apakah Anda yakin ingin menghapus barang ini?",
+      [
+        { text: "Batal", style: "cancel" },
+        { 
+          text: "Hapus", 
+          style: "destructive",
+          onPress: () => {
+            try {
+              ProductRepository.deleteProduct(id);
+              fetchProducts();
+            } catch (error) {
+              Alert.alert("Error", "Gagal menghapus produk");
+            }
+          } 
+        }
+      ]
+    );
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Searchbar
+        placeholder="Cari barang..."
+        onChangeText={setSearchQuery}
+        value={searchQuery}
+        style={styles.searchbar}
+      />
+      
+      <FlatList
+        data={products}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
+          <ProductCard 
+            product={item} 
+            onEdit={() => navigation.navigate('AddProductScreen', { product: item })}
+            onDelete={() => handleDelete(item.id)}
+          />
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={{ color: theme.colors.textSecondary }}>Belum ada barang di gudang.</Text>
+          </View>
+        }
+        contentContainerStyle={{ paddingBottom: 80 }}
+      />
+
+      <FAB
+        icon="plus"
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        color="#fff"
+        onPress={() => navigation.navigate('AddProductScreen')}
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  searchbar: { margin: 16 },
+  fab: {
+    position: 'absolute',
+    margin: 16,
+    right: 0,
+    bottom: 0,
+  },
+  emptyContainer: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center'
+  }
+});
+
+export default GudangScreen;

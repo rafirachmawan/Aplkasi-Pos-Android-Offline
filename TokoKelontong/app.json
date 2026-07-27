@@ -10,6 +10,7 @@
       "supportsTablet": true
     },
     "android": {
+<<<<<<< HEAD
       "package": "com.rafi.tokokelontong",
       "permissions": [
         "CAMERA",
@@ -18,20 +19,42 @@
         "BLUETOOTH_SCAN",
         "WRITE_EXTERNAL_STORAGE"
       ],
+=======
+>>>>>>> f39751906b4f54e6c2a73e0045dabdb926a8e30f
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
+<<<<<<< HEAD
       }
+=======
+      },
+      "permissions": [
+        "CAMERA",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN"
+      ]
+>>>>>>> f39751906b4f54e6c2a73e0045dabdb926a8e30f
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+<<<<<<< HEAD
       "expo-sqlite",
       "expo-barcode-scanner",
       "expo-sharing"
+=======
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Izinkan aplikasi mengakses kamera untuk scan barcode produk."
+        }
+      ]
+>>>>>>> f39751906b4f54e6c2a73e0045dabdb926a8e30f
     ]
   }
 }
