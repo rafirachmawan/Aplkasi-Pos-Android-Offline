@@ -130,7 +130,7 @@ const DashboardScreen = ({ navigation }) => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.txInvoice}>{tx.invoice_number}</Text>
                 <Text style={styles.txTime}>
-                  {new Date(tx.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(tx.created_at.replace(' ', 'T')).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               </View>
               <Text style={styles.txAmount}>{formatRupiah(tx.grand_total)}</Text>
@@ -139,28 +139,7 @@ const DashboardScreen = ({ navigation }) => {
         )}
       </View>
 
-      {/* Quick Actions */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Aksi Cepat</Text>
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('Kasir')}>
-            <MaterialCommunityIcons name="cart-plus" size={24} color={colors.primary} />
-            <Text style={styles.quickLabel}>Kasir</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('Gudang')}>
-            <MaterialCommunityIcons name="package-variant-closed" size={24} color={colors.secondary} />
-            <Text style={styles.quickLabel}>Gudang</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('Laporan')}>
-            <MaterialCommunityIcons name="chart-box" size={24} color={colors.warning} />
-            <Text style={styles.quickLabel}>Laporan</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('SettingNota')}>
-            <MaterialCommunityIcons name="receipt" size={24} color="#8B5CF6" />
-            <Text style={styles.quickLabel}>Nota</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+
     </ScrollView>
   );
 };
@@ -217,14 +196,7 @@ const styles = StyleSheet.create({
   txTime: { fontSize: 11, color: colors.textSecondary },
   txAmount: { fontSize: 14, fontWeight: 'bold', color: colors.primary },
 
-  // Quick actions
-  quickActions: { flexDirection: 'row', gap: 12, marginTop: 4 },
-  quickBtn: {
-    flex: 1, alignItems: 'center', paddingVertical: 12,
-    backgroundColor: colors.background, borderRadius: 10,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  quickLabel: { fontSize: 12, color: colors.text, fontWeight: '600', marginTop: 6 },
+
 });
 
 export default DashboardScreen;

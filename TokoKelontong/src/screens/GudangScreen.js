@@ -60,6 +60,20 @@ const GudangScreen = ({ navigation }) => {
         value={searchQuery}
         style={styles.searchbar}
       />
+
+      <View style={styles.topActionContainer}>
+        <Button
+          mode="contained"
+          onPress={() => navigation.navigate('AddProductScreen')}
+          style={styles.addBtn}
+          buttonColor={theme.colors.primary}
+          labelStyle={{ fontWeight: 'bold', fontSize: 16 }}
+          contentStyle={{ paddingVertical: 8 }}
+          icon="plus"
+        >
+          TAMBAH BARANG
+        </Button>
+      </View>
       
       <FlatList
         data={products}
@@ -79,32 +93,16 @@ const GudangScreen = ({ navigation }) => {
         contentContainerStyle={{ paddingBottom: 80 }}
       />
 
-      <View style={styles.bottomContainer}>
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('AddProductScreen')}
-          style={styles.addBtn}
-          buttonColor={theme.colors.primary}
-          labelStyle={{ fontWeight: 'bold', fontSize: 16 }}
-          contentStyle={{ paddingVertical: 8 }}
-          icon="plus"
-        >
-          TAMBAH BARANG
-        </Button>
-      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  searchbar: { margin: 16 },
-  bottomContainer: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    elevation: 8,
+  searchbar: { margin: 16, marginBottom: 8 },
+  topActionContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   addBtn: {
     borderRadius: 12,

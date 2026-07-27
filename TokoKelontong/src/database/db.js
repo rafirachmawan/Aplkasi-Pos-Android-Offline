@@ -28,7 +28,8 @@ export const initDB = () => {
       stock_quantity INTEGER NOT NULL,
       min_stock_threshold INTEGER DEFAULT 5,
       image_uri TEXT,
-      unit TEXT DEFAULT 'pack'
+      unit TEXT DEFAULT 'pack',
+      category TEXT DEFAULT 'makanan'
     );
     
     CREATE INDEX IF NOT EXISTS idx_barcode ON products(barcode);
@@ -66,6 +67,13 @@ export const initDB = () => {
   // Migration: add unit column jika belum ada (untuk DB lama)
   try {
     db.execSync(`ALTER TABLE products ADD COLUMN unit TEXT DEFAULT 'pcs'`);
+  } catch (_) {
+    // Kolom sudah ada, abaikan error
+  }
+
+  // Migration: add category column jika belum ada (untuk DB lama)
+  try {
+    db.execSync(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'makanan'`);
   } catch (_) {
     // Kolom sudah ada, abaikan error
   }

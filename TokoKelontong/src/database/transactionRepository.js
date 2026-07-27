@@ -16,12 +16,17 @@ class TransactionRepository {
       db.execSync('BEGIN TRANSACTION;');
 
       const invoice_number = generateInvoiceNumber();
+
+      // Dapatkan waktu lokal HP dengan format YYYY-MM-DD HH:MM:SS
+      const now = new Date();
+      const tzOffset = now.getTimezoneOffset() * 60000; // offset in milliseconds
+      const localTimeStr = (new Date(Date.now() - tzOffset)).toISOString().replace('T', ' ').slice(0, 19);
       
       // 1. Insert ke transactions
       const txResult = db.runSync(
-        `INSERT INTO transactions (invoice_number, total_price, discount_amount, grand_total, cash_received, cash_return)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [invoice_number, total_price, discount_amount, grand_total, cash_received, cash_return]
+        `INSERT INTO transactions (invoice_number, total_price, discount_amount, grand_total, cash_received, cash_return, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [invoice_number, total_price, discount_amount, grand_total, cash_received, cash_return, localTimeStr]
       );
       
       transactionId = txResult.lastInsertRowId;

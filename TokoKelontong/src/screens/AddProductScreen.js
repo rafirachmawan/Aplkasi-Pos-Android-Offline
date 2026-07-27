@@ -33,6 +33,9 @@ const parseRp = (formatted) => {
 const DEFAULT_UNITS = ['pack'];
 const UNITS_STORAGE_KEY = 'product_units';
 
+const DEFAULT_CATEGORIES = ['makanan', 'minuman'];
+const CATEGORIES_STORAGE_KEY = 'product_categories';
+
 // ─── Komponen BarcodeDisplay menggunakan SVG ───────────────────────────────
 // Barcode Code128 sederhana (batang ganjil & genap) menggunakan SVG manual
 const SimpleBarcodeDisplay = ({ value }) => {
@@ -137,6 +140,15 @@ const AddProductScreen = ({ navigation, route }) => {
   const [editingUnit, setEditingUnit] = useState(null); // { index, value }
   const [editUnitInput, setEditUnitInput] = useState('');
 
+  // Category CRUD state
+  const [category, setCategory] = useState('makanan');
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editCategoryInput, setEditCategoryInput] = useState('');
+
   // Load units from storage
   useEffect(() => {
     AsyncStorage.getItem(UNITS_STORAGE_KEY).then((stored) => {
@@ -144,6 +156,14 @@ const AddProductScreen = ({ navigation, route }) => {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setUnits(parsed);
+        }
+      }
+    });
+    AsyncStorage.getItem(CATEGORIES_STORAGE_KEY).then((stored) => {
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCategories(parsed);
         }
       }
     });
@@ -204,6 +224,61 @@ const AddProductScreen = ({ navigation, route }) => {
     );
   };
 
+  const saveCategories = async (newCats) => {
+    setCategories(newCats);
+    await AsyncStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(newCats));
+  };
+
+  const handleAddCategory = async () => {
+    const val = newCategoryInput.trim().toLowerCase();
+    if (!val) return;
+    if (categories.includes(val)) {
+      Alert.alert('Duplikat', `Kategori "${val}" sudah ada.`);
+      return;
+    }
+    await saveCategories([...categories, val]);
+    setCategory(val);
+    setNewCategoryInput('');
+    setShowAddCategoryModal(false);
+  };
+
+  const handleEditCategory = async () => {
+    const val = editCategoryInput.trim().toLowerCase();
+    if (!val || editingCategory === null) return;
+    if (categories.includes(val) && val !== editingCategory.value) {
+      Alert.alert('Duplikat', `Kategori "${val}" sudah ada.`);
+      return;
+    }
+    const updated = categories.map((c, i) => (i === editingCategory.index ? val : c));
+    await saveCategories(updated);
+    if (category === editingCategory.value) setCategory(val);
+    setShowEditCategoryModal(false);
+    setEditingCategory(null);
+  };
+
+  const handleDeleteCategory = (c, index) => {
+    if (categories.length <= 1) {
+      Alert.alert('Tidak bisa', 'Minimal harus ada 1 kategori.');
+      return;
+    }
+    Alert.alert(
+      'Hapus Kategori',
+      `Hapus kategori "${c}"?`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: async () => {
+            const updated = categories.filter((_, i) => i !== index);
+            await saveCategories(updated);
+            if (category === c) setCategory(updated[0]);
+          },
+        },
+      ]
+    );
+  };
+
   useEffect(() => {
     if (existingProduct) {
       setBarcode(existingProduct.barcode || '');
@@ -214,6 +289,7 @@ const AddProductScreen = ({ navigation, route }) => {
       setMinStock(existingProduct.min_stock_threshold.toString());
       setImageUri(existingProduct.image_uri || null);
       setUnit(existingProduct.unit || 'pcs');
+      setCategory(existingProduct.category || 'makanan');
     }
   }, [existingProduct]);
 
@@ -232,15 +308,20 @@ const AddProductScreen = ({ navigation, route }) => {
           text: 'Galeri',
           onPress: async () => {
             try {
+              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Akses Ditolak', 'Aplikasi butuh izin untuk mengakses galeri Anda.');
+                return;
+              }
               const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 0.8,
               });
               if (!result.canceled) setImageUri(result.assets[0].uri);
             } catch (e) {
-              Alert.alert('Error', 'Gagal membuka galeri');
+              Alert.alert('Error', 'Gagal membuka galeri: ' + e.message);
             }
           },
         },
@@ -248,15 +329,20 @@ const AddProductScreen = ({ navigation, route }) => {
           text: 'Kamera',
           onPress: async () => {
             try {
+              const { status } = await ImagePicker.requestCameraPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Akses Ditolak', 'Aplikasi butuh izin untuk menggunakan kamera Anda.');
+                return;
+              }
               const result = await ImagePicker.launchCameraAsync({
-                mediaTypes: ['images'],
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 0.8,
               });
               if (!result.canceled) setImageUri(result.assets[0].uri);
             } catch (e) {
-              Alert.alert('Error', 'Gagal membuka kamera');
+              Alert.alert('Error', 'Gagal membuka kamera: ' + e.message);
             }
           },
         },
@@ -372,6 +458,7 @@ const AddProductScreen = ({ navigation, route }) => {
       min_stock_threshold: isNaN(minStockVal) ? 5 : minStockVal,
       image_uri: imageUri || null,
       unit,
+      category,
     };
 
     try {
@@ -556,6 +643,45 @@ const AddProductScreen = ({ navigation, route }) => {
           TAMBAH SATUAN BARU
         </Button>
 
+        {/* ── Kategori Produk ── */}
+        <View style={styles.unitHeader}>
+          <Text style={styles.sectionLabel}>Kategori</Text>
+        </View>
+        <View style={styles.unitPillWrap}>
+          {categories.map((c, index) => (
+            <TouchableOpacity
+              key={c + index}
+              style={[
+                styles.unitPill,
+                category === c && styles.unitPillActive,
+              ]}
+              onPress={() => setCategory(c)}
+              onLongPress={() => {
+                setEditingCategory({ index, value: c });
+                setEditCategoryInput(c);
+                setShowEditCategoryModal(true);
+              }}
+            >
+              <Text style={[
+                styles.unitPillText,
+                category === c && styles.unitPillTextActive,
+              ]}>
+                {c}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Button
+          mode="outlined"
+          onPress={() => { setNewCategoryInput(''); setShowAddCategoryModal(true); }}
+          style={[styles.saveButton, { marginTop: 16 }]}
+          textColor={colors.primary}
+          icon="plus"
+        >
+          TAMBAH KATEGORI BARU
+        </Button>
+
         <Button
           mode="contained"
           onPress={handleSave}
@@ -699,9 +825,95 @@ const AddProductScreen = ({ navigation, route }) => {
               <Text style={styles.unitEditHint}>* Tekan tahan (long press) pada satuan untuk edit/hapus</Text>
             </View>
           </TouchableOpacity>
-      </Modal>
-    </>
-  );
+        </Modal>
+
+        {/* ── Modal Tambah Kategori ── */}
+        <Modal
+          visible={showAddCategoryModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowAddCategoryModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlayCenter}
+            activeOpacity={1}
+            onPress={() => setShowAddCategoryModal(false)}
+          >
+            <View style={styles.unitModal}>
+              <Text style={styles.unitModalTitle}>Tambah Kategori Baru</Text>
+              <RNTextInput
+                style={styles.unitModalInput}
+                value={newCategoryInput}
+                onChangeText={setNewCategoryInput}
+                placeholder="Contoh: makanan, minuman, sabun..."
+                placeholderTextColor={colors.textSecondary}
+                autoFocus
+                autoCapitalize="none"
+                onSubmitEditing={handleAddCategory}
+              />
+              <View style={styles.unitModalActions}>
+                <TouchableOpacity
+                  style={styles.unitModalCancelBtn}
+                  onPress={() => setShowAddCategoryModal(false)}
+                >
+                  <Text style={styles.unitModalCancelText}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.unitModalConfirmBtn}
+                  onPress={handleAddCategory}
+                >
+                  <Text style={styles.unitModalConfirmText}>Tambah</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* ── Modal Edit Kategori ── */}
+        <Modal
+          visible={showEditCategoryModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowEditCategoryModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowEditCategoryModal(false)}
+          >
+            <View style={styles.unitModal}>
+              <Text style={styles.unitModalTitle}>Edit Kategori</Text>
+              <RNTextInput
+                style={styles.unitModalInput}
+                value={editCategoryInput}
+                onChangeText={setEditCategoryInput}
+                autoFocus
+                autoCapitalize="none"
+                onSubmitEditing={handleEditCategory}
+              />
+              <View style={styles.unitModalActions}>
+                <TouchableOpacity
+                  style={[styles.unitModalCancelBtn, { borderColor: colors.error }]}
+                  onPress={() => {
+                    if (editingCategory) handleDeleteCategory(editingCategory.value, editingCategory.index);
+                    setShowEditCategoryModal(false);
+                  }}
+                >
+                  <Text style={[styles.unitModalCancelText, { color: colors.error }]}>Hapus</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.unitModalConfirmBtn}
+                  onPress={handleEditCategory}
+                >
+                  <Text style={styles.unitModalConfirmText}>Simpan</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.unitEditHint}>* Tekan tahan (long press) pada kategori untuk edit/hapus</Text>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      </>
+    );
 };
 
 const styles = StyleSheet.create({

@@ -34,7 +34,7 @@ class ProductRepository {
    * Menambahkan produk baru
    */
   addProduct(product) {
-    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold = 5, image_uri = null, unit = 'pack' } = product;
+    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold = 5, image_uri = null, unit = 'pack', category = 'makanan' } = product;
     
     // Validasi barcode unik
     if (barcode) {
@@ -45,9 +45,9 @@ class ProductRepository {
     }
 
     const result = db.runSync(
-      `INSERT INTO products (barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit]
+      `INSERT INTO products (barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit, category]
     );
     return result.lastInsertRowId;
   }
@@ -56,13 +56,13 @@ class ProductRepository {
    * Memperbarui data produk berdasarkan ID
    */
   updateProduct(id, product) {
-    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri = null, unit = 'pack' } = product;
+    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri = null, unit = 'pack', category = 'makanan' } = product;
     
     const result = db.runSync(
       `UPDATE products 
-       SET barcode = ?, product_name = ?, capital_price = ?, selling_price = ?, stock_quantity = ?, min_stock_threshold = ?, image_uri = ?, unit = ?
+       SET barcode = ?, product_name = ?, capital_price = ?, selling_price = ?, stock_quantity = ?, min_stock_threshold = ?, image_uri = ?, unit = ?, category = ?
        WHERE id = ?`,
-      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit, id]
+      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit, category, id]
     );
     return result.changes > 0;
   }
