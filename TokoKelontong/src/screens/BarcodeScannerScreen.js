@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 /**
  * BarcodeScannerScreen
@@ -17,59 +18,26 @@ import { colors } from '../theme/colors';
  */
 const BarcodeScannerScreen = ({ navigation, route }) => {
   const { onBarcodeScanned } = route.params || {};
-  const [hasPermission, setHasPermission] = useState(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [CameraComponent, setCameraComponent] = useState(null);
-  const [BarcodeScanner, setBarcodeScanner] = useState(null);
+  const isScannedRef = React.useRef(false);
 
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      setHasPermission(false);
-      return;
+    if (permission && !permission.granted && permission.canAskAgain) {
+      requestPermission();
     }
-    // Dynamic import agar web tidak crash
-    (async () => {
-      try {
-        const CameraModule = await import('expo-camera');
-        const { CameraView, useCameraPermissions } = CameraModule;
-        const [permission, requestPermission] = useCameraPermissions
-          ? [null, null]
-          : [null, null];
-
-        // Minta izin kamera
-        const { Camera } = CameraModule;
-        if (Camera && Camera.requestCameraPermissionsAsync) {
-          const { status } = await Camera.requestCameraPermissionsAsync();
-          setHasPermission(status === 'granted');
-        } else if (CameraModule.requestCameraPermissionsAsync) {
-          const { status } = await CameraModule.requestCameraPermissionsAsync();
-          setHasPermission(status === 'granted');
-        } else {
-          // Coba expo-barcode-scanner sebagai fallback
-          const BS = await import('expo-barcode-scanner');
-          const { status } = await BS.BarcodeScannerExpoBarCodeScanner
-            ? await BS.BarcodeScannerExpoBarCodeScanner.requestPermissionsAsync()
-            : await BS.BarcodeScannerComponent?.requestPermissionsAsync?.()
-              || { status: 'denied' };
-          setHasPermission(status === 'granted');
-          setBarcodeScanner(BS);
-          return;
-        }
-        setCameraComponent(CameraModule);
-      } catch (e) {
-        console.error('Camera init error:', e);
-        setHasPermission(false);
-      }
-    })();
-  }, []);
+  }, [permission]);
 
   const handleBarCodeScanned = ({ type, data }) => {
-    if (scanned) return;
+    if (isScannedRef.current) return;
+    isScannedRef.current = true;
     setScanned(true);
     if (onBarcodeScanned) {
       onBarcodeScanned(data);
     }
-    navigation.goBack();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
   };
 
   if (Platform.OS === 'web') {
@@ -85,7 +53,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     );
   }
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={styles.center}>
         <MaterialCommunityIcons name="camera" size={48} color={colors.textSecondary} />
@@ -94,7 +62,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <View style={styles.center}>
         <MaterialCommunityIcons name="camera-off" size={64} color={colors.error} />
@@ -107,31 +75,13 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     );
   }
 
-  // Render kamera native
-  const renderCamera = () => {
-    try {
-      if (CameraComponent && CameraComponent.CameraView) {
-        const { CameraView } = CameraComponent;
-        return (
-          <CameraView
-            style={StyleSheet.absoluteFillObject}
-            facing="back"
-            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-            barcodeScannerSettings={{
-              barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e'],
-            }}
-          />
-        );
-      }
-    } catch (e) {
-      console.error('Render camera error:', e);
-    }
-    return null;
-  };
-
   return (
     <View style={styles.container}>
-      {renderCamera()}
+      <CameraView
+        style={StyleSheet.absoluteFillObject}
+        facing="back"
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+      />
 
       {/* Overlay UI */}
       <View style={styles.overlay}>

@@ -84,6 +84,18 @@ class TransactionRepository {
       ORDER BY t.created_at DESC
     `);
   }
+
+  /**
+   * Mengambil detail item untuk satu transaksi
+   */
+  getTransactionDetails(transactionId) {
+    return db.getAllSync(`
+      SELECT td.*, p.product_name 
+      FROM transaction_details td
+      JOIN products p ON td.product_id = p.id
+      WHERE td.transaction_id = ?
+    `, [transactionId]);
+  }
 }
 
 export default new TransactionRepository();

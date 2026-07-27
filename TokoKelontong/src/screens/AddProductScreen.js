@@ -275,13 +275,42 @@ const AddProductScreen = ({ navigation, route }) => {
       return;
     }
     try {
+      // Generate SVG offline
+      let x = 10;
+      const barWidth = 2;
+      const height = 60;
+      const bars = [];
+      for (let i = 0; i < barcode.length; i++) {
+        const code = barcode.charCodeAt(i);
+        for (let b = 7; b >= 0; b--) {
+          const bit = (code >> b) & 1;
+          bars.push({ x, width: barWidth, filled: bit === 1 });
+          x += barWidth;
+        }
+        x += 2;
+      }
+      bars.unshift({ x: 2, width: 3, filled: true });
+      bars.push({ x: x, width: 3, filled: true });
+      const totalWidth = x + 15;
+      
+      const svgBars = bars
+        .filter(b => b.filled)
+        .map(b => `<rect x="${b.x}" y="0" width="${b.width}" height="${height}" fill="black"/>`)
+        .join('');
+
+      const svgString = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${height + 20}" style="max-width:260px; height:auto;">
+          <rect width="${totalWidth}" height="${height + 20}" fill="white"/>
+          ${svgBars}
+        </svg>
+      `;
+
       const html = `
         <html>
           <body style="margin:0;display:flex;justify-content:center;align-items:center;height:100vh;">
             <div style="text-align:center;border:1px solid #ccc;padding:16px;border-radius:8px;width:280px;">
               <p style="font-size:14px;font-weight:bold;margin:0 0 8px;">${productName || 'Produk'}</p>
-              <img src="https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(barcode)}&code=Code128&translate-esc=true" 
-                   style="max-width:260px;" />
+              ${svgString}
               <p style="font-family:monospace;letter-spacing:2px;font-size:12px;margin:4px 0 0;">${barcode}</p>
             </div>
           </body>
@@ -385,7 +414,14 @@ const AddProductScreen = ({ navigation, route }) => {
           <TouchableOpacity style={styles.iconBtn} onPress={openBarcodeScanner}>
             <MaterialCommunityIcons name="barcode-scan" size={24} color="#fff" />
           </TouchableOpacity>
-          {barcode !== '' && (
+          {barcode === '' ? (
+            <TouchableOpacity
+              style={[styles.iconBtn, { backgroundColor: colors.secondary }]}
+              onPress={() => setBarcode(String(Date.now()))}
+            >
+              <MaterialCommunityIcons name="refresh" size={24} color="#fff" />
+            </TouchableOpacity>
+          ) : (
             <TouchableOpacity
               style={[styles.iconBtn, { backgroundColor: '#8B5CF6' }]}
               onPress={() => setShowBarcodeModal(true)}
@@ -571,7 +607,7 @@ const AddProductScreen = ({ navigation, route }) => {
           onRequestClose={() => setShowAddUnitModal(false)}
         >
           <TouchableOpacity
-            style={styles.modalOverlay}
+            style={styles.modalOverlayCenter}
             activeOpacity={1}
             onPress={() => setShowAddUnitModal(false)}
           >
@@ -796,6 +832,10 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
+  },
+  modalOverlayCenter: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
   },
   modalCard: {
     backgroundColor: '#fff',

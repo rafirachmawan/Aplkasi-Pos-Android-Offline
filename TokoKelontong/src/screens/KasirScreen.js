@@ -45,16 +45,12 @@ const KasirScreen = ({ navigation }) => {
     }
     navigation.navigate('BarcodeScanner', {
       onBarcodeScanned: (code) => {
-        handleSearch(code);
-        setTimeout(() => {
-           setSearchResults(prev => {
-             if (prev.length === 1) {
-               addToCart(prev[0]);
-               return [];
-             }
-             return prev;
-           });
-        }, 500);
+        const product = ProductRepository.getProductByBarcode(code);
+        if (product) {
+          addToCart(product);
+        } else {
+          Alert.alert('Tidak Ditemukan', `Produk dengan barcode ${code} belum terdaftar di gudang.`);
+        }
       },
     });
   };
@@ -66,8 +62,15 @@ const KasirScreen = ({ navigation }) => {
       return;
     }
     try {
-      const results = ProductRepository.searchProductByName(text);
-      setSearchResults(results);
+      const byBarcode = ProductRepository.getProductByBarcode(text.trim());
+      const byName = ProductRepository.searchProductByName(text.trim());
+      
+      if (byBarcode) {
+        const filteredName = byName.filter(p => p.id !== byBarcode.id);
+        setSearchResults([byBarcode, ...filteredName]);
+      } else {
+        setSearchResults(byName);
+      }
     } catch (e) {
       setSearchResults([]);
     }
@@ -305,7 +308,7 @@ const KasirScreen = ({ navigation }) => {
       {/* Modal Checkout */}
       <Modal visible={showCheckout} animationType="slide" transparent onRequestClose={() => setShowCheckout(false)}>
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardAvoiding}>
             <View style={styles.modalContainer}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>💰 Proses Pembayaran</Text>
@@ -345,29 +348,51 @@ const KasirScreen = ({ navigation }) => {
                     />
                   </View>
 
-                  <View style={[styles.calcRow, styles.grandTotalRow]}>
-                    <Text style={styles.grandTotalLabel}>GRAND TOTAL</Text>
+                  <View style={styles.grandTotalContainer}>
+                    <Text style={styles.grandTotalLabel}>TOTAL TAGIHAN</Text>
                     <Text style={styles.grandTotalValue}>{formatRupiah(grandTotal)}</Text>
                   </View>
 
-                  <View style={styles.calcRow}>
-                    <Text style={styles.calcLabel}>Uang Diterima</Text>
-                    <TextInput
-                      style={[styles.calcInput, styles.cashInput]}
-                      value={cashInput}
-                      onChangeText={setCashInput}
-                      keyboardType="numeric"
-                      placeholder="Masukkan nominal"
-                      autoFocus
-                    />
+                  <Text style={[styles.calcLabel, { marginTop: 12, marginBottom: 8, fontWeight: 'bold' }]}>
+                    Pembayaran (Uang Diterima)
+                  </Text>
+                  <TextInput
+                    style={styles.cashInputBig}
+                    value={cashInput}
+                    onChangeText={setCashInput}
+                    keyboardType="numeric"
+                    placeholder="Contoh: 50000"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+
+                  {/* Quick Amount Buttons */}
+                  <View style={styles.quickAmountRow}>
+                    <TouchableOpacity
+                      style={styles.quickAmountBtn}
+                      onPress={() => setCashInput(grandTotal.toString())}
+                    >
+                      <Text style={styles.quickAmountText}>Uang Pas</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.quickAmountBtn}
+                      onPress={() => setCashInput('50000')}
+                    >
+                      <Text style={styles.quickAmountText}>50 Ribu</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.quickAmountBtn}
+                      onPress={() => setCashInput('100000')}
+                    >
+                      <Text style={styles.quickAmountText}>100 Ribu</Text>
+                    </TouchableOpacity>
                   </View>
 
                   {cashReceived > 0 && (
-                    <View style={[styles.calcRow, { backgroundColor: kembalian >= 0 ? '#D1FAE5' : '#FEE2E2', borderRadius: 8, padding: 8, marginTop: 4 }]}>
-                      <Text style={{ fontWeight: 'bold', color: kembalian >= 0 ? colors.primary : colors.error }}>
-                        {kembalian >= 0 ? 'Kembalian' : 'Kurang'}
+                    <View style={[styles.kembalianBox, { backgroundColor: kembalian >= 0 ? '#D1FAE5' : '#FEE2E2' }]}>
+                      <Text style={{ fontWeight: 'bold', fontSize: 15, color: kembalian >= 0 ? '#065F46' : '#991B1B' }}>
+                        {kembalian >= 0 ? 'KEMBALIAN' : 'UANG KURANG'}
                       </Text>
-                      <Text style={{ fontWeight: 'bold', fontSize: 18, color: kembalian >= 0 ? colors.primary : colors.error }}>
+                      <Text style={{ fontWeight: 'bold', fontSize: 24, color: kembalian >= 0 ? '#065F46' : '#991B1B' }}>
                         {formatRupiah(Math.abs(kembalian))}
                       </Text>
                     </View>
@@ -375,13 +400,13 @@ const KasirScreen = ({ navigation }) => {
                 </View>
 
                 {/* Tombol bayar */}
-                <View style={styles.modalSection}>
+                <View style={[styles.modalSection, { paddingTop: 0 }]}>
                   <TouchableOpacity
                     style={[styles.bayarBtn, { opacity: cashReceived >= grandTotal ? 1 : 0.5 }]}
                     onPress={handleBayar}
                     disabled={cashReceived < grandTotal}
                   >
-                    <MaterialCommunityIcons name="check-circle" size={22} color="#fff" />
+                    <MaterialCommunityIcons name="check-circle" size={24} color="#fff" />
                     <Text style={styles.bayarText}>SELESAIKAN TRANSAKSI</Text>
                   </TouchableOpacity>
                 </View>
@@ -505,11 +530,18 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end', alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
+    padding: 16,
+  },
+  keyboardAvoiding: {
+    width: '100%',
+    maxWidth: 450,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContainer: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    borderRadius: 24,
     width: '100%',
     maxHeight: '90%',
     paddingBottom: 24,
@@ -532,17 +564,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6, fontSize: 14,
     minWidth: 130, textAlign: 'right', color: colors.text,
   },
-  cashInput: { borderColor: colors.primary, minWidth: 150 },
-  grandTotalRow: {
+  grandTotalContainer: {
     backgroundColor: colors.primaryContainer,
-    borderRadius: 10, padding: 12, marginVertical: 8,
+    borderRadius: 12, padding: 16, marginVertical: 12,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
   },
   grandTotalLabel: { fontSize: 16, fontWeight: 'bold', color: colors.primary },
-  grandTotalValue: { fontSize: 20, fontWeight: 'bold', color: colors.primary },
+  grandTotalValue: { fontSize: 22, fontWeight: 'bold', color: colors.primary },
+  cashInputBig: {
+    borderWidth: 1.5, borderColor: colors.primary, borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 12, fontSize: 18,
+    color: colors.text, backgroundColor: '#fff', fontWeight: 'bold',
+  },
+  quickAmountRow: {
+    flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, gap: 8,
+  },
+  quickAmountBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 8,
+    backgroundColor: colors.surfaceVariant, alignItems: 'center',
+    borderWidth: 1, borderColor: colors.border
+  },
+  quickAmountText: { fontSize: 13, fontWeight: '700', color: colors.primary },
+  kembalianBox: {
+    borderRadius: 12, padding: 16, marginTop: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
+  },
   bayarBtn: {
     backgroundColor: colors.primary,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    padding: 16, borderRadius: 14, gap: 8, elevation: 4, marginTop: 8,
+    padding: 16, borderRadius: 14, gap: 8, elevation: 4, marginTop: 12,
   },
   bayarText: { color: '#fff', fontWeight: 'bold', fontSize: 15, letterSpacing: 0.5 },
 });

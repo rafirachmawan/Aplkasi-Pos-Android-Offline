@@ -32,7 +32,6 @@
     "plugins": [
       "expo-sqlite",
       "expo-barcode-scanner",
-      "expo-sharing",
       [
         "expo-camera",
         {
