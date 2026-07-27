@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "TokoKelontong",
-    "slug": "TokoKelontong",
+    "name": "MARKETPOS",
+    "slug": "marketpos",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,7 +10,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.rafi.tokokelontong",
+      "package": "com.rafi.marketpos",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -23,7 +23,9 @@
         "BLUETOOTH_ADMIN",
         "BLUETOOTH_CONNECT",
         "BLUETOOTH_SCAN",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -38,6 +40,11 @@
           "cameraPermission": "Izinkan aplikasi mengakses kamera untuk scan barcode produk."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e65a8dea-6bd1-4bb0-a99e-3cc7c20935ac"
+      }
+    }
   }
 }
