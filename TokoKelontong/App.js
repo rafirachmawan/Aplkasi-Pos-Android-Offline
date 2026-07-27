@@ -1,21 +1,4 @@
 import React, { useEffect } from 'react';
-<<<<<<< HEAD
-import { StatusBar } from 'expo-status-bar';
-import { PaperProvider, MD3DarkTheme } from 'react-native-paper';
-import { AppNavigator } from './src/navigation/AppNavigator';
-import { initDatabase } from './src/database/db';
-import { colors } from './src/theme/colors';
-
-const theme = {
-  ...MD3DarkTheme,
-  colors: {
-    ...MD3DarkTheme.colors,
-    primary: colors.primary,
-    secondary: colors.secondary,
-    error: colors.danger,
-    background: colors.background,
-    surface: colors.surface,
-=======
 import { NavigationContainer } from '@react-navigation/native';
 import { Provider as PaperProvider, DefaultTheme } from 'react-native-paper';
 import { AppProvider } from './src/context/AppContext';
@@ -33,23 +16,11 @@ const theme = {
     background: colors.background,
     surface: colors.surface,
     error: colors.error,
->>>>>>> f39751906b4f54e6c2a73e0045dabdb926a8e30f
   },
 };
 
 export default function App() {
   useEffect(() => {
-<<<<<<< HEAD
-    // Inisialisasi SQLite saat aplikasi pertama kali dimuat
-    initDatabase();
-  }, []);
-
-  return (
-    <PaperProvider theme={theme}>
-      <AppNavigator />
-      <StatusBar style="light" />
-    </PaperProvider>
-=======
     // Inisialisasi Database saat aplikasi pertama kali dibuka
     try {
       initDB();
@@ -67,6 +38,5 @@ export default function App() {
         </NavigationContainer>
       </PaperProvider>
     </AppProvider>
->>>>>>> f39751906b4f54e6c2a73e0045dabdb926a8e30f
   );
 }
