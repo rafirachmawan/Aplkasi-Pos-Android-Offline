@@ -13,6 +13,8 @@ import {
   Platform,
   ActivityIndicator,
   Linking,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -26,13 +28,19 @@ import { formatRupiah } from '../utils/helpers';
 import { generateReceiptHTML, generateWAMessage } from '../utils/receiptGenerator';
 import { colors } from '../theme/colors';
 
+const { width } = Dimensions.get('window');
+const isTablet = width > 600;
+
 const KasirScreen = ({ navigation }) => {
   const { state, dispatch } = useContext(AppContext);
   const cart = state.cart;
 
+  const [allProducts, setAllProducts] = useState([]);
+  const [categories, setCategories] = useState(['Semua']);
+  const [selectedCategory, setSelectedCategory] = useState('Semua');
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [showCheckout, setShowCheckout] = useState(false);
+  const [showCartModal, setShowCartModal] = useState(false);
   const [cashInput, setCashInput] = useState('');
   const [discountInput, setDiscountInput] = useState('0');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -43,9 +51,28 @@ const KasirScreen = ({ navigation }) => {
   // Refresh saat screen difokus
   useFocusEffect(
     useCallback(() => {
-      if (searchQuery.trim()) handleSearch(searchQuery);
+      loadProducts();
     }, [])
   );
+
+  const loadProducts = () => {
+    try {
+      const products = ProductRepository.getAllProducts();
+      setAllProducts(products);
+      
+      const uniqueCats = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
+      setCategories(['Semua', ...uniqueCats]);
+    } catch (e) {
+      console.log('Error loading products', e);
+    }
+  };
+
+  const displayedProducts = allProducts.filter(p => {
+    const matchCategory = selectedCategory === 'Semua' || p.category === selectedCategory;
+    const matchSearch = p.product_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                        (p.barcode && p.barcode.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchCategory && matchSearch;
+  });
 
   const openBarcodeScanner = () => {
     if (Platform.OS === 'web') {
@@ -62,27 +89,6 @@ const KasirScreen = ({ navigation }) => {
         }
       },
     });
-  };
-
-  const handleSearch = (text) => {
-    setSearchQuery(text);
-    if (text.trim().length === 0) {
-      setSearchResults([]);
-      return;
-    }
-    try {
-      const byBarcode = ProductRepository.getProductByBarcode(text.trim());
-      const byName = ProductRepository.searchProductByName(text.trim());
-      
-      if (byBarcode) {
-        const filteredName = byName.filter(p => p.id !== byBarcode.id);
-        setSearchResults([byBarcode, ...filteredName]);
-      } else {
-        setSearchResults(byName);
-      }
-    } catch (e) {
-      setSearchResults([]);
-    }
   };
 
   const addToCart = (product) => {
@@ -104,10 +110,11 @@ const KasirScreen = ({ navigation }) => {
         selling_price: product.selling_price,
         capital_price: product.capital_price,
         stock_quantity: product.stock_quantity,
+        category: product.category,
+        image_uri: product.image_uri,
       },
     });
     setSearchQuery('');
-    setSearchResults([]);
   };
 
   const updateQty = (product_id, qty) => {
@@ -121,7 +128,11 @@ const KasirScreen = ({ navigation }) => {
   const clearCart = () => {
     Alert.alert('Kosongkan Keranjang', 'Yakin ingin menghapus semua item?', [
       { text: 'Batal', style: 'cancel' },
-      { text: 'Ya, Kosongkan', style: 'destructive', onPress: () => dispatch({ type: 'CLEAR_CART' }) },
+      { text: 'Ya, Kosongkan', style: 'destructive', onPress: () => {
+          dispatch({ type: 'CLEAR_CART' });
+          setShowCartModal(false);
+        } 
+      },
     ]);
   };
 
@@ -131,16 +142,6 @@ const KasirScreen = ({ navigation }) => {
   const grandTotal = Math.max(0, totalHarga - diskon);
   const cashReceived = parseInt(cashInput) || 0;
   const kembalian = cashReceived - grandTotal;
-
-  const handleCheckout = () => {
-    if (cart.length === 0) {
-      Alert.alert('Keranjang Kosong', 'Tambahkan barang terlebih dahulu.');
-      return;
-    }
-    setCashInput('');
-    setDiscountInput('0');
-    setShowCheckout(true);
-  };
 
   const handleBayar = async () => {
     if (cashReceived < grandTotal) {
@@ -157,17 +158,15 @@ const KasirScreen = ({ navigation }) => {
         kembalian
       );
       
-      // Ambil invoice number dari transaksi terbaru
       const todayStr = new Date().toISOString().split('T')[0];
       const todayTxs = TransactionRepository.getTransactionsByDate(todayStr);
       const fullTx = todayTxs.find(t => t.id === txId);
-      const invoiceNum = fullTx ? fullTx.invoice_number : `INV-${txId}`;
 
-      setShowCheckout(false);
-      const cartItems = [...cart];
+      setShowCartModal(false);
+      setCashInput('');
+      setDiscountInput('0');
       dispatch({ type: 'CLEAR_CART' });
 
-      // Ambil detail transaksi untuk nota
       try {
         const details = TransactionRepository.getTransactionDetails(txId);
         setLastTxDetails(details);
@@ -179,6 +178,10 @@ const KasirScreen = ({ navigation }) => {
       } else {
         Alert.alert('✅ Transaksi Berhasil!', `Kembalian: ${formatRupiah(kembalian)}`);
       }
+      
+      // Refresh stok di tampilan
+      loadProducts();
+
     } catch (e) {
       Alert.alert('Error', e.message);
     }
@@ -210,14 +213,12 @@ const KasirScreen = ({ navigation }) => {
     setIsLoadingReceipt(true);
     try {
       const storeProfile = await getStoreProfile();
-      // Kirim pesan teks ke WhatsApp dulu
       const waText = generateWAMessage(lastTx, lastTxDetails, storeProfile);
       const waUrl = `whatsapp://send?text=${encodeURIComponent(waText)}`;
       const canOpenWA = await Linking.canOpenURL(waUrl);
       if (canOpenWA) {
         await Linking.openURL(waUrl);
       } else {
-        // Fallback: share PDF jika WA tidak tersedia
         const html = generateReceiptHTML(lastTx, lastTxDetails, storeProfile);
         const { uri } = await Print.printToFileAsync({ html });
         const canShare = await Sharing.isAvailableAsync();
@@ -232,52 +233,73 @@ const KasirScreen = ({ navigation }) => {
     }
   };
 
-  // Render item keranjang
-  const renderCartItem = ({ item }) => (
-    <View style={styles.cartItem}>
-      <View style={styles.cartItemInfo}>
-        <Text style={styles.cartItemName} numberOfLines={1}>{item.product_name}</Text>
-        <Text style={styles.cartItemPrice}>{formatRupiah(item.selling_price)} x {item.quantity}</Text>
-      </View>
-      <View style={styles.qtyControl}>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.product_id, item.quantity - 1)}>
-          <MaterialCommunityIcons name="minus" size={16} color={colors.error} />
-        </TouchableOpacity>
-        <Text style={styles.qtyText}>{item.quantity}</Text>
-        <TouchableOpacity
-          style={styles.qtyBtn}
-          onPress={() => updateQty(item.product_id, item.quantity + 1)}
-        >
-          <MaterialCommunityIcons name="plus" size={16} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.cartItemTotal}>{formatRupiah(item.selling_price * item.quantity)}</Text>
-    </View>
-  );
-
-  // Render hasil pencarian
-  const renderSearchResult = ({ item }) => {
+  // Render POS Grid Item
+  const renderProductGrid = ({ item }) => {
     const lowStock = item.stock_quantity <= item.min_stock_threshold;
+    const isOutOfStock = item.stock_quantity <= 0;
+
+    const cartItem = cart.find(i => i.product_id === item.id);
+    const qtyInCart = cartItem ? cartItem.quantity : 0;
+
     return (
-      <TouchableOpacity style={styles.searchResult} onPress={() => addToCart(item)}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.searchName}>{item.product_name}</Text>
-          <Text style={styles.searchPrice}>{formatRupiah(item.selling_price)}</Text>
+      <TouchableOpacity 
+        style={[styles.productCard, isOutOfStock && { opacity: 0.5 }]} 
+        onPress={() => addToCart(item)}
+        disabled={isOutOfStock}
+        activeOpacity={0.7}
+      >
+        <View style={styles.productCardImg}>
+          {item.image_uri ? (
+            <Image source={{ uri: item.image_uri }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+          ) : (
+            <MaterialCommunityIcons name="image-outline" size={32} color={colors.textSecondary} />
+          )}
+          {item.category && (
+            <View style={styles.gridCategoryBadge}>
+              <Text style={styles.gridCategoryBadgeText}>{item.category}</Text>
+            </View>
+          )}
+          {qtyInCart > 0 && (
+            <View style={styles.gridQtyBadge}>
+              <Text style={styles.gridQtyBadgeText}>{qtyInCart}</Text>
+            </View>
+          )}
         </View>
-        <View style={styles.searchRight}>
-          <Text style={[styles.searchStock, { color: lowStock ? colors.error : colors.primary }]}>
-            Stok: {item.stock_quantity}
-          </Text>
-          {lowStock && <Text style={styles.lowStockBadge}>Menipis!</Text>}
+        <View style={styles.productCardInfo}>
+          <Text style={styles.productCardName} numberOfLines={2}>{item.product_name}</Text>
+          <Text style={styles.productCardPrice}>{formatRupiah(item.selling_price)}</Text>
+          
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, minHeight: 24 }}>
+            <Text style={[styles.productCardStock, { color: lowStock ? colors.error : colors.textSecondary, marginTop: 0 }]}>
+              Stok: {item.stock_quantity}
+            </Text>
+            
+            {qtyInCart > 0 && (
+              <View style={[styles.qtyControl, { marginRight: 0 }]}>
+                <TouchableOpacity 
+                  style={[styles.qtyBtn, { width: 24, height: 24 }]} 
+                  onPress={() => updateQty(item.id, qtyInCart - 1)}
+                >
+                  <MaterialCommunityIcons name="minus" size={14} color={colors.error} />
+                </TouchableOpacity>
+                <Text style={[styles.qtyText, { marginHorizontal: 6, fontSize: 13 }]}>{qtyInCart}</Text>
+                <TouchableOpacity 
+                  style={[styles.qtyBtn, { width: 24, height: 24 }]} 
+                  onPress={() => updateQty(item.id, qtyInCart + 1)}
+                >
+                  <MaterialCommunityIcons name="plus" size={14} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
-        <MaterialCommunityIcons name="plus-circle" size={24} color={colors.primary} />
       </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.container}>
-      {/* Search Bar */}
+      {/* ── Search Bar ── */}
       <View style={styles.searchContainer}>
         <MaterialCommunityIcons name="magnify" size={22} color={colors.textSecondary} style={{ marginRight: 8 }} />
         <TextInput
@@ -285,11 +307,11 @@ const KasirScreen = ({ navigation }) => {
           placeholder="Cari nama barang atau scan barcode..."
           placeholderTextColor={colors.textSecondary}
           value={searchQuery}
-          onChangeText={handleSearch}
+          onChangeText={setSearchQuery}
           returnKeyType="search"
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }} style={{ marginRight: 8 }}>
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={{ marginRight: 8 }}>
             <MaterialCommunityIcons name="close-circle" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
@@ -298,171 +320,169 @@ const KasirScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Dropdown Hasil Pencarian */}
-      {searchResults.length > 0 && (
-        <View style={styles.searchDropdown}>
-          <FlatList
-            data={searchResults}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={renderSearchResult}
-            keyboardShouldPersistTaps="always"
-            style={{ maxHeight: 220 }}
-          />
-        </View>
-      )}
-
-      {/* Keranjang Belanja */}
-      <View style={styles.cartHeader}>
-        <Text style={styles.cartTitle}>🛒 Keranjang ({cart.length} item)</Text>
-        {cart.length > 0 && (
-          <TouchableOpacity onPress={clearCart}>
-            <Text style={styles.clearBtn}>Kosongkan</Text>
-          </TouchableOpacity>
-        )}
+      {/* ── Filter Kategori ── */}
+      <View style={styles.categoryScrollWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12 }}>
+          {categories.map((cat, idx) => (
+            <TouchableOpacity 
+              key={idx}
+              style={[styles.categoryPill, selectedCategory === cat && styles.categoryPillActive]}
+              onPress={() => setSelectedCategory(cat)}
+            >
+              <Text style={[styles.categoryPillText, selectedCategory === cat && styles.categoryPillTextActive]}>
+                {cat}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
-      {cart.length === 0 ? (
-        <View style={styles.emptyCart}>
-          <MaterialCommunityIcons name="cart-outline" size={64} color={colors.border} />
-          <Text style={styles.emptyText}>Keranjang masih kosong</Text>
-          <Text style={styles.emptySubText}>Cari barang di atas untuk ditambahkan</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={cart}
-          keyExtractor={(item) => item.product_id.toString()}
-          renderItem={renderCartItem}
-          style={styles.cartList}
-          contentContainerStyle={{ paddingBottom: 8 }}
-        />
-      )}
-
-      {/* Footer Total + Checkout */}
-      {cart.length > 0 && (
-        <View style={styles.footer}>
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total Belanja</Text>
-            <Text style={styles.totalValue}>{formatRupiah(totalHarga)}</Text>
+      {/* ── Grid Produk ── */}
+      <FlatList
+        data={displayedProducts}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderProductGrid}
+        numColumns={isTablet ? 3 : 2}
+        contentContainerStyle={styles.productGrid}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 50 }}>
+            <MaterialCommunityIcons name="package-variant" size={64} color={colors.border} />
+            <Text style={{ marginTop: 12, color: colors.textSecondary }}>Tidak ada produk ditemukan.</Text>
           </View>
-          <TouchableOpacity style={styles.checkoutBtn} onPress={handleCheckout}>
-            <MaterialCommunityIcons name="cash-register" size={20} color="#fff" />
-            <Text style={styles.checkoutText}>PROSES PEMBAYARAN</Text>
+        }
+      />
+
+      {/* ── Floating Cart Footer ── */}
+      {cart.length > 0 && (
+        <View style={styles.floatingCart}>
+          <View style={styles.floatingCartInfo}>
+            <Text style={styles.floatingCartTotal}>{formatRupiah(totalHarga)}</Text>
+            <Text style={styles.floatingCartItems}>{cart.length} item dipilih</Text>
+          </View>
+          <TouchableOpacity style={styles.floatingCartBtn} onPress={() => setShowCartModal(true)}>
+            <Text style={styles.floatingCartBtnText}>LIHAT KERANJANG</Text>
+            <MaterialCommunityIcons name="cart" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Modal Checkout */}
-      <Modal visible={showCheckout} animationType="slide" transparent onRequestClose={() => setShowCheckout(false)}>
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardAvoiding}>
-            <View style={styles.modalContainer}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>💰 Proses Pembayaran</Text>
-                <TouchableOpacity onPress={() => setShowCheckout(false)}>
-                  <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+      {/* ── Modal Keranjang & Checkout ── */}
+      <Modal visible={showCartModal} animationType="slide" onRequestClose={() => setShowCartModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={styles.modalHeaderFullScreen}>
+            <TouchableOpacity onPress={() => setShowCartModal(false)} style={{ padding: 8 }}>
+              <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.modalTitleFullScreen}>🛒 Keranjang & Pembayaran</Text>
+            <TouchableOpacity onPress={clearCart} style={{ padding: 8 }}>
+              <MaterialCommunityIcons name="trash-can-outline" size={24} color={colors.error} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
+            {/* Daftar Item Keranjang */}
+            <View style={styles.cartListContainer}>
+              {cart.map((item) => (
+                <View key={item.product_id} style={styles.cartItem}>
+                  {item.image_uri ? (
+                    <Image source={{ uri: item.image_uri }} style={styles.cartItemImage} />
+                  ) : (
+                    <View style={[styles.cartItemImage, { backgroundColor: colors.surfaceVariant, alignItems: 'center', justifyContent: 'center' }]}>
+                      <MaterialCommunityIcons name="image-outline" size={20} color={colors.textSecondary} />
+                    </View>
+                  )}
+                  <View style={styles.cartItemInfo}>
+                    <Text style={styles.cartItemName} numberOfLines={1}>{item.product_name}</Text>
+                    <Text style={styles.cartItemPrice}>{formatRupiah(item.selling_price)}</Text>
+                  </View>
+                  <View style={styles.qtyControl}>
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.product_id, item.quantity - 1)}>
+                      <MaterialCommunityIcons name="minus" size={16} color={colors.error} />
+                    </TouchableOpacity>
+                    <Text style={styles.qtyText}>{item.quantity}</Text>
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.product_id, item.quantity + 1)}>
+                      <MaterialCommunityIcons name="plus" size={16} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.dividerFullScreen} />
+
+            {/* Kalkulasi */}
+            <View style={styles.calcSection}>
+              <View style={styles.calcRow}>
+                <Text style={styles.calcLabel}>Subtotal</Text>
+                <Text style={styles.calcValue}>{formatRupiah(totalHarga)}</Text>
+              </View>
+
+              <View style={styles.calcRow}>
+                <Text style={styles.calcLabel}>Diskon (Rp)</Text>
+                <TextInput
+                  style={styles.calcInput}
+                  value={discountInput}
+                  onChangeText={setDiscountInput}
+                  keyboardType="numeric"
+                  placeholder="0"
+                />
+              </View>
+
+              <View style={styles.grandTotalContainer}>
+                <Text style={styles.grandTotalLabel}>TOTAL TAGIHAN</Text>
+                <Text style={styles.grandTotalValue}>{formatRupiah(grandTotal)}</Text>
+              </View>
+
+              <Text style={[styles.calcLabel, { marginTop: 12, marginBottom: 8, fontWeight: 'bold' }]}>
+                Pembayaran (Uang Diterima)
+              </Text>
+              <TextInput
+                style={styles.cashInputBig}
+                value={cashInput}
+                onChangeText={setCashInput}
+                keyboardType="numeric"
+                placeholder="Contoh: 50000"
+                placeholderTextColor={colors.textSecondary}
+              />
+
+              <View style={styles.quickAmountRow}>
+                <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput(grandTotal.toString())}>
+                  <Text style={styles.quickAmountText}>Uang Pas</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput('50000')}>
+                  <Text style={styles.quickAmountText}>50 Ribu</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput('100000')}>
+                  <Text style={styles.quickAmountText}>100 Ribu</Text>
                 </TouchableOpacity>
               </View>
 
-              <ScrollView>
-                {/* Ringkasan item */}
-                <View style={styles.modalSection}>
-                  {cart.map((item) => (
-                    <View key={item.product_id} style={styles.summaryRow}>
-                      <Text style={styles.summaryName} numberOfLines={1}>{item.product_name} x{item.quantity}</Text>
-                      <Text style={styles.summaryPrice}>{formatRupiah(item.selling_price * item.quantity)}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <View style={styles.divider} />
-
-                {/* Kalkulasi */}
-                <View style={styles.modalSection}>
-                  <View style={styles.calcRow}>
-                    <Text style={styles.calcLabel}>Subtotal</Text>
-                    <Text style={styles.calcValue}>{formatRupiah(totalHarga)}</Text>
-                  </View>
-
-                  <View style={styles.calcRow}>
-                    <Text style={styles.calcLabel}>Diskon (Rp)</Text>
-                    <TextInput
-                      style={styles.calcInput}
-                      value={discountInput}
-                      onChangeText={setDiscountInput}
-                      keyboardType="numeric"
-                      placeholder="0"
-                    />
-                  </View>
-
-                  <View style={styles.grandTotalContainer}>
-                    <Text style={styles.grandTotalLabel}>TOTAL TAGIHAN</Text>
-                    <Text style={styles.grandTotalValue}>{formatRupiah(grandTotal)}</Text>
-                  </View>
-
-                  <Text style={[styles.calcLabel, { marginTop: 12, marginBottom: 8, fontWeight: 'bold' }]}>
-                    Pembayaran (Uang Diterima)
+              {cashReceived > 0 && (
+                <View style={[styles.kembalianBox, { backgroundColor: kembalian >= 0 ? '#D1FAE5' : '#FEE2E2' }]}>
+                  <Text style={{ fontWeight: 'bold', fontSize: 15, color: kembalian >= 0 ? '#065F46' : '#991B1B' }}>
+                    {kembalian >= 0 ? 'KEMBALIAN' : 'UANG KURANG'}
                   </Text>
-                  <TextInput
-                    style={styles.cashInputBig}
-                    value={cashInput}
-                    onChangeText={setCashInput}
-                    keyboardType="numeric"
-                    placeholder="Contoh: 50000"
-                    placeholderTextColor={colors.textSecondary}
-                  />
-
-                  {/* Quick Amount Buttons */}
-                  <View style={styles.quickAmountRow}>
-                    <TouchableOpacity
-                      style={styles.quickAmountBtn}
-                      onPress={() => setCashInput(grandTotal.toString())}
-                    >
-                      <Text style={styles.quickAmountText}>Uang Pas</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.quickAmountBtn}
-                      onPress={() => setCashInput('50000')}
-                    >
-                      <Text style={styles.quickAmountText}>50 Ribu</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.quickAmountBtn}
-                      onPress={() => setCashInput('100000')}
-                    >
-                      <Text style={styles.quickAmountText}>100 Ribu</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {cashReceived > 0 && (
-                    <View style={[styles.kembalianBox, { backgroundColor: kembalian >= 0 ? '#D1FAE5' : '#FEE2E2' }]}>
-                      <Text style={{ fontWeight: 'bold', fontSize: 15, color: kembalian >= 0 ? '#065F46' : '#991B1B' }}>
-                        {kembalian >= 0 ? 'KEMBALIAN' : 'UANG KURANG'}
-                      </Text>
-                      <Text style={{ fontWeight: 'bold', fontSize: 24, color: kembalian >= 0 ? '#065F46' : '#991B1B' }}>
-                        {formatRupiah(Math.abs(kembalian))}
-                      </Text>
-                    </View>
-                  )}
+                  <Text style={{ fontWeight: 'bold', fontSize: 24, color: kembalian >= 0 ? '#065F46' : '#991B1B' }}>
+                    {formatRupiah(Math.abs(kembalian))}
+                  </Text>
                 </View>
+              )}
 
-                {/* Tombol bayar */}
-                <View style={[styles.modalSection, { paddingTop: 0 }]}>
-                  <TouchableOpacity
-                    style={[styles.bayarBtn, { opacity: cashReceived >= grandTotal ? 1 : 0.5 }]}
-                    onPress={handleBayar}
-                    disabled={cashReceived < grandTotal}
-                  >
-                    <MaterialCommunityIcons name="check-circle" size={24} color="#fff" />
-                    <Text style={styles.bayarText}>SELESAIKAN TRANSAKSI</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
+              <TouchableOpacity
+                style={[styles.bayarBtn, { opacity: cashReceived >= grandTotal ? 1 : 0.5 }]}
+                onPress={handleBayar}
+                disabled={cashReceived < grandTotal}
+              >
+                <MaterialCommunityIcons name="check-circle" size={24} color="#fff" />
+                <Text style={styles.bayarText}>SELESAIKAN TRANSAKSI</Text>
+              </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* Success Modal - Print/Share */}
+      {/* ── Success Modal - Print/Share ── */}
       <Modal visible={showSuccessModal} transparent animationType="fade" onRequestClose={() => setShowSuccessModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.successModal, { padding: 0, overflow: 'hidden' }]}>
@@ -546,149 +566,98 @@ const styles = StyleSheet.create({
 
   // Search
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    margin: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    elevation: 2,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
+    marginHorizontal: 12, marginTop: 12, marginBottom: 8, paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 12, borderWidth: 1, borderColor: colors.border, elevation: 2,
   },
   searchInput: { flex: 1, fontSize: 15, color: colors.text },
-  searchDropdown: {
-    marginHorizontal: 12,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    elevation: 6,
-    zIndex: 10,
-    overflow: 'hidden',
-  },
-  searchResult: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  searchName: { fontSize: 14, fontWeight: '600', color: colors.text },
-  searchPrice: { fontSize: 12, color: colors.primary, marginTop: 2 },
-  searchRight: { alignItems: 'flex-end', marginRight: 10 },
-  searchStock: { fontSize: 12, fontWeight: '600' },
-  lowStockBadge: { fontSize: 10, color: '#fff', backgroundColor: colors.error, borderRadius: 4, paddingHorizontal: 4, marginTop: 2 },
 
-  // Cart Header
-  cartHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  // Categories
+  categoryScrollWrapper: { marginBottom: 8 },
+  categoryPill: {
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    marginRight: 8, elevation: 1
   },
-  cartTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
-  clearBtn: { fontSize: 13, color: colors.error, fontWeight: '600' },
+  categoryPillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  categoryPillText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  categoryPillTextActive: { color: '#fff' },
 
-  // Empty Cart
-  emptyCart: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
-  emptyText: { fontSize: 16, color: colors.textSecondary, marginTop: 12, fontWeight: '600' },
-  emptySubText: { fontSize: 13, color: colors.textSecondary, marginTop: 4 },
+  // Grid
+  productGrid: { paddingHorizontal: 6, paddingBottom: 90 },
+  productCard: {
+    flex: 1, margin: 6, backgroundColor: colors.surface, borderRadius: 12,
+    overflow: 'hidden', elevation: 2, borderWidth: 1, borderColor: colors.border,
+    maxWidth: isTablet ? '31%' : '47%',
+  },
+  productCardImg: { height: 110, width: '100%', backgroundColor: colors.surfaceVariant, alignItems: 'center', justifyContent: 'center' },
+  gridCategoryBadge: {
+    position: 'absolute', top: 6, left: 6, backgroundColor: colors.primaryContainer,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
+  },
+  gridCategoryBadgeText: { fontSize: 9, color: colors.primary, fontWeight: 'bold', textTransform: 'uppercase' },
+  gridQtyBadge: {
+    position: 'absolute', top: 6, right: 6, backgroundColor: colors.error,
+    width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    elevation: 2,
+  },
+  gridQtyBadgeText: { fontSize: 12, color: '#fff', fontWeight: 'bold' },
+  productCardInfo: { padding: 10 },
+  productCardName: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 4 },
+  productCardPrice: { fontSize: 14, color: colors.primary, fontWeight: '700' },
+  productCardStock: { fontSize: 11, color: colors.textSecondary, marginTop: 4 },
 
-  // Cart Items
-  cartList: { flex: 1 },
+  // Floating Cart
+  floatingCart: {
+    position: 'absolute', bottom: 16, left: 16, right: 16,
+    backgroundColor: colors.surface, borderRadius: 16, padding: 12,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    elevation: 8, borderWidth: 1, borderColor: colors.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 4,
+  },
+  floatingCartInfo: { flex: 1 },
+  floatingCartTotal: { fontSize: 18, fontWeight: 'bold', color: colors.primary },
+  floatingCartItems: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  floatingCartBtn: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary,
+    paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, gap: 6,
+  },
+  floatingCartBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+
+  // Modal Keranjang Fullscreen
+  modalHeaderFullScreen: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, paddingTop: Platform.OS === 'android' ? 40 : (Platform.OS === 'ios' ? 50 : 16),
+    borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface,
+  },
+  modalTitleFullScreen: { fontSize: 18, fontWeight: 'bold', color: colors.text },
+  cartListContainer: { padding: 16 },
   cartItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    marginHorizontal: 12,
-    marginVertical: 4,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    elevation: 1,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
+    marginBottom: 10, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border,
   },
+  cartItemImage: { width: 50, height: 50, borderRadius: 8, marginRight: 12 },
   cartItemInfo: { flex: 1, marginRight: 8 },
   cartItemName: { fontSize: 14, fontWeight: '600', color: colors.text },
-  cartItemPrice: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  qtyControl: { flexDirection: 'row', alignItems: 'center', marginRight: 12 },
+  cartItemPrice: { fontSize: 13, color: colors.primary, marginTop: 4, fontWeight: '600' },
+  qtyControl: { flexDirection: 'row', alignItems: 'center' },
   qtyBtn: {
-    width: 28, height: 28, borderRadius: 14,
-    borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.surface,
+    width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface,
   },
   qtyText: { fontSize: 15, fontWeight: 'bold', marginHorizontal: 10, color: colors.text },
-  cartItemTotal: { fontSize: 14, fontWeight: 'bold', color: colors.primary, minWidth: 70, textAlign: 'right' },
-
-  // Footer
-  footer: {
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    padding: 16,
-    elevation: 8,
-  },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  totalLabel: { fontSize: 15, color: colors.textSecondary, fontWeight: '600' },
-  totalValue: { fontSize: 18, fontWeight: 'bold', color: colors.text },
-  checkoutBtn: {
-    backgroundColor: colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
-    borderRadius: 12,
-    gap: 8,
-    elevation: 4,
-  },
-  checkoutText: { color: '#fff', fontWeight: 'bold', fontSize: 15, letterSpacing: 0.5 },
-
-  // Modal
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center', alignItems: 'center',
-    padding: 16,
-  },
-  keyboardAvoiding: {
-    width: '100%',
-    maxWidth: 450,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: colors.surface,
-    borderRadius: 24,
-    width: '100%',
-    maxHeight: '90%',
-    paddingBottom: 24,
-  },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
-  modalSection: { paddingHorizontal: 20, paddingVertical: 12 },
-  divider: { height: 1, backgroundColor: colors.border, marginHorizontal: 20 },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 3 },
-  summaryName: { fontSize: 13, color: colors.text, flex: 1 },
-  summaryPrice: { fontSize: 13, color: colors.text, fontWeight: '600' },
+  dividerFullScreen: { height: 1, backgroundColor: colors.border, marginHorizontal: 16 },
+  calcSection: { padding: 16 },
   calcRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 6 },
   calcLabel: { fontSize: 14, color: colors.textSecondary },
   calcValue: { fontSize: 14, color: colors.text, fontWeight: '600' },
   calcInput: {
     borderWidth: 1, borderColor: colors.border, borderRadius: 8,
     paddingHorizontal: 10, paddingVertical: 6, fontSize: 14,
-    minWidth: 130, textAlign: 'right', color: colors.text,
+    minWidth: 130, textAlign: 'right', color: colors.text, backgroundColor: '#fff',
   },
   grandTotalContainer: {
-    backgroundColor: colors.primaryContainer,
-    borderRadius: 12, padding: 16, marginVertical: 12,
+    backgroundColor: colors.primaryContainer, borderRadius: 12, padding: 16, marginVertical: 12,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
   },
   grandTotalLabel: { fontSize: 16, fontWeight: 'bold', color: colors.primary },
@@ -698,13 +667,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12, fontSize: 18,
     color: colors.text, backgroundColor: '#fff', fontWeight: 'bold',
   },
-  quickAmountRow: {
-    flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, gap: 8,
-  },
+  quickAmountRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, gap: 8 },
   quickAmountBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 8,
-    backgroundColor: colors.surfaceVariant, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border
+    flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.surfaceVariant,
+    alignItems: 'center', borderWidth: 1, borderColor: colors.border
   },
   quickAmountText: { fontSize: 13, fontWeight: '700', color: colors.primary },
   kembalianBox: {
@@ -712,50 +678,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'
   },
   bayarBtn: {
-    backgroundColor: colors.primary,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    padding: 16, borderRadius: 14, gap: 8, elevation: 4, marginTop: 12,
+    backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    padding: 16, borderRadius: 14, gap: 8, elevation: 4, marginTop: 24,
   },
   bayarText: { color: '#fff', fontWeight: 'bold', fontSize: 15, letterSpacing: 0.5 },
 
   // Success Modal
-  successModal: {
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
-    width: '85%',
-    maxWidth: 380,
-    alignSelf: 'center',
-    elevation: 8,
-  },
-  successTitle: {
-    fontSize: 22, fontWeight: 'bold', color: colors.text,
-    textAlign: 'center', marginTop: 12, marginBottom: 4,
-  },
-  successInvoice: {
-    fontSize: 14, color: colors.textSecondary,
-    textAlign: 'center', marginBottom: 16,
-  },
-  successDetail: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    backgroundColor: '#D1FAE5', borderRadius: 12,
-    paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16,
-  },
-  successLabel: { fontSize: 14, color: '#065F46', fontWeight: '600' },
-  successValue: { fontSize: 18, color: '#065F46', fontWeight: 'bold' },
-  successActions: {
-    flexDirection: 'row', gap: 10, marginBottom: 12,
-  },
-  successBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', backgroundColor: colors.primary,
-    paddingVertical: 12, borderRadius: 12, gap: 6,
-  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 },
+  successModal: { backgroundColor: '#fff', borderRadius: 24, width: '100%', maxWidth: 380, alignSelf: 'center', elevation: 8 },
+  successTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 },
+  successActions: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  successBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 12, gap: 6 },
   successBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  successClose: {
-    alignItems: 'center', paddingVertical: 12,
-    borderTopWidth: 1, borderTopColor: colors.border, marginTop: 4,
-  },
+  successClose: { alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border, marginTop: 4 },
   successCloseText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
 });
 
