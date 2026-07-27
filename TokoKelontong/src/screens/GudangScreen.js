@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, FlatList, StyleSheet, Alert } from 'react-native';
-import { Searchbar, FAB, useTheme, Text } from 'react-native-paper';
+import { Searchbar, useTheme, Text, Button } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import ProductRepository from '../database/productRepository';
 import ProductCard from '../components/ProductCard';
@@ -79,12 +79,19 @@ const GudangScreen = ({ navigation }) => {
         contentContainerStyle={{ paddingBottom: 80 }}
       />
 
-      <FAB
-        icon="plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        color="#fff"
-        onPress={() => navigation.navigate('AddProductScreen')}
-      />
+      <View style={styles.bottomContainer}>
+        <Button
+          mode="contained"
+          onPress={() => navigation.navigate('AddProductScreen')}
+          style={styles.addBtn}
+          buttonColor={theme.colors.primary}
+          labelStyle={{ fontWeight: 'bold', fontSize: 16 }}
+          contentStyle={{ paddingVertical: 8 }}
+          icon="plus"
+        >
+          TAMBAH BARANG
+        </Button>
+      </View>
     </View>
   );
 };
@@ -92,11 +99,15 @@ const GudangScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   searchbar: { margin: 16 },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 30,
+  bottomContainer: {
+    padding: 16,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    elevation: 8,
+  },
+  addBtn: {
+    borderRadius: 12,
   },
   emptyContainer: {
     padding: 32,

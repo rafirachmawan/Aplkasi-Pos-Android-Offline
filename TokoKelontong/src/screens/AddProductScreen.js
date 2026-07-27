@@ -222,20 +222,46 @@ const AddProductScreen = ({ navigation, route }) => {
   }, [scannedBarcode]);
 
   // ── Image picker ──
-  const handlePickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      if (!result.canceled) {
-        setImageUri(result.assets[0].uri);
-      }
-    } catch (e) {
-      Alert.alert('Error', 'Gagal membuka galeri');
-    }
+  const handlePickImage = () => {
+    Alert.alert(
+      'Pilih Sumber Foto',
+      'Pilih dari mana Anda ingin mengambil foto produk.',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Galeri',
+          onPress: async () => {
+            try {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+              });
+              if (!result.canceled) setImageUri(result.assets[0].uri);
+            } catch (e) {
+              Alert.alert('Error', 'Gagal membuka galeri');
+            }
+          },
+        },
+        {
+          text: 'Kamera',
+          onPress: async () => {
+            try {
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+              });
+              if (!result.canceled) setImageUri(result.assets[0].uri);
+            } catch (e) {
+              Alert.alert('Error', 'Gagal membuka kamera');
+            }
+          },
+        },
+      ]
+    );
   };
 
   // ── Barcode scanner ──
@@ -414,21 +440,6 @@ const AddProductScreen = ({ navigation, route }) => {
           <TouchableOpacity style={styles.iconBtn} onPress={openBarcodeScanner}>
             <MaterialCommunityIcons name="barcode-scan" size={24} color="#fff" />
           </TouchableOpacity>
-          {barcode === '' ? (
-            <TouchableOpacity
-              style={[styles.iconBtn, { backgroundColor: colors.secondary }]}
-              onPress={() => setBarcode(String(Date.now()))}
-            >
-              <MaterialCommunityIcons name="refresh" size={24} color="#fff" />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.iconBtn, { backgroundColor: '#8B5CF6' }]}
-              onPress={() => setShowBarcodeModal(true)}
-            >
-              <MaterialCommunityIcons name="barcode" size={24} color="#fff" />
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* ── Info Produk ── */}
@@ -509,13 +520,6 @@ const AddProductScreen = ({ navigation, route }) => {
         {/* ── Satuan Produk ── */}
         <View style={styles.unitHeader}>
           <Text style={styles.sectionLabel}>Satuan</Text>
-          <TouchableOpacity
-            style={styles.addUnitBtn}
-            onPress={() => { setNewUnitInput(''); setShowAddUnitModal(true); }}
-          >
-            <MaterialCommunityIcons name="plus" size={14} color={colors.primary} />
-            <Text style={styles.addUnitBtnText}>Tambah</Text>
-          </TouchableOpacity>
         </View>
         <View style={styles.unitPillWrap}>
           {units.map((u, index) => (
@@ -543,9 +547,21 @@ const AddProductScreen = ({ navigation, route }) => {
         </View>
 
         <Button
+          mode="outlined"
+          onPress={() => { setNewUnitInput(''); setShowAddUnitModal(true); }}
+          style={[styles.saveButton, { marginTop: 16 }]}
+          textColor={colors.primary}
+          icon="plus"
+        >
+          TAMBAH SATUAN BARU
+        </Button>
+
+        <Button
           mode="contained"
           onPress={handleSave}
           style={styles.saveButton}
+          buttonColor={colors.primary}
+          labelStyle={{ fontWeight: 'bold', fontSize: 16 }}
           contentStyle={{ paddingVertical: 6 }}
           icon={existingProduct ? 'content-save' : 'plus'}
         >

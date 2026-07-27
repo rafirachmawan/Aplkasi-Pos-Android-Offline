@@ -10,6 +10,7 @@ import LaporanScreen from '../screens/LaporanScreen';
 import PengaturanScreen from '../screens/PengaturanScreen';
 import AddProductScreen from '../screens/AddProductScreen';
 import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
+import SettingNotaScreen from '../screens/SettingNotaScreen';
 
 import { colors } from '../theme/colors';
 
@@ -57,6 +58,11 @@ export default function AppNavigator() {
         name="AddProductScreen"
         component={AddProductScreen}
         options={{ title: 'Form Barang' }}
+      />
+      <Stack.Screen
+        name="SettingNota"
+        component={SettingNotaScreen}
+        options={{ title: 'Pengaturan Nota' }}
       />
       <Stack.Screen
         name="Laporan"

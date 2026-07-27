@@ -155,6 +155,10 @@ const DashboardScreen = ({ navigation }) => {
             <MaterialCommunityIcons name="chart-box" size={24} color={colors.warning} />
             <Text style={styles.quickLabel}>Laporan</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('SettingNota')}>
+            <MaterialCommunityIcons name="receipt" size={24} color="#8B5CF6" />
+            <Text style={styles.quickLabel}>Nota</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>

@@ -54,6 +54,14 @@ const menuItems = [
     desc: 'Konfigurasi Toko',
     screen: 'Pengaturan',
   },
+  {
+    name: 'Pengaturan Nota',
+    icon: 'receipt',
+    color: '#10B981', // Emerald
+    bg: '#D1FAE5',
+    desc: 'Cetak & Format Struk',
+    screen: 'SettingNota',
+  },
 ];
 
 const HomeScreen = ({ navigation }) => {

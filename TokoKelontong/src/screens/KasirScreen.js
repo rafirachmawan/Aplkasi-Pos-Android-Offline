@@ -11,14 +11,19 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppContext } from '../context/AppContext';
 import ProductRepository from '../database/productRepository';
 import TransactionRepository from '../database/transactionRepository';
 import { formatRupiah } from '../utils/helpers';
-import { printReceipt } from '../utils/printer';
+import { generateReceiptHTML, generateWAMessage } from '../utils/receiptGenerator';
 import { colors } from '../theme/colors';
 
 const KasirScreen = ({ navigation }) => {
@@ -30,6 +35,10 @@ const KasirScreen = ({ navigation }) => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [cashInput, setCashInput] = useState('');
   const [discountInput, setDiscountInput] = useState('0');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastTx, setLastTx] = useState(null);
+  const [lastTxDetails, setLastTxDetails] = useState([]);
+  const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
 
   // Refresh saat screen difokus
   useFocusEffect(
@@ -157,32 +166,69 @@ const KasirScreen = ({ navigation }) => {
       setShowCheckout(false);
       const cartItems = [...cart];
       dispatch({ type: 'CLEAR_CART' });
-      
-      // Cetak Struk
-      if (Platform.OS !== 'web' && state.printerAddress) {
-         const printRes = await printReceipt(
-           state.storeName || 'Toko Kelontong',
-           invoiceNum,
-           cartItems,
-           totalHarga,
-           diskon,
-           grandTotal,
-           cashReceived,
-           kembalian,
-           state.printerAddress
-         );
-         if (!printRes.success) {
-           Alert.alert('Info Printer', printRes.message);
-         }
-      }
 
-      Alert.alert(
-        '✅ Transaksi Berhasil!',
-        `Kembalian: ${formatRupiah(kembalian)}`,
-        [{ text: 'OK' }]
-      );
+      // Ambil detail transaksi untuk nota
+      try {
+        const details = TransactionRepository.getTransactionDetails(txId);
+        setLastTxDetails(details);
+      } catch (_) { setLastTxDetails([]); }
+
+      if (fullTx) {
+        setLastTx(fullTx);
+        setShowSuccessModal(true);
+      } else {
+        Alert.alert('✅ Transaksi Berhasil!', `Kembalian: ${formatRupiah(kembalian)}`);
+      }
     } catch (e) {
       Alert.alert('Error', e.message);
+    }
+  };
+
+  const getStoreProfile = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('@TokoKelontong:StoreProfile');
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  };
+
+  const handlePrintFromKasir = async () => {
+    if (Platform.OS === 'web' || !lastTx) return;
+    setIsLoadingReceipt(true);
+    try {
+      const storeProfile = await getStoreProfile();
+      const html = generateReceiptHTML(lastTx, lastTxDetails, storeProfile);
+      await Print.printAsync({ html });
+    } catch (e) {
+      Alert.alert('Error', 'Gagal cetak: ' + e.message);
+    } finally {
+      setIsLoadingReceipt(false);
+    }
+  };
+
+  const handleShareFromKasir = async () => {
+    if (Platform.OS === 'web' || !lastTx) return;
+    setIsLoadingReceipt(true);
+    try {
+      const storeProfile = await getStoreProfile();
+      // Kirim pesan teks ke WhatsApp dulu
+      const waText = generateWAMessage(lastTx, lastTxDetails, storeProfile);
+      const waUrl = `whatsapp://send?text=${encodeURIComponent(waText)}`;
+      const canOpenWA = await Linking.canOpenURL(waUrl);
+      if (canOpenWA) {
+        await Linking.openURL(waUrl);
+      } else {
+        // Fallback: share PDF jika WA tidak tersedia
+        const html = generateReceiptHTML(lastTx, lastTxDetails, storeProfile);
+        const { uri } = await Print.printToFileAsync({ html });
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Kirim Nota via...' });
+        }
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Gagal kirim: ' + e.message);
+    } finally {
+      setIsLoadingReceipt(false);
     }
   };
 
@@ -415,6 +461,82 @@ const KasirScreen = ({ navigation }) => {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Success Modal - Print/Share */}
+      <Modal visible={showSuccessModal} transparent animationType="fade" onRequestClose={() => setShowSuccessModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.successModal, { padding: 0, overflow: 'hidden' }]}>
+            
+            <View style={{ backgroundColor: '#10B981', padding: 20, alignItems: 'center' }}>
+              <MaterialCommunityIcons name="check-circle" size={48} color="#fff" />
+              <Text style={[styles.successTitle, { color: '#fff', marginTop: 8 }]}>Transaksi Berhasil!</Text>
+              <Text style={{ color: '#D1FAE5', fontSize: 13 }}>{lastTx?.invoice_number}</Text>
+            </View>
+
+            <ScrollView style={{ maxHeight: 300 }} contentContainerStyle={{ padding: 20 }}>
+              {lastTx && lastTxDetails.map((item, index) => (
+                <View key={index} style={{ marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingBottom: 8 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>{item.product_name}</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>{item.quantity} x {formatRupiah(item.price_at_sale)}</Text>
+                    <Text style={{ fontSize: 13, fontWeight: 'bold', color: colors.text }}>{formatRupiah(item.quantity * item.price_at_sale)}</Text>
+                  </View>
+                </View>
+              ))}
+
+              {lastTx && (
+                <View style={{ marginTop: 8, gap: 6 }}>
+                  {lastTx.discount_amount > 0 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: 13, color: colors.textSecondary }}>Subtotal</Text>
+                      <Text style={{ fontSize: 13, color: colors.text }}>{formatRupiah(lastTx.total_price)}</Text>
+                    </View>
+                  )}
+                  {lastTx.discount_amount > 0 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: 13, color: colors.textSecondary }}>Diskon</Text>
+                      <Text style={{ fontSize: 13, color: '#EF4444' }}>-{formatRupiah(lastTx.discount_amount)}</Text>
+                    </View>
+                  )}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
+                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.primary }}>TOTAL</Text>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.primary }}>{formatRupiah(lastTx.grand_total)}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>Tunai</Text>
+                    <Text style={{ fontSize: 13, color: colors.text }}>{formatRupiah(lastTx.cash_received)}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#ECFDF5', padding: 10, borderRadius: 8, marginTop: 4 }}>
+                    <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#059669' }}>Kembalian</Text>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#059669' }}>{formatRupiah(lastTx.cash_return)}</Text>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+              {isLoadingReceipt ? (
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: 12 }} />
+              ) : (
+                <View style={styles.successActions}>
+                  <TouchableOpacity style={styles.successBtn} onPress={handlePrintFromKasir}>
+                    <MaterialCommunityIcons name="printer" size={20} color="#fff" />
+                    <Text style={styles.successBtnText}>Cetak</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.successBtn, { backgroundColor: '#25D366' }]} onPress={handleShareFromKasir}>
+                    <MaterialCommunityIcons name="whatsapp" size={20} color="#fff" />
+                    <Text style={styles.successBtnText}>Kirim WA</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+  
+              <TouchableOpacity style={styles.successClose} onPress={() => setShowSuccessModal(false)}>
+                <Text style={styles.successCloseText}>Tutup</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -595,6 +717,46 @@ const styles = StyleSheet.create({
     padding: 16, borderRadius: 14, gap: 8, elevation: 4, marginTop: 12,
   },
   bayarText: { color: '#fff', fontWeight: 'bold', fontSize: 15, letterSpacing: 0.5 },
+
+  // Success Modal
+  successModal: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    width: '85%',
+    maxWidth: 380,
+    alignSelf: 'center',
+    elevation: 8,
+  },
+  successTitle: {
+    fontSize: 22, fontWeight: 'bold', color: colors.text,
+    textAlign: 'center', marginTop: 12, marginBottom: 4,
+  },
+  successInvoice: {
+    fontSize: 14, color: colors.textSecondary,
+    textAlign: 'center', marginBottom: 16,
+  },
+  successDetail: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    backgroundColor: '#D1FAE5', borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16,
+  },
+  successLabel: { fontSize: 14, color: '#065F46', fontWeight: '600' },
+  successValue: { fontSize: 18, color: '#065F46', fontWeight: 'bold' },
+  successActions: {
+    flexDirection: 'row', gap: 10, marginBottom: 12,
+  },
+  successBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', backgroundColor: colors.primary,
+    paddingVertical: 12, borderRadius: 12, gap: 6,
+  },
+  successBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  successClose: {
+    alignItems: 'center', paddingVertical: 12,
+    borderTopWidth: 1, borderTopColor: colors.border, marginTop: 4,
+  },
+  successCloseText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
 });
 
 export default KasirScreen;

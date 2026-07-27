@@ -8,12 +8,19 @@ import {
   ScrollView,
   Platform,
   Modal,
+  Alert,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import TransactionRepository from '../database/transactionRepository';
 import { formatRupiah } from '../utils/helpers';
 import { exportToCSV } from '../utils/exportCSV';
+import { generateReceiptHTML, generateWAMessage } from '../utils/receiptGenerator';
 import { colors } from '../theme/colors';
 
 const TABS = ['Harian', 'Bulanan', 'Riwayat'];
@@ -23,9 +30,9 @@ const LaporanScreen = () => {
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({ omzet: 0, laba: 0, count: 0 });
   const [selectedDate, setSelectedDate] = useState(new Date());
-
   const [selectedTx, setSelectedTx] = useState(null);
   const [txDetails, setTxDetails] = useState([]);
+  const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
 
   const today = new Date();
 
@@ -126,6 +133,58 @@ const LaporanScreen = () => {
       setSelectedTx(tx);
     } catch (e) {
       alert('Gagal mengambil detail transaksi: ' + e.message);
+    }
+  };
+
+  const getStoreProfile = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('@TokoKelontong:StoreProfile');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const handlePrintReceipt = async () => {
+    if (!selectedTx) return;
+    if (Platform.OS === 'web') { Alert.alert('Info', 'Cetak hanya tersedia di Android.'); return; }
+    setIsLoadingReceipt(true);
+    try {
+      const storeProfile = await getStoreProfile();
+      const html = generateReceiptHTML(selectedTx, txDetails, storeProfile);
+      await Print.printAsync({ html });
+    } catch (e) {
+      Alert.alert('Error', 'Gagal mencetak nota: ' + e.message);
+    } finally {
+      setIsLoadingReceipt(false);
+    }
+  };
+
+  const handleSharePDF = async () => {
+    if (!selectedTx) return;
+    if (Platform.OS === 'web') { Alert.alert('Info', 'Bagikan PDF hanya tersedia di Android.'); return; }
+    setIsLoadingReceipt(true);
+    try {
+      const storeProfile = await getStoreProfile();
+      // Kirim pesan teks ke WhatsApp dulu
+      const waText = generateWAMessage(selectedTx, txDetails, storeProfile);
+      const waUrl = `whatsapp://send?text=${encodeURIComponent(waText)}`;
+      const canOpenWA = await Linking.canOpenURL(waUrl);
+      if (canOpenWA) {
+        await Linking.openURL(waUrl);
+      } else {
+        // Fallback: share PDF jika WA tidak tersedia
+        const html = generateReceiptHTML(selectedTx, txDetails, storeProfile);
+        const { uri } = await Print.printToFileAsync({ html });
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Kirim Nota via...' });
+        }
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Gagal mengirim: ' + e.message);
+    } finally {
+      setIsLoadingReceipt(false);
     }
   };
 
@@ -289,6 +348,23 @@ const LaporanScreen = () => {
                 </>
               )}
             </ScrollView>
+            {/* Action Buttons */}
+            <View style={styles.modalActions}>
+              {isLoadingReceipt ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+              ) : (
+                <>
+                  <TouchableOpacity style={styles.actionBtn} onPress={handlePrintReceipt}>
+                    <MaterialCommunityIcons name="printer" size={20} color="#fff" />
+                    <Text style={styles.actionBtnText}>Cetak Nota</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#25D366' }]} onPress={handleSharePDF}>
+                    <MaterialCommunityIcons name="whatsapp" size={20} color="#fff" />
+                    <Text style={styles.actionBtnText}>Kirim PDF</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
           </View>
         </View>
       </Modal>
@@ -390,6 +466,26 @@ const styles = StyleSheet.create({
   calcRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   calcLabel: { fontSize: 14, color: colors.textSecondary },
   calcValue: { fontSize: 14, fontWeight: '600', color: colors.text },
+
+  // Modal Action Buttons
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // Empty
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
