@@ -26,7 +26,9 @@ export const initDB = () => {
       capital_price INTEGER NOT NULL,
       selling_price INTEGER NOT NULL,
       stock_quantity INTEGER NOT NULL,
-      min_stock_threshold INTEGER DEFAULT 5
+      min_stock_threshold INTEGER DEFAULT 5,
+      image_uri TEXT,
+      unit TEXT DEFAULT 'pack'
     );
     
     CREATE INDEX IF NOT EXISTS idx_barcode ON products(barcode);
@@ -53,6 +55,20 @@ export const initDB = () => {
       FOREIGN KEY(product_id) REFERENCES products(id)
     );
   `);
+
+  // Migration: add image_uri column jika belum ada (untuk DB lama)
+  try {
+    db.execSync(`ALTER TABLE products ADD COLUMN image_uri TEXT`);
+  } catch (_) {
+    // Kolom sudah ada, abaikan error
+  }
+
+  // Migration: add unit column jika belum ada (untuk DB lama)
+  try {
+    db.execSync(`ALTER TABLE products ADD COLUMN unit TEXT DEFAULT 'pcs'`);
+  } catch (_) {
+    // Kolom sudah ada, abaikan error
+  }
 };
 
 export default db;

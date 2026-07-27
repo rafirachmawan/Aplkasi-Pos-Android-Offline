@@ -34,7 +34,7 @@ class ProductRepository {
    * Menambahkan produk baru
    */
   addProduct(product) {
-    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold = 5 } = product;
+    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold = 5, image_uri = null, unit = 'pack' } = product;
     
     // Validasi barcode unik
     if (barcode) {
@@ -45,9 +45,9 @@ class ProductRepository {
     }
 
     const result = db.runSync(
-      `INSERT INTO products (barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold]
+      `INSERT INTO products (barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit]
     );
     return result.lastInsertRowId;
   }
@@ -56,13 +56,13 @@ class ProductRepository {
    * Memperbarui data produk berdasarkan ID
    */
   updateProduct(id, product) {
-    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold } = product;
+    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri = null, unit = 'pack' } = product;
     
     const result = db.runSync(
       `UPDATE products 
-       SET barcode = ?, product_name = ?, capital_price = ?, selling_price = ?, stock_quantity = ?, min_stock_threshold = ?
+       SET barcode = ?, product_name = ?, capital_price = ?, selling_price = ?, stock_quantity = ?, min_stock_threshold = ?, image_uri = ?, unit = ?
        WHERE id = ?`,
-      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, id]
+      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit, id]
     );
     return result.changes > 0;
   }
