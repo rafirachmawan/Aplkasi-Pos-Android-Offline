@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle b/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
-index d86e4f5..36f1c40 100644
+index d86e4f5..db0286b 100644
 --- a/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
 +++ b/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
 @@ -1,7 +1,7 @@
@@ -7,12 +7,13 @@ index d86e4f5..36f1c40 100644
      repositories {
 -        jcenter { url "http://jcenter.bintray.com/" }
 -        maven {url "http://repo.spring.io/plugins-release/"}
-+        google()
-+        mavenCentral()
++        jcenter { url "https://jcenter.bintray.com/" }
++        maven {url "https://repo.spring.io/plugins-release/"}
          mavenCentral()
          maven {
              // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-@@ -20,12 +20,16 @@ apply plugin: 'com.android.library'
+@@ -20,12 +20,16 @@ buildscript {
+ apply plugin: 'com.android.library'
  
  android {
 -    compileSdkVersion 27
@@ -32,18 +33,18 @@ index d86e4f5..36f1c40 100644
          versionCode 1
          versionName "1.0"
      }
-@@ -39,8 +43,8 @@ android {
+@@ -40,8 +44,8 @@ android {
  }
  
  repositories {
 -    jcenter { url "http://jcenter.bintray.com/" }
 -    maven {url "http://repo.spring.io/plugins-release/"}
-+    google()
-+    mavenCentral()
++    jcenter { url "https://jcenter.bintray.com/" }
++    maven {url "https://repo.spring.io/plugins-release/"}
      mavenCentral()
      maven {
          // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-@@ -52,7 +56,7 @@ repositories {
+@@ -53,7 +57,7 @@ repositories {
  }
  
  dependencies {
