@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
 
   // Floating Cart
   floatingCart: {
-    position: 'absolute', bottom: 16, left: 16, right: 16,
+    position: 'absolute', bottom: 48, left: 16, right: 16,
     backgroundColor: colors.surface, borderRadius: 16, padding: 12,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     elevation: 8, borderWidth: 1, borderColor: colors.border,
