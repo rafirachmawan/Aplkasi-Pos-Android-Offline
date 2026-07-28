@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle b/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
-index d86e4f5..fba1f54 100644
+index d86e4f5..2113619 100644
 --- a/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
 +++ b/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
 @@ -1,7 +1,7 @@
@@ -46,12 +46,14 @@ index d86e4f5..fba1f54 100644
      mavenCentral()
      maven {
          // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-@@ -53,7 +58,7 @@ repositories {
+@@ -53,8 +58,7 @@ repositories {
  }
  
  dependencies {
 -    compile fileTree(dir: 'libs', include: ['*.jar'])
 +    implementation fileTree(dir: 'libs', include: ['*.jar'])
      implementation 'com.facebook.react:react-native:+'  // From node_modules
-     implementation group: 'com.android.support', name: 'support-v4', version: '27.0.0'
+-    implementation group: 'com.android.support', name: 'support-v4', version: '27.0.0'
      implementation "com.google.zxing:core:3.3.0"
+ }
+\ No newline at end of file
