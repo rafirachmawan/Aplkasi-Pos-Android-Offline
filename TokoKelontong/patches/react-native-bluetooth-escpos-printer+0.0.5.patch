@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle b/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
-index d86e4f5..db0286b 100644
+index d86e4f5..fba1f54 100644
 --- a/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
 +++ b/node_modules/react-native-bluetooth-escpos-printer/android/build.gradle
 @@ -1,7 +1,7 @@
@@ -12,15 +12,17 @@ index d86e4f5..db0286b 100644
          mavenCentral()
          maven {
              // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-@@ -20,12 +20,16 @@ buildscript {
+@@ -19,13 +19,18 @@ buildscript {
+ 
  apply plugin: 'com.android.library'
  
++def safeExtGet(prop, fallback) {
++    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
++}
++
  android {
 -    compileSdkVersion 27
 -    buildToolsVersion "27.0.3"
-+    def safeExtGet(prop, fallback) {
-+        rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
-+    }
 +
 +    compileSdkVersion safeExtGet('compileSdkVersion', 34)
 +    buildToolsVersion safeExtGet('buildToolsVersion', '34.0.0')
@@ -33,7 +35,7 @@ index d86e4f5..db0286b 100644
          versionCode 1
          versionName "1.0"
      }
-@@ -40,8 +44,8 @@ android {
+@@ -40,8 +45,8 @@ android {
  }
  
  repositories {
@@ -44,7 +46,7 @@ index d86e4f5..db0286b 100644
      mavenCentral()
      maven {
          // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-@@ -53,7 +57,7 @@ repositories {
+@@ -53,7 +58,7 @@ repositories {
  }
  
  dependencies {
