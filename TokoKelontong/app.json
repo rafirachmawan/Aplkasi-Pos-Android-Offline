@@ -43,8 +43,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "e65a8dea-6bd1-4bb0-a99e-3cc7c20935ac"
+        "projectId": "b3b55795-dbed-43c2-94a6-728f7ac0a817"
       }
-    }
+    },
+    "owner": "rafirachmawan"
   }
 }
