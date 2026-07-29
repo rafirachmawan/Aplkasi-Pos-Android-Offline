@@ -8,61 +8,15 @@ import {
   StatusBar,
   ScrollView,
   Image,
+  Dimensions,
+  Platform,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import Svg, { LinearGradient, Defs, Rect, Stop } from "react-native-svg";
 import { AppContext } from "../context/AppContext";
 import { colors } from "../theme/colors";
 
-const menuItems = [
-  {
-    name: "Dashboard",
-    icon: "view-dashboard",
-    color: "#4F46E5", // Indigo
-    bg: "#E0E7FF",
-    desc: "Ringkasan & Statistik",
-    screen: "Dashboard",
-  },
-  {
-    name: "Kasir",
-    icon: "cart",
-    color: "#0EA5E9", // Sky
-    bg: "#E0F2FE",
-    desc: "Transaksi & POS",
-    screen: "Kasir",
-  },
-  {
-    name: "Gudang",
-    icon: "package-variant-closed",
-    color: "#8B5CF6", // Violet
-    bg: "#EDE9FE",
-    desc: "Stok & Produk",
-    screen: "Gudang",
-  },
-  {
-    name: "Laporan",
-    icon: "chart-box",
-    color: "#F59E0B", // Amber
-    bg: "#FEF3C7",
-    desc: "Laporan Penjualan",
-    screen: "Laporan",
-  },
-  {
-    name: "Pengaturan",
-    icon: "cog",
-    color: "#EC4899", // Pink
-    bg: "#FCE7F3",
-    desc: "Konfigurasi Toko",
-    screen: "Pengaturan",
-  },
-  {
-    name: "Pengaturan Nota",
-    icon: "receipt",
-    color: "#10B981", // Emerald
-    bg: "#D1FAE5",
-    desc: "Cetak & Format Struk",
-    screen: "SettingNota",
-  },
-];
+const { width } = Dimensions.get("window");
 
 const HomeScreen = ({ navigation }) => {
   const { state } = useContext(AppContext);
@@ -74,90 +28,201 @@ const HomeScreen = ({ navigation }) => {
   });
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar backgroundColor={colors.background} barStyle="dark-content" />
+    <View style={styles.safe}>
+      <StatusBar translucent={true} backgroundColor="transparent" barStyle="light-content" />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerGreeting}>Selamat Datang </Text>
-          <Text style={styles.headerTitle}>
-            {state.storeName || "Toko Kelontong"}
-          </Text>
-          <Text style={styles.headerDate}>{today}</Text>
+      {/* Header Background */}
+      <View style={styles.headerBackground}>
+        <View style={StyleSheet.absoluteFillObject}>
+          <Svg height="100%" width="100%">
+            <Defs>
+              <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor="#7C3AED" />
+                <Stop offset="1" stopColor="#EC4899" />
+              </LinearGradient>
+            </Defs>
+            <Rect width="100%" height="100%" fill="url(#grad)" />
+          </Svg>
         </View>
-        <View style={styles.headerIcon}>
-          {state.storeLogo ? (
-            <Image
-              source={{ uri: state.storeLogo }}
-              style={styles.storeLogoImage}
-            />
-          ) : (
-            <MaterialCommunityIcons
-              name="store"
-              size={34}
-              color={colors.primary}
-            />
-          )}
+        <View style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerGreeting}>Selamat Datang,</Text>
+            <Text style={styles.headerTitle}>
+              {state.storeName || "Toko Kelontong"}
+            </Text>
+            <View style={styles.dateContainer}>
+              <MaterialCommunityIcons name="calendar-month" size={14} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.headerDate}>{today}</Text>
+            </View>
+          </View>
+          <View style={styles.headerIcon}>
+            {state.storeLogo ? (
+              <Image
+                source={{ uri: state.storeLogo }}
+                style={styles.storeLogoImage}
+              />
+            ) : (
+              <MaterialCommunityIcons
+                name="store"
+                size={28}
+                color={colors.primary}
+              />
+            )}
+          </View>
         </View>
       </View>
 
       <ScrollView
+        style={styles.scrollWrapper}
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
       >
-        {/* Subtitle */}
-        <Text style={styles.subtitle}>Pilih Menu</Text>
+        <View style={styles.overlapSpacer} />
+        {/* Primary Action: Kasir (Overlaps Header) */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.primaryCard}
+          onPress={() => navigation.navigate("Kasir")}
+        >
+          <View style={styles.primaryCardLeft}>
+            <View style={styles.primaryIconWrapper}>
+              <MaterialCommunityIcons name="storefront-outline" size={32} color={colors.surface} />
+            </View>
+            <View>
+              <Text style={styles.primaryCardTitle}>Buka Kasir</Text>
+              <Text style={styles.primaryCardDesc}>Mulai transaksi baru</Text>
+            </View>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={28} color={colors.textSecondary} style={{opacity: 0.3}} />
+        </TouchableOpacity>
 
-        {/* Menu Grid */}
+        <Text style={styles.sectionTitle}>Menu Utama</Text>
+
+        {/* Secondary Actions (Bento Grid) */}
         <View style={styles.grid}>
-          {menuItems.map((item) => (
-            <TouchableOpacity
-              key={item.name}
-              style={styles.card}
-              activeOpacity={0.82}
-              onPress={() => navigation.navigate(item.screen)}
-            >
-              <View style={[styles.iconCircle, { backgroundColor: item.bg }]}>
-                <MaterialCommunityIcons
-                  name={item.icon}
-                  size={38}
-                  color={item.color}
-                />
+          {/* Dashboard */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.bentoCard}
+            onPress={() => navigation.navigate("Dashboard")}
+          >
+            <View style={styles.bentoHeader}>
+              <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
+                <MaterialCommunityIcons name="chart-arc" size={26} color="#334155" />
               </View>
-              <Text style={styles.cardName}>{item.name}</Text>
-              <Text style={styles.cardDesc}>{item.desc}</Text>
-            </TouchableOpacity>
-          ))}
+            </View>
+            <Text style={styles.bentoTitle}>Dashboard</Text>
+            <Text style={styles.bentoDesc}>Statistik toko</Text>
+          </TouchableOpacity>
+
+          {/* Gudang */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.bentoCard}
+            onPress={() => navigation.navigate("Gudang")}
+          >
+            <View style={styles.bentoHeader}>
+              <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
+                <MaterialCommunityIcons name="package-variant-closed" size={26} color="#334155" />
+              </View>
+            </View>
+            <Text style={styles.bentoTitle}>Gudang</Text>
+            <Text style={styles.bentoDesc}>Kelola stok</Text>
+          </TouchableOpacity>
+
+          {/* Laporan */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.bentoCard}
+            onPress={() => navigation.navigate("Laporan")}
+          >
+            <View style={styles.bentoHeader}>
+              <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
+                <MaterialCommunityIcons name="file-document-outline" size={26} color="#334155" />
+              </View>
+            </View>
+            <Text style={styles.bentoTitle}>Laporan</Text>
+            <Text style={styles.bentoDesc}>Data penjualan</Text>
+          </TouchableOpacity>
+
+          {/* Pengaturan Nota */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.bentoCard}
+            onPress={() => navigation.navigate("SettingNota")}
+          >
+            <View style={styles.bentoHeader}>
+              <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
+                <MaterialCommunityIcons name="receipt" size={26} color="#334155" />
+              </View>
+            </View>
+            <Text style={styles.bentoTitle}>Format Nota</Text>
+            <Text style={styles.bentoDesc}>Desain struk</Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Administrative Actions */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[styles.listCard, { marginBottom: 16 }]}
+          onPress={() => navigation.navigate("Pengaturan")}
+        >
+          <View style={[styles.listIconCircle, { backgroundColor: "#F1F5F9" }]}>
+            <MaterialCommunityIcons name="cog-outline" size={24} color="#334155" />
+          </View>
+          <View style={styles.listTextContainer}>
+            <Text style={styles.listTitle}>Pengaturan Toko</Text>
+            <Text style={styles.listDesc}>Konfigurasi profil dan sistem</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color={colors.border} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.listCard}
+          onPress={() => navigation.navigate("Panduan")}
+        >
+          <View style={[styles.listIconCircle, { backgroundColor: "#EFF6FF" }]}>
+            <MaterialCommunityIcons name="book-open-page-variant" size={24} color="#3B82F6" />
+          </View>
+          <View style={styles.listTextContainer}>
+            <Text style={styles.listTitle}>Buku Panduan</Text>
+            <Text style={styles.listDesc}>Cara pakai dan fungsi aplikasi</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color={colors.border} />
+        </TouchableOpacity>
 
         {/* Footer info */}
         <View style={styles.footerNote}>
           <MaterialCommunityIcons
-            name="information-outline"
+            name="check-decagram"
             size={16}
-            color={colors.textSecondary}
+            color={colors.primary}
           />
           <Text style={styles.footerText}>
-            {" "}
-            Aplikasi berjalan secara offline
+            {" "}Sistem Offline Aktif
           </Text>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.background, 
   },
-  header: {
-    backgroundColor: colors.background,
+  headerBackground: {
+    backgroundColor: colors.primary,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 16 : 48, 
+    paddingBottom: 40,
     paddingHorizontal: 24,
-    paddingTop: 56, // Ditambah agar posisinya turun sedikit
-    paddingBottom: 16,
+    overflow: 'hidden', // Menjamin SVG gradient terpotong membulat mengikuti radius
+  },
+  headerContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -167,102 +232,190 @@ const styles = StyleSheet.create({
   },
   headerGreeting: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: "rgba(255, 255, 255, 0.8)",
     fontWeight: "500",
     marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "800",
-    color: colors.text,
+    color: "#FFFFFF",
     letterSpacing: 0.2,
+    marginBottom: 8,
+  },
+  dateContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.15)",
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   headerDate: {
     fontSize: 12,
-    color: colors.primary,
+    color: "#FFFFFF",
     fontWeight: "600",
-    marginTop: 6,
+    marginLeft: 6,
   },
   headerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primaryContainer,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
   },
   storeLogoImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 30,
+    borderRadius: 26,
+  },
+  scrollWrapper: {
+    flex: 1,
+    zIndex: 10,
+    elevation: 10, // Menjamin ScrollView merender di atas header
+  },
+  overlapSpacer: {
+    height: 24,
+    marginTop: -24, // Disesuaikan dengan pengurangan tinggi header
   },
   body: {
-    padding: 20,
-    paddingBottom: 32,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
-  subtitle: {
+  primaryCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24, // Lebih membulat dan halus
+    padding: 22,
+    marginBottom: 24,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 2, // Shadow Android yang sangat tipis
+    shadowColor: "rgba(0,0,0,0.06)",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.03)",
+  },
+  primaryCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  primaryIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28, // Bulat sempurna (halus)
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+  },
+  primaryCardTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: 2,
+  },
+  primaryCardDesc: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: colors.text,
     marginBottom: 16,
-    marginTop: 4,
+    marginLeft: 4,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
     gap: 14,
+    marginBottom: 16,
   },
-  card: {
-    width: "47%",
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    paddingVertical: 24,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    elevation: 4,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+  bentoCard: {
+    width: (width - 40 - 14) / 2, 
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24, // Lebih membulat
+    padding: 20,
+    elevation: 0, // Dihilangkan agar flat dan halus
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.02)",
+    borderColor: "rgba(0,0,0,0.06)", // Garis tepi sangat tipis dan halus
+  },
+  bentoHeader: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    marginBottom: 16,
   },
   iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 48,
+    height: 48,
+    borderRadius: 24, // Bulat sempurna agar terkesan lebih 'halus'
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
+    backgroundColor: "#F8FAFC", // Background icon yang lebih lembut
   },
-  cardName: {
-    fontSize: 16,
+  bentoTitle: {
+    fontSize: 15,
     fontWeight: "700",
     color: colors.text,
     marginBottom: 4,
   },
-  cardDesc: {
-    fontSize: 11,
+  bentoDesc: {
+    fontSize: 12,
     color: colors.textSecondary,
-    textAlign: "center",
+  },
+  listCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 16,
+    elevation: 0,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+    marginBottom: 24,
+  },
+  listIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24, // Bulat sempurna
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+    backgroundColor: "#F8FAFC",
+  },
+  listTextContainer: {
+    flex: 1,
+  },
+  listTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 2,
+  },
+  listDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   footerNote: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 28,
-    paddingVertical: 12,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingVertical: 8,
   },
   footerText: {
     fontSize: 12,
+    fontWeight: "600",
     color: colors.textSecondary,
   },
 });

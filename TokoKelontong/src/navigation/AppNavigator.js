@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Svg, { LinearGradient, Defs, Rect, Stop } from "react-native-svg";
 
 import HomeScreen from '../screens/HomeScreen';
 import DashboardScreen from '../screens/DashboardScreen';
@@ -13,16 +14,17 @@ import PengaturanScreen from '../screens/PengaturanScreen';
 import AddProductScreen from '../screens/AddProductScreen';
 import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
 import SettingNotaScreen from '../screens/SettingNotaScreen';
+import PanduanScreen from '../screens/PanduanScreen';
 
 import { colors } from '../theme/colors';
 
 const Stack = createStackNavigator();
 
 // ── Reusable Header Title ─────────────────────────────────────────
-const makeHeaderTitle = (icon, iconColor, iconBg, title, subtitle) => () => (
+const makeHeaderTitle = (icon, title, subtitle) => () => (
   <View style={headerStyles.titleWrapper}>
-    <View style={[headerStyles.iconBox, { backgroundColor: iconBg }]}>
-      <MaterialCommunityIcons name={icon} size={18} color={iconColor} />
+    <View style={[headerStyles.iconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+      <MaterialCommunityIcons name={icon} size={18} color="#FFFFFF" />
     </View>
     <View>
       <Text style={headerStyles.title}>{title}</Text>
@@ -55,10 +57,10 @@ const KasirHeaderRight = () => {
 };
 
 // ── Badge kanan generik ────────────────────────────────────────────
-const makeBadgeRight = (label, badgeBg, badgeColor) => () => (
+const makeBadgeRight = (label) => () => (
   <View style={[headerStyles.rightWrapper, { justifyContent: 'center' }]}>
-    <View style={[headerStyles.genericBadge, { backgroundColor: badgeBg }]}>
-      <Text style={[headerStyles.genericBadgeText, { color: badgeColor }]}>{label}</Text>
+    <View style={[headerStyles.genericBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+      <Text style={[headerStyles.genericBadgeText, { color: '#FFFFFF' }]}>{label}</Text>
     </View>
   </View>
 );
@@ -77,14 +79,14 @@ const headerStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
-    color: colors.text,
+    color: '#FFFFFF',
     letterSpacing: 0.3,
   },
   subtitle: {
-    fontSize: 10,
-    color: colors.textSecondary,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
     fontWeight: '500',
     marginTop: 1,
   },
@@ -117,8 +119,8 @@ const headerStyles = StyleSheet.create({
   },
   clock: {
     fontSize: 11,
-    fontWeight: '600',
-    color: colors.textSecondary,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.9)',
   },
   // Generic badge
   genericBadge: {
@@ -135,15 +137,26 @@ const headerStyles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────
 
 const defaultHeaderOptions = {
+  headerBackground: () => (
+    <View style={StyleSheet.absoluteFillObject}>
+      <Svg height="100%" width="100%">
+        <Defs>
+          <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#7C3AED" />
+            <Stop offset="1" stopColor="#EC4899" />
+          </LinearGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill="url(#grad)" />
+      </Svg>
+    </View>
+  ),
+  headerTintColor: '#FFFFFF',
+  headerTitleStyle: { fontWeight: '700' },
   headerStyle: { 
-    backgroundColor: colors.background, 
     elevation: 0, 
     shadowOpacity: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border
+    borderBottomWidth: 0,
   },
-  headerTintColor: colors.text,
-  headerTitleStyle: { fontWeight: '700' },
 };
 
 export default function AppNavigator() {
@@ -163,11 +176,8 @@ export default function AppNavigator() {
         name="Dashboard"
         component={DashboardScreen}
         options={{
-          headerTitle: makeHeaderTitle(
-            'view-dashboard', '#fff', '#4F46E5',
-            'Dashboard', 'Ringkasan hari ini'
-          ),
-          headerRight: makeBadgeRight('RINGKASAN', '#EDE9FE', '#6D28D9'),
+          headerTitle: makeHeaderTitle('view-dashboard', 'Dashboard', 'Ringkasan hari ini'),
+          headerRight: makeBadgeRight('RINGKASAN'),
         }}
       />
 
@@ -176,10 +186,7 @@ export default function AppNavigator() {
         name="Kasir"
         component={KasirScreen}
         options={{
-          headerTitle: makeHeaderTitle(
-            'cash-register', '#fff', '#4F46E5',
-            'Kasir', 'Point of Sale'
-          ),
+          headerTitle: makeHeaderTitle('cash-register', 'Kasir', 'Point of Sale'),
           headerRight: () => <KasirHeaderRight />,
         }}
       />
@@ -189,11 +196,8 @@ export default function AppNavigator() {
         name="Gudang"
         component={GudangScreen}
         options={{
-          headerTitle: makeHeaderTitle(
-            'warehouse', '#fff', '#0EA5E9',
-            'Gudang Stok', 'Manajemen inventaris'
-          ),
-          headerRight: makeBadgeRight('STOK', '#E0F2FE', '#0369A1'),
+          headerTitle: makeHeaderTitle('warehouse', 'Gudang Stok', 'Manajemen inventaris'),
+          headerRight: makeBadgeRight('STOK'),
         }}
       />
 
@@ -202,11 +206,8 @@ export default function AppNavigator() {
         name="AddProductScreen"
         component={AddProductScreen}
         options={{
-          headerTitle: makeHeaderTitle(
-            'package-variant-plus', '#fff', '#10B981',
-            'Form Barang', 'Tambah / edit produk'
-          ),
-          headerRight: makeBadgeRight('PRODUK', '#D1FAE5', '#065F46'),
+          headerTitle: makeHeaderTitle('package-variant-plus', 'Form Barang', 'Tambah / edit produk'),
+          headerRight: makeBadgeRight('PRODUK'),
         }}
       />
 
@@ -215,11 +216,8 @@ export default function AppNavigator() {
         name="SettingNota"
         component={SettingNotaScreen}
         options={{
-          headerTitle: makeHeaderTitle(
-            'receipt-text-edit', '#fff', '#F59E0B',
-            'Pengaturan Nota', 'Format struk cetak'
-          ),
-          headerRight: makeBadgeRight('NOTA', '#FEF3C7', '#92400E'),
+          headerTitle: makeHeaderTitle('receipt-text-edit', 'Pengaturan Nota', 'Format struk cetak'),
+          headerRight: makeBadgeRight('NOTA'),
         }}
       />
 
@@ -228,11 +226,8 @@ export default function AppNavigator() {
         name="Laporan"
         component={LaporanScreen}
         options={{
-          headerTitle: makeHeaderTitle(
-            'chart-bar', '#fff', '#8B5CF6',
-            'Laporan Penjualan', 'Analisis transaksi'
-          ),
-          headerRight: makeBadgeRight('LAPORAN', '#EDE9FE', '#6D28D9'),
+          headerTitle: makeHeaderTitle('chart-bar', 'Laporan Penjualan', 'Analisis transaksi'),
+          headerRight: makeBadgeRight('LAPORAN'),
         }}
       />
 
@@ -241,11 +236,18 @@ export default function AppNavigator() {
         name="Pengaturan"
         component={PengaturanScreen}
         options={{
-          headerTitle: makeHeaderTitle(
-            'cog', '#fff', '#64748B',
-            'Pengaturan', 'Konfigurasi aplikasi'
-          ),
-          headerRight: makeBadgeRight('SETTING', '#F1F5F9', '#475569'),
+          headerTitle: makeHeaderTitle('cog', 'Pengaturan', 'Konfigurasi aplikasi'),
+          headerRight: makeBadgeRight('SETTING'),
+        }}
+      />
+
+      {/* Panduan */}
+      <Stack.Screen
+        name="Panduan"
+        component={PanduanScreen}
+        options={{
+          headerTitle: makeHeaderTitle('book-open-page-variant', 'Buku Panduan', 'Cara penggunaan aplikasi'),
+          headerRight: makeBadgeRight('INFO'),
         }}
       />
 
