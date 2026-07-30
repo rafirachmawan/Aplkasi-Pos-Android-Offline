@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Svg, { LinearGradient, Defs, Rect, Stop } from "react-native-svg";
 
 import HomeScreen from '../screens/HomeScreen';
 import DashboardScreen from '../screens/DashboardScreen';
@@ -21,11 +20,11 @@ import { colors } from '../theme/colors';
 const Stack = createStackNavigator();
 
 // ── Reusable Header Title ─────────────────────────────────────────
-const makeHeaderTitle = (icon, title, subtitle) => () => (
-  <View style={headerStyles.titleWrapper}>
-    <View style={[headerStyles.iconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-      <MaterialCommunityIcons name={icon} size={18} color="#FFFFFF" />
-    </View>
+  const makeHeaderTitle = (icon, title, subtitle) => () => (
+    <View style={headerStyles.titleWrapper}>
+      <View style={[headerStyles.iconBox, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+        <MaterialCommunityIcons name={icon} size={18} color="#FFFFFF" />
+      </View>
     <View>
       <Text style={headerStyles.title}>{title}</Text>
       <Text style={headerStyles.subtitle}>{subtitle}</Text>
@@ -57,13 +56,13 @@ const KasirHeaderRight = () => {
 };
 
 // ── Badge kanan generik ────────────────────────────────────────────
-const makeBadgeRight = (label) => () => (
-  <View style={[headerStyles.rightWrapper, { justifyContent: 'center' }]}>
-    <View style={[headerStyles.genericBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-      <Text style={[headerStyles.genericBadgeText, { color: '#FFFFFF' }]}>{label}</Text>
+  const makeBadgeRight = (label) => () => (
+    <View style={[headerStyles.rightWrapper, { justifyContent: 'center' }]}>
+      <View style={[headerStyles.genericBadge, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+        <Text style={[headerStyles.genericBadgeText, { color: '#F8FAFC' }]}>{label}</Text>
+      </View>
     </View>
-  </View>
-);
+  );
 
 const headerStyles = StyleSheet.create({
   titleWrapper: {
@@ -136,28 +135,18 @@ const headerStyles = StyleSheet.create({
 });
 // ─────────────────────────────────────────────────────────────────
 
-const defaultHeaderOptions = {
-  headerBackground: () => (
-    <View style={StyleSheet.absoluteFillObject}>
-      <Svg height="100%" width="100%">
-        <Defs>
-          <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#7C3AED" />
-            <Stop offset="1" stopColor="#EC4899" />
-          </LinearGradient>
-        </Defs>
-        <Rect width="100%" height="100%" fill="url(#grad)" />
-      </Svg>
-    </View>
-  ),
-  headerTintColor: '#FFFFFF',
-  headerTitleStyle: { fontWeight: '700' },
-  headerStyle: { 
-    elevation: 0, 
-    shadowOpacity: 0,
-    borderBottomWidth: 0,
-  },
-};
+  const defaultHeaderOptions = {
+    headerBackground: () => (
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#0F172A' }]} />
+    ),
+    headerTintColor: '#FFFFFF',
+    headerTitleStyle: { fontWeight: '700' },
+    headerStyle: { 
+      elevation: 4, 
+      shadowOpacity: 0.1,
+      borderBottomWidth: 0,
+    },
+  };
 
 export default function AppNavigator() {
   return (

@@ -1013,11 +1013,11 @@ const styles = StyleSheet.create({
   // Modal Keranjang Centered Card
   modalOverlayCart: {
     flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24,
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   cartBottomSheet: {
-    backgroundColor: colors.background, borderRadius: 24, width: '100%',
-    maxHeight: '80%', elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20,
+    backgroundColor: colors.background, borderRadius: 24, width: '92%',
+    maxHeight: '75%', elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20,
   },
   modalIconBtn: {
     width: 34, height: 34, borderRadius: 17, backgroundColor: '#F8FAFC',

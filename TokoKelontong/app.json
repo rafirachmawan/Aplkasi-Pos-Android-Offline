@@ -4,7 +4,7 @@
     "slug": "marketpos",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/MarketPos.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
@@ -12,8 +12,8 @@
     "android": {
       "package": "com.rafi.marketpos",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0F172A",
+        "foregroundImage": "./assets/MarketPos.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },

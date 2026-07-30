@@ -5,7 +5,7 @@ export const AppContext = createContext();
 
 const initialState = {
   cart: [],
-  storeName: 'Toko Kelontong',
+  storeName: 'MarketPos',
   storeLogo: null,
   printerAddress: null,
 };
@@ -68,7 +68,7 @@ export const AppProvider = ({ children }) => {
         dispatch({
           type: 'LOAD_SETTINGS',
           payload: {
-            storeName: storeName || 'Toko Kelontong',
+            storeName: storeName || 'MarketPos',
             storeLogo: storeLogo || null,
             printerAddress: printerAddress || null,
           }

@@ -1,7 +1,7 @@
 export const colors = {
-  primary: '#8B5CF6', // Violet
-  primaryContainer: '#EDE9FE',
-  secondary: '#0EA5E9',
+  primary: '#0F172A', // Dark Slate (Utama)
+  primaryContainer: '#E2E8F0', // Light Slate (Background ikon/badge)
+  secondary: '#334155', // Slate menengah
   background: '#F8FAFC',
   surface: '#FFFFFF',
   error: '#EF4444',

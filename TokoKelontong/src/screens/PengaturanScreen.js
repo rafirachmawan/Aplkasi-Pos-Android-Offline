@@ -8,8 +8,10 @@ import {
   ScrollView,
   Alert,
   Switch,
-  Platform,
   Image,
+  StatusBar,
+  Modal,
+  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -43,21 +45,45 @@ const PengaturanScreen = () => {
     setLogoUri(state.storeLogo);
   }, [state.storeName, state.printerAddress, state.storeLogo]);
 
-  const handlePickLogo = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
+  const [showImageSourceModal, setShowImageSourceModal] = useState(false);
 
-      if (!result.canceled) {
-        setLogoUri(result.assets[0].uri);
+  const handlePickLogo = () => {
+    setShowImageSourceModal(true);
+  };
+
+  const launchPicker = async (source) => {
+    setShowImageSourceModal(false);
+    setTimeout(async () => {
+      try {
+        if (source === 'gallery') {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Akses Ditolak', 'Izin galeri diperlukan.');
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: false,
+            quality: 0.8,
+          });
+          if (!result.canceled) setLogoUri(result.assets[0].uri);
+        } else {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Akses Ditolak', 'Izin kamera diperlukan.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            allowsEditing: false,
+            quality: 0.8,
+          });
+          if (!result.canceled) setLogoUri(result.assets[0].uri);
+        }
+      } catch (e) {
+        Alert.alert('Error', 'Gagal membuka ' + source);
       }
-    } catch (e) {
-      Alert.alert('Error', 'Gagal membuka galeri');
-    }
+    }, 300);
   };
 
   const handleSave = async () => {
@@ -215,6 +241,49 @@ const PengaturanScreen = () => {
 
       {/* Versi App */}
       <Text style={styles.versionText}>TokoKelontong v1.0.0 MVP · Offline-First</Text>
+
+      {/* ── Modal Pilih Sumber Gambar ── */}
+      <Modal
+        visible={showImageSourceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowImageSourceModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlayCenter}
+          activeOpacity={1}
+          onPress={() => setShowImageSourceModal(false)}
+        >
+          <View style={styles.sourceModalCard}>
+            <Text style={styles.sourceModalTitle}>Pilih Sumber Foto</Text>
+            <Text style={styles.sourceModalDesc}>Pilih dari mana Anda ingin mengambil foto logo toko.</Text>
+            
+            <View style={styles.sourceOptionsRow}>
+              <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('gallery')}>
+                <View style={[styles.sourceIconWrap, { backgroundColor: '#DBEAFE' }]}>
+                  <MaterialCommunityIcons name="image" size={32} color="#2563EB" />
+                </View>
+                <Text style={styles.sourceOptionText}>Galeri</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('camera')}>
+                <View style={[styles.sourceIconWrap, { backgroundColor: '#D1FAE5' }]}>
+                  <MaterialCommunityIcons name="camera" size={32} color="#059669" />
+                </View>
+                <Text style={styles.sourceOptionText}>Kamera</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.sourceCancelBtn}
+              onPress={() => setShowImageSourceModal(false)}
+            >
+              <Text style={styles.sourceCancelText}>Batal</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </ScrollView>
   );
 };
@@ -236,14 +305,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   storeAvatar: {
-    width: 64, height: 64, borderRadius: 32,
+    width: 64, height: 64, borderRadius: 16,
     backgroundColor: colors.primaryContainer,
     alignItems: 'center', justifyContent: 'center',
-    overflow: 'hidden',
     borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)',
   },
   storeLogoImage: {
-    width: '100%', height: '100%', borderRadius: 32,
+    width: '100%', height: '100%', borderRadius: 16,
   },
   removeLogoBtn: {
     position: 'absolute',
@@ -307,6 +375,73 @@ const styles = StyleSheet.create({
   versionText: {
     textAlign: 'center', fontSize: 12,
     color: colors.textSecondary, marginTop: 8, marginBottom: 16,
+  },
+
+  // Modal Source Options
+  modalOverlayCenter: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+  },
+  sourceModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    marginHorizontal: 32,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+  },
+  sourceModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  sourceModalDesc: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  sourceOptionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    width: '100%',
+    marginBottom: 24,
+  },
+  sourceOptionBtn: {
+    alignItems: 'center',
+  },
+  sourceIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  sourceOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  sourceCancelBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  sourceCancelText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textSecondary,
   },
 });
 

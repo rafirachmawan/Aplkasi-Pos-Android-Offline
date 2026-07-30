@@ -12,7 +12,6 @@ import {
   Platform,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import Svg, { LinearGradient, Defs, Rect, Stop } from "react-native-svg";
 import { AppContext } from "../context/AppContext";
 import { colors } from "../theme/colors";
 
@@ -29,29 +28,26 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <View style={styles.safe}>
-      <StatusBar translucent={true} backgroundColor="transparent" barStyle="light-content" />
+      <StatusBar
+        translucent={true}
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
 
-      {/* Header Background */}
-      <View style={styles.headerBackground}>
-        <View style={StyleSheet.absoluteFillObject}>
-          <Svg height="100%" width="100%">
-            <Defs>
-              <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor="#7C3AED" />
-                <Stop offset="1" stopColor="#EC4899" />
-              </LinearGradient>
-            </Defs>
-            <Rect width="100%" height="100%" fill="url(#grad)" />
-          </Svg>
-        </View>
+      {/* Premium Dark Slate Header */}
+      <View style={styles.headerDarkSlate}>
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerGreeting}>Selamat Datang,</Text>
-            <Text style={styles.headerTitle}>
-              {state.storeName || "Toko Kelontong"}
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {state.storeName || "MarketPos"}
             </Text>
             <View style={styles.dateContainer}>
-              <MaterialCommunityIcons name="calendar-month" size={14} color="rgba(255,255,255,0.8)" />
+              <MaterialCommunityIcons
+                name="calendar-month-outline"
+                size={14}
+                color="#CBD5E1"
+              />
               <Text style={styles.headerDate}>{today}</Text>
             </View>
           </View>
@@ -64,8 +60,8 @@ const HomeScreen = ({ navigation }) => {
             ) : (
               <MaterialCommunityIcons
                 name="store"
-                size={28}
-                color={colors.primary}
+                size={26}
+                color="#0F172A"
               />
             )}
           </View>
@@ -86,14 +82,23 @@ const HomeScreen = ({ navigation }) => {
         >
           <View style={styles.primaryCardLeft}>
             <View style={styles.primaryIconWrapper}>
-              <MaterialCommunityIcons name="storefront-outline" size={32} color={colors.surface} />
+              <MaterialCommunityIcons
+                name="storefront-outline"
+                size={32}
+                color="#FFFFFF"
+              />
             </View>
             <View>
               <Text style={styles.primaryCardTitle}>Buka Kasir</Text>
               <Text style={styles.primaryCardDesc}>Mulai transaksi baru</Text>
             </View>
           </View>
-          <MaterialCommunityIcons name="chevron-right" size={28} color={colors.textSecondary} style={{opacity: 0.3}} />
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={28}
+            color={colors.textSecondary}
+            style={{ opacity: 0.3 }}
+          />
         </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>Menu Utama</Text>
@@ -108,7 +113,11 @@ const HomeScreen = ({ navigation }) => {
           >
             <View style={styles.bentoHeader}>
               <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
-                <MaterialCommunityIcons name="chart-arc" size={26} color="#334155" />
+                <MaterialCommunityIcons
+                  name="chart-arc"
+                  size={26}
+                  color="#334155"
+                />
               </View>
             </View>
             <Text style={styles.bentoTitle}>Dashboard</Text>
@@ -123,7 +132,11 @@ const HomeScreen = ({ navigation }) => {
           >
             <View style={styles.bentoHeader}>
               <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
-                <MaterialCommunityIcons name="package-variant-closed" size={26} color="#334155" />
+                <MaterialCommunityIcons
+                  name="package-variant-closed"
+                  size={26}
+                  color="#334155"
+                />
               </View>
             </View>
             <Text style={styles.bentoTitle}>Gudang</Text>
@@ -138,7 +151,11 @@ const HomeScreen = ({ navigation }) => {
           >
             <View style={styles.bentoHeader}>
               <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
-                <MaterialCommunityIcons name="file-document-outline" size={26} color="#334155" />
+                <MaterialCommunityIcons
+                  name="file-document-outline"
+                  size={26}
+                  color="#334155"
+                />
               </View>
             </View>
             <Text style={styles.bentoTitle}>Laporan</Text>
@@ -153,7 +170,11 @@ const HomeScreen = ({ navigation }) => {
           >
             <View style={styles.bentoHeader}>
               <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
-                <MaterialCommunityIcons name="receipt" size={26} color="#334155" />
+                <MaterialCommunityIcons
+                  name="receipt"
+                  size={26}
+                  color="#334155"
+                />
               </View>
             </View>
             <Text style={styles.bentoTitle}>Format Nota</Text>
@@ -168,13 +189,21 @@ const HomeScreen = ({ navigation }) => {
           onPress={() => navigation.navigate("Pengaturan")}
         >
           <View style={[styles.listIconCircle, { backgroundColor: "#F1F5F9" }]}>
-            <MaterialCommunityIcons name="cog-outline" size={24} color="#334155" />
+            <MaterialCommunityIcons
+              name="cog-outline"
+              size={24}
+              color="#334155"
+            />
           </View>
           <View style={styles.listTextContainer}>
             <Text style={styles.listTitle}>Pengaturan Toko</Text>
             <Text style={styles.listDesc}>Konfigurasi profil dan sistem</Text>
           </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color={colors.border} />
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={24}
+            color={colors.border}
+          />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -182,14 +211,22 @@ const HomeScreen = ({ navigation }) => {
           style={styles.listCard}
           onPress={() => navigation.navigate("Panduan")}
         >
-          <View style={[styles.listIconCircle, { backgroundColor: "#EFF6FF" }]}>
-            <MaterialCommunityIcons name="book-open-page-variant" size={24} color="#3B82F6" />
+          <View style={[styles.listIconCircle, { backgroundColor: "#F1F5F9" }]}>
+            <MaterialCommunityIcons
+              name="book-open-page-variant"
+              size={24}
+              color="#0F172A"
+            />
           </View>
           <View style={styles.listTextContainer}>
             <Text style={styles.listTitle}>Buku Panduan</Text>
             <Text style={styles.listDesc}>Cara pakai dan fungsi aplikasi</Text>
           </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color={colors.border} />
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={24}
+            color={colors.border}
+          />
         </TouchableOpacity>
 
         {/* Footer info */}
@@ -199,9 +236,7 @@ const HomeScreen = ({ navigation }) => {
             size={16}
             color={colors.primary}
           />
-          <Text style={styles.footerText}>
-            {" "}Sistem Offline Aktif
-          </Text>
+          <Text style={styles.footerText}> Sistem Offline Aktif</Text>
         </View>
       </ScrollView>
     </View>
@@ -211,16 +246,20 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background, 
+    backgroundColor: colors.background,
   },
-  headerBackground: {
-    backgroundColor: colors.primary,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 16 : 48, 
+  headerDarkSlate: {
+    backgroundColor: "#0F172A", // Slate 900
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 20 : 56,
     paddingBottom: 40,
     paddingHorizontal: 24,
-    overflow: 'hidden', // Menjamin SVG gradient terpotong membulat mengikuti radius
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 8,
   },
   headerContent: {
     flexDirection: "row",
@@ -229,61 +268,61 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     flex: 1,
+    paddingRight: 16,
   },
   headerGreeting: {
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.8)",
-    fontWeight: "500",
+    fontSize: 13,
+    color: "#94A3B8", // Slate 400
+    fontWeight: "600",
     marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "800",
     color: "#FFFFFF",
-    letterSpacing: 0.2,
-    marginBottom: 8,
+    letterSpacing: 0.3,
+    marginBottom: 10,
   },
   dateContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.15)",
+    backgroundColor: "rgba(255,255,255,0.1)",
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   headerDate: {
     fontSize: 12,
-    color: "#FFFFFF",
+    color: "#F8FAFC",
     fontWeight: "600",
     marginLeft: 6,
   },
   headerIcon: {
     width: 52,
     height: 52,
-    borderRadius: 26,
+    borderRadius: 16, // Squircle instead of full circle for a modern corporate look
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.2)",
   },
   storeLogoImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 26,
+    borderRadius: 14,
   },
   scrollWrapper: {
     flex: 1,
     zIndex: 10,
-    elevation: 10, // Menjamin ScrollView merender di atas header
+    elevation: 10,
   },
   overlapSpacer: {
-    height: 24,
-    marginTop: -24, // Disesuaikan dengan pengurangan tinggi header
+    height: 32,
+    marginTop: -32,
   },
   body: {
     paddingHorizontal: 20,
@@ -312,8 +351,8 @@ const styles = StyleSheet.create({
   primaryIconWrapper: {
     width: 56,
     height: 56,
-    borderRadius: 28, // Bulat sempurna (halus)
-    backgroundColor: colors.primary,
+    borderRadius: 16, // Matching squircle
+    backgroundColor: "#0F172A", // Dark Slate / Black
     alignItems: "center",
     justifyContent: "center",
     marginRight: 16,
@@ -343,7 +382,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   bentoCard: {
-    width: (width - 40 - 14) / 2, 
+    width: (width - 40 - 14) / 2,
     backgroundColor: "#FFFFFF",
     borderRadius: 24, // Lebih membulat
     padding: 20,
