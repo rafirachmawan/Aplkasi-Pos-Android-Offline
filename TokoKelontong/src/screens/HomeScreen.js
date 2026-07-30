@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   Image,
@@ -12,19 +11,37 @@ import {
   Platform,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+
 import { AppContext } from "../context/AppContext";
 import { colors } from "../theme/colors";
 
 const { width } = Dimensions.get("window");
 
+const formatRupiah = (value) => {
+  if (!value && value !== 0) return "Rp 0";
+  return "Rp " + Number(value).toLocaleString("id-ID");
+};
+
 const HomeScreen = ({ navigation }) => {
   const { state } = useContext(AppContext);
-  const today = new Date().toLocaleDateString("id-ID", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
+
+  const now = new Date();
+  const dayName = now.toLocaleDateString("id-ID", { weekday: "long" });
+  const dateStr = now.toLocaleDateString("id-ID", {
     day: "numeric",
+    month: "long",
+    year: "numeric",
   });
+
+  const hour = now.getHours();
+  const greetingText =
+    hour < 11 ? "Selamat Pagi" : hour < 15 ? "Selamat Siang" : hour < 18 ? "Selamat Sore" : "Selamat Malam";
+  const greetingEmoji =
+    hour < 11 ? "☀️" : hour < 15 ? "🌤️" : hour < 18 ? "🌇" : "🌙";
+
+  const totalPemasukan = state.totalPemasukan ?? 0;
+  const totalPengeluaran = state.totalPengeluaran ?? 0;
+  const totalSaldo = totalPemasukan - totalPengeluaran;
 
   return (
     <View style={styles.safe}>
@@ -34,23 +51,38 @@ const HomeScreen = ({ navigation }) => {
         barStyle="light-content"
       />
 
-      {/* Premium Dark Slate Header */}
+      {/* ─── Premium Header ─── */}
       <View style={styles.headerDarkSlate}>
-        <View style={styles.headerContent}>
+        {/* Top row: greeting + logo */}
+        <View style={styles.headerTopRow}>
           <View style={styles.headerLeft}>
-            <Text style={styles.headerGreeting}>Selamat Datang,</Text>
+            {/* Live badge */}
+            <View style={styles.greetingBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.greetingBadgeText}>Toko Aktif</Text>
+            </View>
+
+            <Text style={styles.greetingText}>
+              {greetingText} {greetingEmoji}
+            </Text>
             <Text style={styles.headerTitle} numberOfLines={1}>
               {state.storeName || "MarketPos"}
             </Text>
-            <View style={styles.dateContainer}>
+
+            {/* Date pill */}
+            <View style={styles.datePill}>
               <MaterialCommunityIcons
-                name="calendar-month-outline"
-                size={14}
-                color="#CBD5E1"
+                name="calendar-check-outline"
+                size={12}
+                color="#7DD3FC"
               />
-              <Text style={styles.headerDate}>{today}</Text>
+              <Text style={styles.datePillText}>
+                {dayName}, {dateStr}
+              </Text>
             </View>
           </View>
+
+          {/* Store Logo / Icon */}
           <View style={styles.headerIcon}>
             {state.storeLogo ? (
               <Image
@@ -58,12 +90,45 @@ const HomeScreen = ({ navigation }) => {
                 style={styles.storeLogoImage}
               />
             ) : (
-              <MaterialCommunityIcons
-                name="store"
-                size={26}
-                color="#0F172A"
-              />
+              <MaterialCommunityIcons name="store" size={26} color="#0F172A" />
             )}
+          </View>
+        </View>
+
+        {/* Divider */}
+        <View style={styles.headerDivider} />
+
+        {/* Bottom row: mini stats */}
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>Saldo</Text>
+            <Text
+              style={[
+                styles.statValue,
+                { color: totalSaldo >= 0 ? "#4ADE80" : "#F87171" },
+              ]}
+              numberOfLines={1}
+            >
+              {formatRupiah(totalSaldo)}
+            </Text>
+          </View>
+
+          <View style={styles.statDividerV} />
+
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>Pemasukan</Text>
+            <Text style={[styles.statValue, { color: "#4ADE80" }]} numberOfLines={1}>
+              {formatRupiah(totalPemasukan)}
+            </Text>
+          </View>
+
+          <View style={styles.statDividerV} />
+
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>Pengeluaran</Text>
+            <Text style={[styles.statValue, { color: "#F87171" }]} numberOfLines={1}>
+              {formatRupiah(totalPengeluaran)}
+            </Text>
           </View>
         </View>
       </View>
@@ -249,66 +314,125 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   headerDarkSlate: {
-    backgroundColor: "#0F172A", // Slate 900
-    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 20 : 56,
-    paddingBottom: 40,
+    backgroundColor: "#0F172A",
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 16 : 56,
+    paddingBottom: 24,
     paddingHorizontal: 24,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
   },
-  headerContent: {
+  headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   headerLeft: {
     flex: 1,
     paddingRight: 16,
   },
-  headerGreeting: {
-    fontSize: 13,
-    color: "#94A3B8", // Slate 400
-    fontWeight: "600",
-    marginBottom: 4,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    letterSpacing: 0.3,
-    marginBottom: 10,
-  },
-  dateContainer: {
+  greetingBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(74,222,128,0.12)",
     alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(74,222,128,0.25)",
   },
-  headerDate: {
-    fontSize: 12,
-    color: "#F8FAFC",
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#4ADE80",
+    marginRight: 6,
+  },
+  greetingBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#4ADE80",
+    letterSpacing: 0.5,
+  },
+  greetingText: {
+    fontSize: 13,
+    color: "#94A3B8",
     fontWeight: "600",
-    marginLeft: 6,
+    marginBottom: 2,
+    letterSpacing: 0.2,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    marginBottom: 10,
+  },
+  datePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(125,211,252,0.1)",
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(125,211,252,0.2)",
+  },
+  datePillText: {
+    fontSize: 11,
+    color: "#7DD3FC",
+    fontWeight: "600",
+    marginLeft: 5,
   },
   headerIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16, // Squircle instead of full circle for a modern corporate look
+    width: 54,
+    height: 54,
+    borderRadius: 18,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  headerDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginVertical: 16,
+    marginHorizontal: -4,
+  },
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statLabel: {
+    fontSize: 10,
+    color: "#64748B",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  statValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  statDividerV: {
+    width: 1,
+    height: 30,
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
   storeLogoImage: {
     width: "100%",
