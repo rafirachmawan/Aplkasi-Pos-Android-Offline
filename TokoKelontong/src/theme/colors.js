@@ -9,4 +9,17 @@ export const colors = {
   text: '#0F172A',
   textSecondary: '#64748B',
   border: '#E2E8F0',
+  // ─ Clean Monochrome Tokens ─
+  iconBg: '#F1F5F9',     // Background unified untuk semua ikon
+  iconColor: '#334155',  // Warna unified untuk semua ikon
+  success: '#10B981',    // Semantik: sukses/positif
+  cardBorder: 'rgba(0,0,0,0.06)', // Border tipis card
+};
+
+export const fonts = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semiBold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+  extraBold: 'Inter_800ExtraBold',
 };

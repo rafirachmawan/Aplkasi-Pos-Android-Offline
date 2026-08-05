@@ -15,15 +15,15 @@ import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
 import SettingNotaScreen from '../screens/SettingNotaScreen';
 import PanduanScreen from '../screens/PanduanScreen';
 
-import { colors } from '../theme/colors';
+import { colors, fonts } from '../theme/colors';
 
 const Stack = createStackNavigator();
 
 // ── Reusable Header Title ─────────────────────────────────────────
   const makeHeaderTitle = (icon, title, subtitle) => () => (
     <View style={headerStyles.titleWrapper}>
-      <View style={[headerStyles.iconBox, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-        <MaterialCommunityIcons name={icon} size={18} color="#FFFFFF" />
+      <View style={[headerStyles.iconBox, { backgroundColor: colors.iconBg }]}>
+        <MaterialCommunityIcons name={icon} size={18} color={colors.iconColor} />
       </View>
     <View>
       <Text style={headerStyles.title}>{title}</Text>
@@ -55,11 +55,11 @@ const KasirHeaderRight = () => {
   );
 };
 
-// ── Badge kanan generik ────────────────────────────────────────────
+// ── Badge kanan generik ──────────────────────────────────────────
   const makeBadgeRight = (label) => () => (
     <View style={[headerStyles.rightWrapper, { justifyContent: 'center' }]}>
-      <View style={[headerStyles.genericBadge, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
-        <Text style={[headerStyles.genericBadgeText, { color: '#F8FAFC' }]}>{label}</Text>
+      <View style={[headerStyles.genericBadge, { backgroundColor: colors.iconBg }]}>
+        <Text style={[headerStyles.genericBadgeText, { color: colors.textSecondary }]}>{label}</Text>
       </View>
     </View>
   );
@@ -78,14 +78,16 @@ const headerStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
+    fontFamily: fonts.extraBold,
     fontSize: 16,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     letterSpacing: 0.3,
   },
   subtitle: {
+    fontFamily: fonts.medium,
     fontSize: 11,
-    color: 'rgba(255,255,255,0.8)',
+    color: colors.textSecondary,
     fontWeight: '500',
     marginTop: 1,
   },
@@ -111,15 +113,17 @@ const headerStyles = StyleSheet.create({
     backgroundColor: '#16A34A',
   },
   liveText: {
+    fontFamily: fonts.extraBold,
     fontSize: 10,
     fontWeight: '800',
     color: '#15803D',
     letterSpacing: 0.8,
   },
   clock: {
+    fontFamily: fonts.bold,
     fontSize: 11,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.9)',
+    color: colors.textSecondary,
   },
   // Generic badge
   genericBadge: {
@@ -128,6 +132,7 @@ const headerStyles = StyleSheet.create({
     borderRadius: 20,
   },
   genericBadgeText: {
+    fontFamily: fonts.extraBold,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -137,13 +142,13 @@ const headerStyles = StyleSheet.create({
 
   const defaultHeaderOptions = {
     headerBackground: () => (
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#0F172A' }]} />
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }]} />
     ),
-    headerTintColor: '#FFFFFF',
-    headerTitleStyle: { fontWeight: '700' },
+    headerTintColor: colors.text,
+    headerTitleStyle: { fontFamily: fonts.bold, fontWeight: '700' },
     headerStyle: { 
-      elevation: 4, 
-      shadowOpacity: 0.1,
+      elevation: 0, 
+      shadowOpacity: 0,
       borderBottomWidth: 0,
     },
   };

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { colors, fonts } from '../theme/colors';
 
 const GuideSection = ({ title, icon, iconBg, iconColor, content }) => (
   <View style={styles.card}>
@@ -35,8 +35,8 @@ const PanduanScreen = () => {
         <GuideSection
           title="Buka Kasir (POS)"
           icon="cart-arrow-right"
-          iconBg="#FCE7F3"
-          iconColor="#EC4899"
+          iconBg={colors.iconBg}
+          iconColor={colors.iconColor}
           content={[
             "Pilih barang dari daftar atau gunakan fitur Scan Barcode dari kamera jika barang sudah memiliki barcode.",
             "Tekan tombol Plus (+) atau Minus (-) untuk mengatur jumlah kuantitas barang yang dibeli.",
@@ -48,8 +48,8 @@ const PanduanScreen = () => {
         <GuideSection
           title="Dashboard"
           icon="chart-arc"
-          iconBg="#E0E7FF"
-          iconColor="#4F46E5"
+          iconBg={colors.iconBg}
+          iconColor={colors.iconColor}
           content={[
             "Melihat ringkasan total penjualan dan keuntungan yang didapat hari ini.",
             "Grafik akan menunjukkan performa transaksi secara visual.",
@@ -60,8 +60,8 @@ const PanduanScreen = () => {
         <GuideSection
           title="Gudang Stok"
           icon="package-variant-closed"
-          iconBg="#EDE9FE"
-          iconColor="#8B5CF6"
+          iconBg={colors.iconBg}
+          iconColor={colors.iconColor}
           content={[
             "Gunakan menu ini untuk mendata semua barang dagangan secara permanen ke database offline.",
             "Pilih 'Tambah Produk', lalu isi nama, barcode, harga modal (kulakan), harga jual, dan stok saat ini.",
@@ -72,8 +72,8 @@ const PanduanScreen = () => {
         <GuideSection
           title="Laporan Penjualan"
           icon="file-document-outline"
-          iconBg="#FEF3C7"
-          iconColor="#F59E0B"
+          iconBg={colors.iconBg}
+          iconColor={colors.iconColor}
           content={[
             "Semua transaksi kasir yang telah selesai akan otomatis masuk dan terekap di halaman Laporan.",
             "Buka laporan untuk melihat total omset, total profit (keuntungan bersih), dan daftar seluruh transaksi masa lalu.",
@@ -84,8 +84,8 @@ const PanduanScreen = () => {
         <GuideSection
           title="Format Nota (Printer)"
           icon="receipt"
-          iconBg="#D1FAE5"
-          iconColor="#10B981"
+          iconBg={colors.iconBg}
+          iconColor={colors.iconColor}
           content={[
             "Masuk ke menu ini untuk menghubungkan aplikasi dengan Printer Thermal Bluetooth.",
             "Nyalakan bluetooth HP dan printer, lalu cari nama printer di daftar perangkat yang muncul.",
@@ -111,12 +111,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   headerTitle: {
+    fontFamily: fonts.extraBold,
     fontSize: 22,
     fontWeight: '800',
     color: colors.text,
     marginBottom: 8,
   },
   headerSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 14,
     color: colors.textSecondary,
     lineHeight: 20,
@@ -144,6 +146,7 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   cardTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
     fontWeight: '700',
     color: colors.text,
@@ -165,6 +168,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   listText: {
+    fontFamily: fonts.regular,
     flex: 1,
     fontSize: 13,
     color: colors.textSecondary,

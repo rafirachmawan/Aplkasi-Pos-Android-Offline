@@ -21,7 +21,7 @@ import TransactionRepository from '../database/transactionRepository';
 import { formatRupiah } from '../utils/helpers';
 import { exportToCSV } from '../utils/exportCSV';
 import { generateReceiptHTML, generateWAMessage } from '../utils/receiptGenerator';
-import { colors } from '../theme/colors';
+import { colors, fonts } from '../theme/colors';
 
 const TABS = ['Harian', 'Bulanan', 'Riwayat'];
 
@@ -247,20 +247,26 @@ const LaporanScreen = () => {
 
       {/* Summary Cards */}
       <View style={styles.summaryRow}>
-        <View style={[styles.summaryCard, { backgroundColor: '#D1FAE5' }]}>
-          <MaterialCommunityIcons name="cash" size={28} color={colors.primary} />
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryIconWrap}>
+            <MaterialCommunityIcons name="cash" size={22} color={colors.iconColor} />
+          </View>
           <Text style={styles.summaryLabel}>Omzet</Text>
-          <Text style={[styles.summaryValue, { color: colors.primary }]}>{formatRupiah(summary.omzet)}</Text>
+          <Text style={styles.summaryValue}>{formatRupiah(summary.omzet)}</Text>
         </View>
-        <View style={[styles.summaryCard, { backgroundColor: '#DBEAFE' }]}>
-          <MaterialCommunityIcons name="trending-up" size={28} color={colors.secondary} />
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryIconWrap}>
+            <MaterialCommunityIcons name="trending-up" size={22} color={colors.iconColor} />
+          </View>
           <Text style={styles.summaryLabel}>Laba Bersih</Text>
-          <Text style={[styles.summaryValue, { color: colors.secondary }]}>{formatRupiah(summary.laba)}</Text>
+          <Text style={styles.summaryValue}>{formatRupiah(summary.laba)}</Text>
         </View>
-        <View style={[styles.summaryCard, { backgroundColor: '#FEF3C7' }]}>
-          <MaterialCommunityIcons name="receipt" size={28} color={colors.warning} />
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryIconWrap}>
+            <MaterialCommunityIcons name="receipt" size={22} color={colors.iconColor} />
+          </View>
           <Text style={styles.summaryLabel}>Transaksi</Text>
-          <Text style={[styles.summaryValue, { color: colors.warning }]}>{summary.count}x</Text>
+          <Text style={styles.summaryValue}>{summary.count}x</Text>
         </View>
       </View>
 
@@ -402,11 +408,17 @@ const styles = StyleSheet.create({
   // Summary Cards
   summaryRow: { flexDirection: 'row', padding: 12, gap: 8 },
   summaryCard: {
-    flex: 1, borderRadius: 14, padding: 12, alignItems: 'center',
-    elevation: 1,
+    flex: 1, borderRadius: 16, padding: 12, alignItems: 'center',
+    elevation: 0, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border,
   },
-  summaryLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
-  summaryValue: { fontSize: 13, fontWeight: 'bold', marginTop: 4, textAlign: 'center' },
+  summaryIconWrap: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: colors.iconBg,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  summaryLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 6, textAlign: 'center' },
+  summaryValue: { fontSize: 13, fontWeight: 'bold', marginTop: 4, textAlign: 'center', color: colors.text },
 
   // List Header
   listHeader: {

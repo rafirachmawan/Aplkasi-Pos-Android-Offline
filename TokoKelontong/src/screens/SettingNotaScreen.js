@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors } from '../theme/colors';
+import { colors, fonts } from '../theme/colors';
 
 const STORE_PROFILE_KEY = '@TokoKelontong:StoreProfile';
 
@@ -85,7 +85,7 @@ const SettingNotaScreen = ({ navigation }) => {
       {/* Identitas Toko */}
       <Text style={styles.sectionTitle}>Identitas Toko</Text>
       <View style={styles.card}>
-        <SettingRow icon="store" iconColor={colors.primary} iconBg="#D1FAE5" label="Nama Toko">
+        <SettingRow icon="store" iconColor={colors.iconColor} iconBg={colors.iconBg} label="Nama Toko">
           <TextInput
             style={styles.input}
             value={storeName}
@@ -95,7 +95,7 @@ const SettingNotaScreen = ({ navigation }) => {
           />
         </SettingRow>
         <View style={styles.divider} />
-        <SettingRow icon="map-marker" iconColor="#F59E0B" iconBg="#FEF3C7" label="Alamat Toko">
+        <SettingRow icon="map-marker" iconColor={colors.iconColor} iconBg={colors.iconBg} label="Alamat Toko">
           <TextInput
             style={[styles.input, styles.textArea]}
             value={storeAddress}
@@ -106,7 +106,7 @@ const SettingNotaScreen = ({ navigation }) => {
           />
         </SettingRow>
         <View style={styles.divider} />
-        <SettingRow icon="phone" iconColor="#8B5CF6" iconBg="#EDE9FE" label="Nomor Telepon / WA (Opsional)">
+        <SettingRow icon="phone" iconColor={colors.iconColor} iconBg={colors.iconBg} label="Nomor Telepon / WA (Opsional)">
           <TextInput
             style={styles.input}
             value={storeContact}
@@ -121,7 +121,7 @@ const SettingNotaScreen = ({ navigation }) => {
       {/* Format Nota */}
       <Text style={styles.sectionTitle}>Format Struk</Text>
       <View style={styles.card}>
-        <SettingRow icon="message-text" iconColor="#EC4899" iconBg="#FCE7F3" label="Pesan Penutup (Footer)">
+        <SettingRow icon="message-text" iconColor={colors.iconColor} iconBg={colors.iconBg} label="Pesan Penutup (Footer)">
           <TextInput
             style={styles.input}
             value={footerMessage}

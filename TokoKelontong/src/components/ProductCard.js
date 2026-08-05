@@ -3,6 +3,7 @@ import { View, StyleSheet, Image } from 'react-native';
 import { Card, Text, IconButton, useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { formatRupiah } from '../utils/helpers';
+import { fonts } from '../theme/colors';
 
 const ProductCard = ({ product, onEdit, onDelete }) => {
   const theme = useTheme();
@@ -24,26 +25,26 @@ const ProductCard = ({ product, onEdit, onDelete }) => {
           {/* Info Produk */}
           <View style={{ flex: 1 }}>
             <View style={styles.header}>
-              <Text variant="titleMedium" style={{ fontWeight: 'bold', flex: 1 }} numberOfLines={1}>{product.product_name}</Text>
+              <Text variant="titleMedium" style={{ fontFamily: fonts.bold, fontWeight: 'bold', flex: 1 }} numberOfLines={1}>{product.product_name}</Text>
               {isLowStock && (
                 <View style={[styles.badge, { backgroundColor: theme.colors.error }]}>
-                  <Text style={styles.badgeText}>Menipis</Text>
+                  <Text style={[styles.badgeText, { fontFamily: fonts.bold }]}>Menipis</Text>
                 </View>
               )}
             </View>
-            <Text variant="bodySmall" style={{ color: theme.colors.textSecondary, marginBottom: 6 }}>
+            <Text variant="bodySmall" style={{ fontFamily: fonts.regular, color: theme.colors.textSecondary, marginBottom: 6 }}>
               Barcode: {product.barcode || '-'}
             </Text>
             <View style={styles.row}>
               <View style={styles.infoCol}>
-                <Text variant="labelSmall">Stok</Text>
-                <Text variant="bodyLarge" style={{ color: isLowStock ? theme.colors.error : theme.colors.primary, fontWeight: 'bold' }}>
-                  {product.stock_quantity} <Text style={{ fontSize: 12, fontWeight: '400', color: theme.colors.textSecondary }}>{product.unit || 'pcs'}</Text>
+                <Text variant="labelSmall" style={{ fontFamily: fonts.medium }}>Stok</Text>
+                <Text variant="bodyLarge" style={{ fontFamily: fonts.bold, color: isLowStock ? theme.colors.error : theme.colors.primary, fontWeight: 'bold' }}>
+                  {product.stock_quantity} <Text style={{ fontFamily: fonts.regular, fontSize: 12, fontWeight: '400', color: theme.colors.textSecondary }}>{product.unit || 'pcs'}</Text>
                 </Text>
               </View>
               <View style={styles.infoCol}>
-                <Text variant="labelSmall">Harga Jual</Text>
-                <Text variant="bodyLarge">{formatRupiah(product.selling_price)}</Text>
+                <Text variant="labelSmall" style={{ fontFamily: fonts.medium }}>Harga Jual</Text>
+                <Text variant="bodyLarge" style={{ fontFamily: fonts.bold }}>{formatRupiah(product.selling_price)}</Text>
               </View>
             </View>
           </View>
@@ -69,7 +70,7 @@ const styles = StyleSheet.create({
   },
   thumbnail: {
     width: 64, height: 64, borderRadius: 12,
-    backgroundColor: '#E0E7FF',
+    backgroundColor: '#F1F5F9',
     alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
     flexShrink: 0,

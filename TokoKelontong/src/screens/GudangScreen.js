@@ -13,7 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import ProductRepository from '../database/productRepository';
 import ProductCard from '../components/ProductCard';
-import { colors } from '../theme/colors';
+import { colors, fonts } from '../theme/colors';
 
 const GudangScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -231,12 +231,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   infoValue: {
+    fontFamily: fonts.extraBold,
     fontSize: 16,
     fontWeight: '800',
     color: colors.text,
     marginTop: 2,
   },
   infoLabel: {
+    fontFamily: fonts.medium,
     fontSize: 10,
     color: colors.textSecondary,
     fontWeight: '500',
@@ -264,6 +266,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    fontFamily: fonts.regular,
     fontSize: 14,
     color: colors.text,
   },
@@ -288,6 +291,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   categoryPillText: {
+    fontFamily: fonts.semiBold,
     fontSize: 13,
     fontWeight: '600',
     color: colors.textSecondary,
@@ -307,6 +311,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   categoryCountText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
     fontWeight: '700',
     color: colors.textSecondary,
@@ -322,6 +327,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyText: {
+    fontFamily: fonts.regular,
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
@@ -347,6 +353,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   fabText: {
+    fontFamily: fonts.extraBold,
     color: '#fff',
     fontWeight: '800',
     fontSize: 14,

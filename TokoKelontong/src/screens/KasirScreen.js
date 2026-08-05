@@ -29,7 +29,7 @@ import {
   generateReceiptHTML,
   generateWAMessage,
 } from "../utils/receiptGenerator";
-import { colors } from "../theme/colors";
+import { colors, fonts } from "../theme/colors";
 
 const { width } = Dimensions.get("window");
 const isTablet = width > 600;
@@ -637,7 +637,7 @@ const KasirScreen = ({ navigation }) => {
           >
             <View
               style={{
-                backgroundColor: "#10B981",
+                backgroundColor: colors.primary,
                 padding: 20,
                 alignItems: "center",
               }}
@@ -652,7 +652,7 @@ const KasirScreen = ({ navigation }) => {
               >
                 Transaksi Berhasil!
               </Text>
-              <Text style={{ color: "#D1FAE5", fontSize: 13 }}>
+              <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>
                 {lastTx?.invoice_number}
               </Text>
             </View>

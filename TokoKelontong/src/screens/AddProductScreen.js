@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProductRepository from '../database/productRepository';
-import { colors } from '../theme/colors';
+import { colors, fonts } from '../theme/colors';
 
 // ─── Helper: format angka menjadi format Rupiah saat diketik ───────────────
 const formatToRp = (raw) => {
@@ -559,7 +559,7 @@ const AddProductScreen = ({ navigation, route }) => {
 
         {/* ── Margin Preview ── */}
         {(capitalPrice !== '' && sellingPrice !== '') && (
-          <View style={[styles.marginPreview, { borderColor: marginPositive ? '#BBF7D0' : '#FCA5A5', backgroundColor: marginPositive ? '#F0FDF4' : '#FFF1F2' }]}>
+          <View style={[styles.marginPreview, { borderColor: marginPositive ? colors.border : '#FCA5A5', backgroundColor: marginPositive ? colors.iconBg : '#FFF1F2' }]}>
             <MaterialCommunityIcons
               name={marginPositive ? 'trending-up' : 'trending-down'}
               size={16}
@@ -922,15 +922,15 @@ const AddProductScreen = ({ navigation, route }) => {
               
               <View style={styles.sourceOptionsRow}>
                 <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('gallery')}>
-                  <View style={[styles.sourceIconWrap, { backgroundColor: '#DBEAFE' }]}>
-                    <MaterialCommunityIcons name="image" size={32} color="#2563EB" />
+                  <View style={[styles.sourceIconWrap, { backgroundColor: colors.iconBg }]}>
+                    <MaterialCommunityIcons name="image" size={32} color={colors.iconColor} />
                   </View>
                   <Text style={styles.sourceOptionText}>Galeri</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('camera')}>
-                  <View style={[styles.sourceIconWrap, { backgroundColor: '#D1FAE5' }]}>
-                    <MaterialCommunityIcons name="camera" size={32} color="#059669" />
+                  <View style={[styles.sourceIconWrap, { backgroundColor: colors.iconBg }]}>
+                    <MaterialCommunityIcons name="camera" size={32} color={colors.iconColor} />
                   </View>
                   <Text style={styles.sourceOptionText}>Kamera</Text>
                 </TouchableOpacity>

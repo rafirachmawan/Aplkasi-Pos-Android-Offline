@@ -17,7 +17,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppContext } from '../context/AppContext';
-import { colors } from '../theme/colors';
+import { colors, fonts } from '../theme/colors';
 
 const SettingRow = ({ icon, iconColor, iconBg, label, children }) => (
   <View style={styles.settingRow}>
@@ -169,7 +169,7 @@ const PengaturanScreen = () => {
       {/* Seksi Informasi Toko */}
       <Text style={styles.sectionTitle}>Informasi Toko</Text>
       <View style={styles.card}>
-        <SettingRow icon="store-edit" iconColor={colors.primary} iconBg="#D1FAE5" label="Nama Toko">
+        <SettingRow icon="store-edit" iconColor={colors.iconColor} iconBg={colors.iconBg} label="Nama Toko">
           <TextInput
             style={styles.input}
             value={storeNameInput}
@@ -183,7 +183,7 @@ const PengaturanScreen = () => {
       {/* Seksi Printer */}
       <Text style={styles.sectionTitle}>Printer Bluetooth</Text>
       <View style={styles.card}>
-        <SettingRow icon="printer-wireless" iconColor="#8B5CF6" iconBg="#EDE9FE" label="Alamat MAC Printer (opsional)">
+        <SettingRow icon="printer-wireless" iconColor={colors.iconColor} iconBg={colors.iconBg} label="Alamat MAC Printer (opsional)">
           <TextInput
             style={styles.input}
             value={printerInput}
@@ -204,7 +204,7 @@ const PengaturanScreen = () => {
       {/* Seksi Sinkronisasi */}
       <Text style={styles.sectionTitle}>Sinkronisasi & Backup</Text>
       <View style={styles.card}>
-        <SettingRow icon="cloud-sync" iconColor={colors.secondary} iconBg="#DBEAFE" label="Sinkronisasi Otomatis (background)">
+        <SettingRow icon="cloud-sync" iconColor={colors.iconColor} iconBg={colors.iconBg} label="Sinkronisasi Otomatis (background)">
           <Switch
             value={autoSync}
             onValueChange={(val) => {
@@ -260,15 +260,15 @@ const PengaturanScreen = () => {
             
             <View style={styles.sourceOptionsRow}>
               <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('gallery')}>
-                <View style={[styles.sourceIconWrap, { backgroundColor: '#DBEAFE' }]}>
-                  <MaterialCommunityIcons name="image" size={32} color="#2563EB" />
+                <View style={[styles.sourceIconWrap, { backgroundColor: colors.iconBg }]}>
+                  <MaterialCommunityIcons name="image" size={32} color={colors.iconColor} />
                 </View>
                 <Text style={styles.sourceOptionText}>Galeri</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('camera')}>
-                <View style={[styles.sourceIconWrap, { backgroundColor: '#D1FAE5' }]}>
-                  <MaterialCommunityIcons name="camera" size={32} color="#059669" />
+                <View style={[styles.sourceIconWrap, { backgroundColor: colors.iconBg }]}>
+                  <MaterialCommunityIcons name="camera" size={32} color={colors.iconColor} />
                 </View>
                 <Text style={styles.sourceOptionText}>Kamera</Text>
               </TouchableOpacity>

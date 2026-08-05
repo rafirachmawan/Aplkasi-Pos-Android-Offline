@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import React, { useContext, useState } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { AppContext } from "../context/AppContext";
-import { colors } from "../theme/colors";
+import { colors, fonts } from "../theme/colors";
 
 const { width } = Dimensions.get("window");
 
@@ -24,6 +24,7 @@ const formatRupiah = (value) => {
 
 const HomeScreen = ({ navigation }) => {
   const { state } = useContext(AppContext);
+  const [hideBalance, setHideBalance] = useState(false);
 
   const now = new Date();
   const dayName = now.toLocaleDateString("id-ID", { weekday: "long" });
@@ -48,35 +49,25 @@ const HomeScreen = ({ navigation }) => {
       <StatusBar
         translucent={true}
         backgroundColor="transparent"
-        barStyle="light-content"
+        barStyle="dark-content"
       />
 
-      {/* ─── Premium Header ─── */}
-      <View style={styles.headerDarkSlate}>
+      {/* ─── Clean White Header ─── */}
+      <View style={styles.headerWhite}>
         {/* Top row: greeting + logo */}
         <View style={styles.headerTopRow}>
           <View style={styles.headerLeft}>
-            {/* Live badge */}
-            <View style={styles.greetingBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.greetingBadgeText}>Toko Aktif</Text>
-            </View>
-
-            <Text style={styles.greetingText}>
-              {greetingText} {greetingEmoji}
-            </Text>
             <Text style={styles.headerTitle} numberOfLines={1}>
               {state.storeName || "MarketPos"}
             </Text>
 
-            {/* Date pill */}
-            <View style={styles.datePill}>
+            <View style={styles.dateRow}>
               <MaterialCommunityIcons
-                name="calendar-check-outline"
-                size={12}
-                color="#7DD3FC"
+                name="calendar-month-outline"
+                size={14}
+                color={colors.textSecondary}
               />
-              <Text style={styles.datePillText}>
+              <Text style={styles.dateSubText}>
                 {dayName}, {dateStr}
               </Text>
             </View>
@@ -90,7 +81,7 @@ const HomeScreen = ({ navigation }) => {
                 style={styles.storeLogoImage}
               />
             ) : (
-              <MaterialCommunityIcons name="store" size={26} color="#0F172A" />
+              <MaterialCommunityIcons name="store" size={26} color={colors.iconColor} />
             )}
           </View>
         </View>
@@ -98,37 +89,55 @@ const HomeScreen = ({ navigation }) => {
         {/* Divider */}
         <View style={styles.headerDivider} />
 
-        {/* Bottom row: mini stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Saldo</Text>
-            <Text
-              style={[
-                styles.statValue,
-                { color: totalSaldo >= 0 ? "#4ADE80" : "#F87171" },
-              ]}
-              numberOfLines={1}
+        {/* Floating Metric Card */}
+        <View style={styles.statsCardWrapper}>
+          <View style={styles.statsCardTopBar}>
+            <Text style={styles.statsCardTopTitle}>RINGKASAN KEUANGAN</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={styles.eyeToggleBtn}
+              onPress={() => setHideBalance(!hideBalance)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              {formatRupiah(totalSaldo)}
-            </Text>
+              <MaterialCommunityIcons
+                name={hideBalance ? "eye-off-outline" : "eye-outline"}
+                size={16}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.statDividerV} />
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Saldo</Text>
+              <Text
+                style={[
+                  styles.statValue,
+                  { color: totalSaldo >= 0 ? colors.success : colors.error },
+                ]}
+                numberOfLines={1}
+              >
+                {hideBalance ? "Rp ••••••" : formatRupiah(totalSaldo)}
+              </Text>
+            </View>
 
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Pemasukan</Text>
-            <Text style={[styles.statValue, { color: "#4ADE80" }]} numberOfLines={1}>
-              {formatRupiah(totalPemasukan)}
-            </Text>
-          </View>
+            <View style={styles.statDividerV} />
 
-          <View style={styles.statDividerV} />
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Pemasukan</Text>
+              <Text style={[styles.statValue, { color: colors.success }]} numberOfLines={1}>
+                {hideBalance ? "Rp ••••••" : formatRupiah(totalPemasukan)}
+              </Text>
+            </View>
 
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Pengeluaran</Text>
-            <Text style={[styles.statValue, { color: "#F87171" }]} numberOfLines={1}>
-              {formatRupiah(totalPengeluaran)}
-            </Text>
+            <View style={styles.statDividerV} />
+
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Pengeluaran</Text>
+              <Text style={[styles.statValue, { color: colors.error }]} numberOfLines={1}>
+                {hideBalance ? "Rp ••••••" : formatRupiah(totalPengeluaran)}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -138,18 +147,17 @@ const HomeScreen = ({ navigation }) => {
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.overlapSpacer} />
-        {/* Primary Action: Kasir (Overlaps Header) */}
+        {/* Primary Hero Action: Buka Kasir */}
         <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.primaryCard}
+          activeOpacity={0.88}
+          style={styles.primaryHeroCard}
           onPress={() => navigation.navigate("Kasir")}
         >
           <View style={styles.primaryCardLeft}>
             <View style={styles.primaryIconWrapper}>
               <MaterialCommunityIcons
                 name="storefront-outline"
-                size={32}
+                size={30}
                 color="#FFFFFF"
               />
             </View>
@@ -158,12 +166,13 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.primaryCardDesc}>Mulai transaksi baru</Text>
             </View>
           </View>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={28}
-            color={colors.textSecondary}
-            style={{ opacity: 0.3 }}
-          />
+          <View style={styles.heroArrowBtn}>
+            <MaterialCommunityIcons
+              name="arrow-right"
+              size={20}
+              color="#FFFFFF"
+            />
+          </View>
         </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>Menu Utama</Text>
@@ -177,13 +186,18 @@ const HomeScreen = ({ navigation }) => {
             onPress={() => navigation.navigate("Dashboard")}
           >
             <View style={styles.bentoHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
+              <View style={styles.iconSquircle}>
                 <MaterialCommunityIcons
                   name="chart-arc"
-                  size={26}
-                  color="#334155"
+                  size={24}
+                  color={colors.iconColor}
                 />
               </View>
+              <MaterialCommunityIcons
+                name="arrow-top-right"
+                size={18}
+                color="#94A3B8"
+              />
             </View>
             <Text style={styles.bentoTitle}>Dashboard</Text>
             <Text style={styles.bentoDesc}>Statistik toko</Text>
@@ -196,13 +210,18 @@ const HomeScreen = ({ navigation }) => {
             onPress={() => navigation.navigate("Gudang")}
           >
             <View style={styles.bentoHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
+              <View style={styles.iconSquircle}>
                 <MaterialCommunityIcons
                   name="package-variant-closed"
-                  size={26}
-                  color="#334155"
+                  size={24}
+                  color={colors.iconColor}
                 />
               </View>
+              <MaterialCommunityIcons
+                name="arrow-top-right"
+                size={18}
+                color="#94A3B8"
+              />
             </View>
             <Text style={styles.bentoTitle}>Gudang</Text>
             <Text style={styles.bentoDesc}>Kelola stok</Text>
@@ -215,13 +234,18 @@ const HomeScreen = ({ navigation }) => {
             onPress={() => navigation.navigate("Laporan")}
           >
             <View style={styles.bentoHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
+              <View style={styles.iconSquircle}>
                 <MaterialCommunityIcons
                   name="file-document-outline"
-                  size={26}
-                  color="#334155"
+                  size={24}
+                  color={colors.iconColor}
                 />
               </View>
+              <MaterialCommunityIcons
+                name="arrow-top-right"
+                size={18}
+                color="#94A3B8"
+              />
             </View>
             <Text style={styles.bentoTitle}>Laporan</Text>
             <Text style={styles.bentoDesc}>Data penjualan</Text>
@@ -234,13 +258,18 @@ const HomeScreen = ({ navigation }) => {
             onPress={() => navigation.navigate("SettingNota")}
           >
             <View style={styles.bentoHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: "#F1F5F9" }]}>
+              <View style={styles.iconSquircle}>
                 <MaterialCommunityIcons
                   name="receipt"
-                  size={26}
-                  color="#334155"
+                  size={24}
+                  color={colors.iconColor}
                 />
               </View>
+              <MaterialCommunityIcons
+                name="arrow-top-right"
+                size={18}
+                color="#94A3B8"
+              />
             </View>
             <Text style={styles.bentoTitle}>Format Nota</Text>
             <Text style={styles.bentoDesc}>Desain struk</Text>
@@ -250,14 +279,14 @@ const HomeScreen = ({ navigation }) => {
         {/* Administrative Actions */}
         <TouchableOpacity
           activeOpacity={0.85}
-          style={[styles.listCard, { marginBottom: 16 }]}
+          style={styles.listCard}
           onPress={() => navigation.navigate("Pengaturan")}
         >
-          <View style={[styles.listIconCircle, { backgroundColor: "#F1F5F9" }]}>
+          <View style={styles.listIconSquircle}>
             <MaterialCommunityIcons
               name="cog-outline"
-              size={24}
-              color="#334155"
+              size={22}
+              color={colors.iconColor}
             />
           </View>
           <View style={styles.listTextContainer}>
@@ -266,8 +295,8 @@ const HomeScreen = ({ navigation }) => {
           </View>
           <MaterialCommunityIcons
             name="chevron-right"
-            size={24}
-            color={colors.border}
+            size={22}
+            color="#94A3B8"
           />
         </TouchableOpacity>
 
@@ -276,11 +305,11 @@ const HomeScreen = ({ navigation }) => {
           style={styles.listCard}
           onPress={() => navigation.navigate("Panduan")}
         >
-          <View style={[styles.listIconCircle, { backgroundColor: "#F1F5F9" }]}>
+          <View style={styles.listIconSquircle}>
             <MaterialCommunityIcons
               name="book-open-page-variant"
-              size={24}
-              color="#0F172A"
+              size={22}
+              color={colors.iconColor}
             />
           </View>
           <View style={styles.listTextContainer}>
@@ -289,8 +318,8 @@ const HomeScreen = ({ navigation }) => {
           </View>
           <MaterialCommunityIcons
             name="chevron-right"
-            size={24}
-            color={colors.border}
+            size={22}
+            color="#94A3B8"
           />
         </TouchableOpacity>
 
@@ -313,99 +342,90 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  headerDarkSlate: {
-    backgroundColor: "#0F172A",
+  headerWhite: {
+    backgroundColor: colors.surface,
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 16 : 56,
-    paddingBottom: 24,
+    paddingBottom: 20,
     paddingHorizontal: 24,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
   },
   headerLeft: {
     flex: 1,
     paddingRight: 16,
   },
-  greetingBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(74,222,128,0.12)",
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "rgba(74,222,128,0.25)",
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#4ADE80",
-    marginRight: 6,
-  },
-  greetingBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#4ADE80",
-    letterSpacing: 0.5,
-  },
   greetingText: {
     fontSize: 13,
-    color: "#94A3B8",
+    color: colors.textSecondary,
     fontWeight: "600",
     marginBottom: 2,
     letterSpacing: 0.2,
   },
   headerTitle: {
+    fontFamily: fonts.extraBold,
     fontSize: 24,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: colors.text,
     letterSpacing: 0.2,
-    marginBottom: 10,
+    marginBottom: 4,
   },
-  datePill: {
+  dateRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(125,211,252,0.1)",
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(125,211,252,0.2)",
+    gap: 5,
   },
-  datePillText: {
-    fontSize: 11,
-    color: "#7DD3FC",
-    fontWeight: "600",
-    marginLeft: 5,
+  dateSubText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "500",
   },
   headerIcon: {
     width: 54,
     height: 54,
     borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.iconBg,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   headerDivider: {
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: colors.border,
     marginVertical: 16,
     marginHorizontal: -4,
+  },
+  statsCardWrapper: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  statsCardTopBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  statsCardTopTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#64748B",
+    letterSpacing: 0.8,
+  },
+  eyeToggleBtn: {
+    padding: 2,
   },
   statsRow: {
     flexDirection: "row",
@@ -417,22 +437,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statLabel: {
+    fontFamily: fonts.bold,
     fontSize: 10,
     color: "#64748B",
-    fontWeight: "600",
+    fontWeight: "700",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     marginBottom: 3,
   },
   statValue: {
+    fontFamily: fonts.bold,
     fontSize: 13,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.text,
   },
   statDividerV: {
     width: 1,
-    height: 30,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    height: 26,
+    backgroundColor: "#CBD5E1",
   },
   storeLogoImage: {
     width: "100%",
@@ -441,132 +463,156 @@ const styles = StyleSheet.create({
   },
   scrollWrapper: {
     flex: 1,
-    zIndex: 10,
-    elevation: 10,
-  },
-  overlapSpacer: {
-    height: 32,
-    marginTop: -32,
   },
   body: {
     paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 40,
   },
-  primaryCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24, // Lebih membulat dan halus
-    padding: 22,
+  primaryHeroCard: {
+    backgroundColor: "#0F172A",
+    borderRadius: 22,
+    padding: 20,
     marginBottom: 24,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    elevation: 2, // Shadow Android yang sangat tipis
-    shadowColor: "rgba(0,0,0,0.06)",
+    shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
+    shadowOpacity: 0.18,
     shadowRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.03)",
+    elevation: 4,
   },
   primaryCardLeft: {
     flexDirection: "row",
     alignItems: "center",
   },
   primaryIconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 16, // Matching squircle
-    backgroundColor: "#0F172A", // Dark Slate / Black
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 16,
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
   },
   primaryCardTitle: {
+    fontFamily: fonts.extraBold,
     fontSize: 18,
     fontWeight: "800",
-    color: colors.text,
+    color: "#FFFFFF",
     marginBottom: 2,
+    letterSpacing: 0.2,
   },
   primaryCardDesc: {
+    fontFamily: fonts.medium,
     fontSize: 13,
-    color: colors.textSecondary,
+    color: "#94A3B8",
+    fontWeight: "500",
+  },
+  heroArrowBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontFamily: fonts.extraBold,
+    fontSize: 15,
+    fontWeight: "800",
     color: colors.text,
-    marginBottom: 16,
-    marginLeft: 4,
+    letterSpacing: 0.3,
+    marginBottom: 14,
+    marginLeft: 2,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 14,
-    marginBottom: 16,
+    gap: 12,
+    marginBottom: 12,
   },
   bentoCard: {
-    width: (width - 40 - 14) / 2,
+    width: (width - 40 - 12) / 2,
     backgroundColor: "#FFFFFF",
-    borderRadius: 24, // Lebih membulat
-    padding: 20,
-    elevation: 0, // Dihilangkan agar flat dan halus
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)", // Garis tepi sangat tipis dan halus
+    borderColor: "rgba(15,23,42,0.07)",
   },
   bentoHeader: {
     flexDirection: "row",
-    justifyContent: "flex-start",
-    marginBottom: 16,
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
   },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24, // Bulat sempurna agar terkesan lebih 'halus'
+  iconSquircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F8FAFC", // Background icon yang lebih lembut
+    backgroundColor: "#F1F5F9",
   },
   bentoTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 4,
-  },
-  bentoDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  listCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 16,
-    elevation: 0,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    marginBottom: 24,
-  },
-  listIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24, // Bulat sempurna
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
-    backgroundColor: "#F8FAFC",
-  },
-  listTextContainer: {
-    flex: 1,
-  },
-  listTitle: {
+    fontFamily: fonts.bold,
     fontSize: 15,
     fontWeight: "700",
     color: colors.text,
     marginBottom: 2,
   },
+  bentoDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "400",
+  },
+  listCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 14,
+    paddingHorizontal: 16,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.07)",
+    marginBottom: 10,
+  },
+  listIconSquircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+    backgroundColor: "#F1F5F9",
+  },
+  listTextContainer: {
+    flex: 1,
+  },
+  listTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 2,
+  },
   listDesc: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     color: colors.textSecondary,
   },
@@ -574,9 +620,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 8,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   footerText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
     fontWeight: "600",
     color: colors.textSecondary,
