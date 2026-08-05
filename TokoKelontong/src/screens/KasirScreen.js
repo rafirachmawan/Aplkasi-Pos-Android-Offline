@@ -36,8 +36,8 @@ const isTablet = width > 600;
 
 // ── Helper: Format angka ke tampilan Rp (Rp 50.000) ──
 const formatToRpDisplay = (raw) => {
-  const num = String(raw).replace(/\D/g, '');
-  if (!num || num === '0') return '';
+  const num = String(raw).replace(/\D/g, '').replace(/^0+/, '');
+  if (!num) return '';
   return 'Rp ' + num.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 };
 
@@ -58,7 +58,7 @@ const KasirScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showCartModal, setShowCartModal] = useState(false);
   const [cashInput, setCashInput] = useState("");
-  const [discountInput, setDiscountInput] = useState("0");
+  const [discountInput, setDiscountInput] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastTx, setLastTx] = useState(null);
   const [lastTxDetails, setLastTxDetails] = useState([]);
@@ -392,6 +392,7 @@ const KasirScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+
       {/* ── Search Bar ── */}
       <View style={styles.searchContainer}>
         <MaterialCommunityIcons
@@ -506,6 +507,7 @@ const KasirScreen = ({ navigation }) => {
         visible={showCartModal}
         animationType="fade"
         transparent={true}
+        statusBarTranslucent={true}
         onRequestClose={() => setShowCartModal(false)}
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -642,6 +644,7 @@ const KasirScreen = ({ navigation }) => {
         visible={showSuccessModal}
         transparent
         animationType="fade"
+        statusBarTranslucent={true}
         onRequestClose={() => setShowSuccessModal(false)}
       >
         <View style={styles.modalOverlay}>
@@ -1025,8 +1028,9 @@ const styles = StyleSheet.create({
 
   // Modal Keranjang Centered Card
   modalOverlayCart: {
-    flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 16,
   },
   cartBottomSheet: {
     backgroundColor: colors.background, borderRadius: 24, width: '92%',

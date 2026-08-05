@@ -30,7 +30,7 @@ const SettingRow = ({ icon, iconColor = colors.primary, iconBg = '#F1F5F9', labe
   </View>
 );
 
-const PengaturanScreen = () => {
+const PengaturanScreen = ({ navigation }) => {
   const { state, dispatch } = useContext(AppContext);
   const [storeNameInput, setStoreNameInput] = useState(state.storeName);
   const [printerInput, setPrinterInput] = useState(state.printerAddress || '');
@@ -335,7 +335,41 @@ const PengaturanScreen = () => {
           <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
         </TouchableOpacity>
       </View>
+      {/* ── Seksi Bantuan & Panduan ── */}
+      <Text style={styles.sectionHeaderTitle}>BANTUAN & PANDUAN</Text>
+      <View style={styles.card}>
+        <TouchableOpacity
+          style={styles.linkRowBtn}
+          onPress={() => navigation.navigate('Panduan')}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.settingIconWrap, { backgroundColor: '#FEF3C7' }]}>
+            <MaterialCommunityIcons name="book-open-page-variant" size={20} color="#D97706" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.linkRowText}>Buku Panduan Kasir</Text>
+            <Text style={styles.linkSubText}>Penjelasan rinci seluruh fitur & alur toko</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
+        </TouchableOpacity>
 
+        <View style={styles.cardDivider} />
+
+        <TouchableOpacity
+          style={styles.linkRowBtn}
+          onPress={() => navigation.navigate('Onboarding')}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.settingIconWrap, { backgroundColor: '#EEF2FF' }]}>
+            <MaterialCommunityIcons name="presentation-play" size={20} color="#4F46E5" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.linkRowText}>Tampilkan Onboarding Awal</Text>
+            <Text style={styles.linkSubText}>Ulangi 3 slide perkenalan aplikasi</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
+        </TouchableOpacity>
+      </View>
       {/* ── Tombol Simpan ── */}
       <TouchableOpacity
         style={[styles.saveBtn, saved && { backgroundColor: '#059669' }]}
