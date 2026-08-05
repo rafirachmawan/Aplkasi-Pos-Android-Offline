@@ -49,7 +49,7 @@ export class BackupService {
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
 
       await FileSystem.writeAsStringAsync(fileUri, jsonString, {
-        encoding: FileSystem.EncodingType.UTF8,
+        encoding: 'utf8',
       });
 
       // 5. Buka Menu Share HP (Bisa kirim ke WA, Save to Drive, Simpan ke File HP)

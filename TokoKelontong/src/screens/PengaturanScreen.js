@@ -10,9 +10,12 @@ import {
   Image,
   Modal,
   Platform,
+  Linking,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppContext } from '../context/AppContext';
@@ -44,7 +47,7 @@ const PengaturanScreen = ({ navigation }) => {
   // Backup & Restore states
   const [isExporting, setIsExporting] = useState(false);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
-  const [restoreJsonInput, setRestoreJsonInput] = useState('');
+  const [selectedBackupFile, setSelectedBackupFile] = useState(null);
   const [isRestoring, setIsRestoring] = useState(false);
 
   useEffect(() => {
@@ -144,16 +147,38 @@ const PengaturanScreen = ({ navigation }) => {
     }
   };
 
-  // Restore
-  const handleProcessRestore = async () => {
-    if (!restoreJsonInput.trim()) {
-      Alert.alert('Peringatan', 'Silakan tempel (paste) kode JSON backup ke dalam kolom.');
+  // Buka file picker dari dalam modal
+  const handleSelectFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const pickedFile = result.assets?.[0];
+      if (!pickedFile || !pickedFile.uri) {
+        Alert.alert('Error', 'Tidak dapat membaca file yang dipilih.');
+        return;
+      }
+
+      setSelectedBackupFile(pickedFile);
+    } catch (e) {
+      Alert.alert('Error', 'Gagal membuka pengelola file: ' + e.message);
+    }
+  };
+
+  // Eksekusi pemulihan data setelah file dipilih
+  const handleExecuteRestore = async () => {
+    if (!selectedBackupFile) {
+      Alert.alert('Peringatan', 'Silakan pilih file backup (.json) terlebih dahulu.');
       return;
     }
 
     Alert.alert(
       '⚠️ Konfirmasi Restore Data',
-      'Memulihkan data akan memperbarui seluruh produk, stok, dan riwayat transaksi dengan data dari file backup. Apakah Anda yakin?',
+      `File: "${selectedBackupFile.name || 'backup.json'}"\n\nMemulihkan data akan memperbarui seluruh produk, stok, dan riwayat transaksi. Apakah Anda yakin?`,
       [
         { text: 'Batal', style: 'cancel' },
         {
@@ -162,7 +187,12 @@ const PengaturanScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               setIsRestoring(true);
-              const res = await BackupService.restoreBackupFromJson(restoreJsonInput.trim());
+
+              const jsonString = await FileSystem.readAsStringAsync(selectedBackupFile.uri, {
+                encoding: 'utf8',
+              });
+
+              const res = await BackupService.restoreBackupFromJson(jsonString);
               if (res.success) {
                 const newStoreName = (await AsyncStorage.getItem('storeName')) || 'MarketPos';
                 const newLogo = await AsyncStorage.getItem('storeLogo');
@@ -177,7 +207,7 @@ const PengaturanScreen = ({ navigation }) => {
                 setPrinterInput(newPrinter || '');
 
                 setShowRestoreModal(false);
-                setRestoreJsonInput('');
+                setSelectedBackupFile(null);
 
                 Alert.alert(
                   '🎉 Restore Berhasil!',
@@ -283,13 +313,24 @@ const PengaturanScreen = ({ navigation }) => {
 
         <TouchableOpacity
           style={styles.linkRow}
-          onPress={() => Alert.alert('Scan Bluetooth', 'Fitur pencarian Bluetooth aktif otomatis pada build Android native.')}
+          onPress={() => {
+            if (Platform.OS === 'android') {
+              Linking.sendIntent('android.settings.BLUETOOTH_SETTINGS').catch(() => {
+                Linking.openSettings();
+              });
+            } else {
+              Linking.openSettings();
+            }
+          }}
           activeOpacity={0.7}
         >
           <View style={[styles.settingIconWrap, { backgroundColor: '#F1F5F9' }]}>
             <MaterialCommunityIcons name="bluetooth-connect" size={20} color="#0F172A" />
           </View>
-          <Text style={styles.linkText}>Cari Perangkat Bluetooth Terdekat</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.linkText}>Buka Pengaturan Bluetooth HP</Text>
+            <Text style={styles.linkSubText}>Pasangkan printer Bluetooth dari sini</Text>
+          </View>
           <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
         </TouchableOpacity>
       </View>
@@ -316,16 +357,20 @@ const PengaturanScreen = ({ navigation }) => {
         <View style={styles.divider} />
 
         <TouchableOpacity
-          style={styles.linkRow}
-          onPress={() => setShowRestoreModal(true)}
+          style={[styles.linkRow, isRestoring && { opacity: 0.5 }]}
+          onPress={() => {
+            setSelectedBackupFile(null);
+            setShowRestoreModal(true);
+          }}
+          disabled={isRestoring}
           activeOpacity={0.7}
         >
           <View style={[styles.settingIconWrap, { backgroundColor: '#F0FDF4' }]}>
-            <MaterialCommunityIcons name="import" size={20} color="#16A34A" />
+            <MaterialCommunityIcons name="file-upload-outline" size={20} color="#16A34A" />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.linkText}>Impor / Restore Data Backup</Text>
-            <Text style={styles.linkSubText}>Pulihkan data produk & transaksi dari backup</Text>
+            <Text style={styles.linkSubText}>Upload file backup (.json) dari memori HP</Text>
           </View>
           <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
         </TouchableOpacity>
@@ -440,62 +485,101 @@ const PengaturanScreen = ({ navigation }) => {
           </View>
         </TouchableOpacity>
       </Modal>
-
-      {/* ── Modal Restore Backup ── */}
+      {/* ── Modal Upload Restore Backup ── */}
       <Modal
         visible={showRestoreModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowRestoreModal(false)}
+        onRequestClose={() => {
+          setShowRestoreModal(false);
+          setSelectedBackupFile(null);
+        }}
       >
         <View style={styles.modalOverlayCenter}>
           <View style={styles.restoreModalCard}>
             <View style={styles.modalHeaderRow}>
               <View style={[styles.settingIconWrap, { backgroundColor: '#F0FDF4' }]}>
-                <MaterialCommunityIcons name="import" size={20} color="#16A34A" />
+                <MaterialCommunityIcons name="file-upload-outline" size={22} color="#16A34A" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.restoreTitle}>Restore Data Kasir</Text>
-                <Text style={styles.restoreSub}>Tempelkan kode/isi file backup (.json)</Text>
+                <Text style={styles.restoreSub}>Upload file backup (.json) dari memori HP</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowRestoreModal(false)}>
+              <TouchableOpacity onPress={() => {
+                setShowRestoreModal(false);
+                setSelectedBackupFile(null);
+              }}>
                 <MaterialCommunityIcons name="close-circle" size={22} color="#94A3B8" />
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              style={styles.jsonTextArea}
-              multiline
-              numberOfLines={8}
-              value={restoreJsonInput}
-              onChangeText={setRestoreJsonInput}
-              placeholder="Tempel (paste) kode JSON file backup di sini..."
-              placeholderTextColor="#94A3B8"
-              textAlignVertical="top"
-            />
+            {/* Dropzone Upload Box */}
+            <TouchableOpacity
+              style={[
+                styles.uploadDropZone,
+                selectedBackupFile && styles.uploadDropZoneActive,
+              ]}
+              onPress={handleSelectFile}
+              activeOpacity={0.7}
+            >
+              {selectedBackupFile ? (
+                <View style={styles.selectedFileWrap}>
+                  <View style={styles.selectedFileIconCircle}>
+                    <MaterialCommunityIcons name="file-check" size={28} color="#16A34A" />
+                  </View>
+                  <Text style={styles.selectedFileName} numberOfLines={1}>
+                    {selectedBackupFile.name || 'backup.json'}
+                  </Text>
+                  <Text style={styles.selectedFileSub}>
+                    {selectedBackupFile.size
+                      ? `${(selectedBackupFile.size / 1024).toFixed(1)} KB • File Siap Dipulihkan`
+                      : 'File Backup Siap Dipulihkan'}
+                  </Text>
+                  <View style={styles.changeFileChip}>
+                    <MaterialCommunityIcons name="folder-sync-outline" size={14} color="#2563EB" />
+                    <Text style={styles.changeFileChipText}>Ketuk untuk Ganti File</Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.emptyUploadWrap}>
+                  <View style={styles.cloudUploadIconWrap}>
+                    <MaterialCommunityIcons name="cloud-upload-outline" size={32} color="#2563EB" />
+                  </View>
+                  <Text style={styles.uploadBoxTitle}>Pilih File Backup (.json)</Text>
+                  <Text style={styles.uploadBoxSub}>
+                    Ketuk di sini untuk membuka galeri / pengelola file HP
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
 
             <View style={styles.restoreActions}>
               <TouchableOpacity
                 style={styles.cancelRestoreBtn}
-                onPress={() => setShowRestoreModal(false)}
+                onPress={() => {
+                  setShowRestoreModal(false);
+                  setSelectedBackupFile(null);
+                }}
               >
                 <Text style={styles.cancelRestoreText}>Batal</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.confirmRestoreBtn, isRestoring && { opacity: 0.6 }]}
-                onPress={handleProcessRestore}
-                disabled={isRestoring}
+                style={[
+                  styles.confirmRestoreBtn,
+                  (!selectedBackupFile || isRestoring) && { backgroundColor: '#94A3B8', opacity: 0.6 },
+                ]}
+                onPress={handleExecuteRestore}
+                disabled={!selectedBackupFile || isRestoring}
               >
                 <Text style={styles.confirmRestoreText}>
-                  {isRestoring ? 'Memulihkan...' : 'Pulihkan Data'}
+                  {isRestoring ? 'Memulihkan Data...' : 'Pulihkan Data'}
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-
     </ScrollView>
   );
 };
@@ -832,17 +916,87 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
   },
-  jsonTextArea: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    padding: 12,
+  uploadDropZone: {
+    borderWidth: 1.5,
+    borderColor: '#93C5FD',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    backgroundColor: '#EFF6FF',
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  uploadDropZoneActive: {
+    borderColor: '#86EFAC',
+    borderStyle: 'solid',
+    backgroundColor: '#F0FDF4',
+  },
+  emptyUploadWrap: {
+    alignItems: 'center',
+  },
+  cloudUploadIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  uploadBoxTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: '#1E40AF',
+    marginBottom: 4,
+  },
+  uploadBoxSub: {
     fontFamily: fonts.regular,
-    fontSize: 12,
+    fontSize: 11,
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  selectedFileWrap: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  selectedFileIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  selectedFileName: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
     color: '#0F172A',
-    minHeight: 120,
-    marginBottom: 16,
+    marginBottom: 2,
+    textAlign: 'center',
+  },
+  selectedFileSub: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: '#16A34A',
+    marginBottom: 10,
+  },
+  changeFileChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  changeFileChipText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: '#2563EB',
   },
   restoreActions: {
     flexDirection: 'row',
