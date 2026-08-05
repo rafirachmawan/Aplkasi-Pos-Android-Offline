@@ -34,6 +34,19 @@ import { colors, fonts } from "../theme/colors";
 const { width } = Dimensions.get("window");
 const isTablet = width > 600;
 
+// ── Helper: Format angka ke tampilan Rp (Rp 50.000) ──
+const formatToRpDisplay = (raw) => {
+  const num = String(raw).replace(/\D/g, '');
+  if (!num || num === '0') return '';
+  return 'Rp ' + num.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+};
+
+// ── Helper: Ambil angka murni dari string Rp (Rp 50.000 → 50000) ──
+const parseRpToNumber = (formatted) => {
+  const num = String(formatted).replace(/\D/g, '');
+  return parseInt(num) || 0;
+};
+
 const KasirScreen = ({ navigation }) => {
   const { state, dispatch } = useContext(AppContext);
   const cart = state.cart;
@@ -164,9 +177,9 @@ const KasirScreen = ({ navigation }) => {
     (sum, i) => sum + i.selling_price * i.quantity,
     0,
   );
-  const diskon = parseInt(discountInput) || 0;
+  const diskon = parseRpToNumber(discountInput);
   const grandTotal = Math.max(0, totalHarga - diskon);
-  const cashReceived = parseInt(cashInput) || 0;
+  const cashReceived = parseRpToNumber(cashInput);
   const kembalian = cashReceived - grandTotal;
 
   const handleBayar = async () => {
@@ -193,7 +206,7 @@ const KasirScreen = ({ navigation }) => {
 
       setShowCartModal(false);
       setCashInput("");
-      setDiscountInput("0");
+      setDiscountInput("");
       dispatch({ type: "CLEAR_CART" });
 
       try {
@@ -565,9 +578,9 @@ const KasirScreen = ({ navigation }) => {
                   <TextInput
                     style={styles.cashInputBig}
                     value={discountInput}
-                    onChangeText={setDiscountInput}
+                    onChangeText={(text) => setDiscountInput(formatToRpDisplay(text))}
                     keyboardType="numeric"
-                    placeholder="0"
+                    placeholder="Rp 0"
                     placeholderTextColor={colors.textSecondary}
                   />
 
@@ -576,21 +589,21 @@ const KasirScreen = ({ navigation }) => {
                   <TextInput
                     style={styles.cashInputBig}
                     value={cashInput}
-                    onChangeText={setCashInput}
+                    onChangeText={(text) => setCashInput(formatToRpDisplay(text))}
                     keyboardType="numeric"
-                    placeholder="Contoh: 50000"
+                    placeholder="Rp 50.000"
                     placeholderTextColor={colors.textSecondary}
                   />
 
                   {/* Quick Amount */}
                   <View style={styles.quickAmountRow}>
-                    <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput(grandTotal.toString())}>
+                    <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput(formatToRpDisplay(grandTotal))}>
                       <Text style={styles.quickAmountText}>Uang Pas</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput('50000')}>
+                    <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput(formatToRpDisplay(50000))}>
                       <Text style={styles.quickAmountText}>50 Ribu</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput('100000')}>
+                    <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput(formatToRpDisplay(100000))}>
                       <Text style={styles.quickAmountText}>100 Ribu</Text>
                     </TouchableOpacity>
                   </View>

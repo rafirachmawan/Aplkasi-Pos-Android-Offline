@@ -56,6 +56,9 @@ const SettingNotaScreen = ({ navigation }) => {
     try {
       const data = { storeName, storeAddress, storeContact, footerMessage };
       await AsyncStorage.setItem(STORE_PROFILE_KEY, JSON.stringify(data));
+      if (storeName.trim()) {
+        await AsyncStorage.setItem('storeName', storeName.trim());
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (error) {

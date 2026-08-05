@@ -52,33 +52,29 @@ const LaporanScreen = () => {
   const loadData = useCallback(() => {
     try {
       let data = [];
+      let datePattern = '';
+
       if (activeTab === 'Harian') {
-        data = TransactionRepository.getTransactionsByDate(getDateStr());
+        datePattern = getDateStr();
+        data = TransactionRepository.getTransactionsByDate(datePattern);
       } else if (activeTab === 'Bulanan') {
-        data = TransactionRepository.getMonthlyTransactions(getMonthStr());
+        datePattern = getMonthStr();
+        data = TransactionRepository.getMonthlyTransactions(datePattern);
       } else {
         // Riwayat: ambil semua
+        datePattern = '';
         data = TransactionRepository.getMonthlyTransactions('');
       }
 
-      const omzet = data.reduce((sum, t) => sum + t.grand_total, 0);
-      // Laba dihitung dari grand_total - (harga modal * qty) — perlu join
-      // Estimasi cepat: grand_total - (total_price - discount) * ratio modal
-      // Untuk MVP: kita simpan sebagai grand_total saja, laba dari getFullReport
-      let laba = 0;
-      try {
-        const fullReport = TransactionRepository.getFullReportForExport();
-        // Filter sesuai tab
-        const filtered = fullReport.filter(r => {
-          if (activeTab === 'Harian') return r.Tanggal === getDateStr();
-          if (activeTab === 'Bulanan') return r.Tanggal && r.Tanggal.startsWith(getMonthStr());
-          return true;
-        });
-        laba = filtered.reduce((sum, r) => sum + (r.Total_Keuntungan || 0), 0);
-      } catch (_) {}
+      // Hitung Omzet & Laba Bersih presisi via SQL Aggregation langsung
+      const summaryRes = TransactionRepository.getSummaryByDatePattern(datePattern);
 
       setTransactions(data);
-      setSummary({ omzet, laba, count: data.length });
+      setSummary({
+        omzet: summaryRes.omzet,
+        laba: summaryRes.laba,
+        count: data.length,
+      });
     } catch (e) {
       console.error('Load laporan error:', e);
     }
@@ -139,7 +135,13 @@ const LaporanScreen = () => {
   const getStoreProfile = async () => {
     try {
       const saved = await AsyncStorage.getItem('@TokoKelontong:StoreProfile');
-      return saved ? JSON.parse(saved) : {};
+      if (saved) {
+        return JSON.parse(saved);
+      }
+      const storeName = (await AsyncStorage.getItem('storeName')) || 'Toko Kelontong';
+      const logo = await AsyncStorage.getItem('storeLogo');
+      const printerAddress = await AsyncStorage.getItem('printerAddress');
+      return { name: storeName, logo, printerAddress };
     } catch {
       return {};
     }

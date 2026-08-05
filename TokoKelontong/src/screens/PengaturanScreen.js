@@ -104,6 +104,14 @@ const PengaturanScreen = () => {
         await AsyncStorage.removeItem('storeLogo');
       }
 
+      // Selaraskan juga ke objek @TokoKelontong:StoreProfile agar nota & laporan konsisten
+      const storeProfileObj = {
+        name: storeNameInput.trim(),
+        printerAddress: printerInput.trim() || null,
+        logo: logoUri || null,
+      };
+      await AsyncStorage.setItem('@TokoKelontong:StoreProfile', JSON.stringify(storeProfileObj));
+
       dispatch({ type: 'SET_STORE_NAME', payload: storeNameInput.trim() });
       dispatch({ type: 'SET_PRINTER_ADDRESS', payload: printerInput.trim() || null });
       dispatch({ type: 'SET_STORE_LOGO', payload: logoUri || null });

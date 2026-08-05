@@ -28,7 +28,9 @@ const formatToRp = (raw) => {
 };
 
 const parseRp = (formatted) => {
-  return parseInt(formatted.replace(/\./g, '').replace(/,/g, ''), 10) || 0;
+  if (!formatted) return 0;
+  const cleaned = String(formatted).replace(/\D/g, '');
+  return parseInt(cleaned, 10) || 0;
 };
 
 const DEFAULT_UNITS = ['pack'];

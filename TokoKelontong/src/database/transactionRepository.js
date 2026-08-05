@@ -101,6 +101,34 @@ class TransactionRepository {
       WHERE td.transaction_id = ?
     `, [transactionId]);
   }
+
+  /**
+   * Menghitung total Omzet & Laba Bersih secara langsung via SQL Aggregation
+   */
+  getSummaryByDatePattern(datePattern = '') {
+    const pattern = `${datePattern}%`;
+
+    // 1. Total Omzet & Count Transaksi
+    const txRow = db.getFirstSync(
+      `SELECT COALESCE(SUM(grand_total), 0) as omzet, COUNT(id) as count FROM transactions WHERE created_at LIKE ?`,
+      [pattern]
+    ) || { omzet: 0, count: 0 };
+
+    // 2. Total Laba Bersih (Total Jual - Total Modal) dari transaksi yang sesuai
+    const profitRow = db.getFirstSync(
+      `SELECT COALESCE(SUM(td.quantity * (td.price_at_sale - td.capital_at_sale)), 0) as laba
+       FROM transactions t
+       JOIN transaction_details td ON t.id = td.transaction_id
+       WHERE t.created_at LIKE ?`,
+      [pattern]
+    ) || { laba: 0 };
+
+    return {
+      omzet: txRow.omzet || 0,
+      laba: profitRow.laba || 0,
+      count: txRow.count || 0,
+    };
+  }
 }
 
 export default new TransactionRepository();

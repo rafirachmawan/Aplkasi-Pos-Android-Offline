@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,8 +11,10 @@ import {
   Platform,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { AppContext } from "../context/AppContext";
+import TransactionRepository from "../database/transactionRepository";
 import { colors, fonts } from "../theme/colors";
 
 const { width } = Dimensions.get("window");
@@ -25,6 +27,19 @@ const formatRupiah = (value) => {
 const HomeScreen = ({ navigation }) => {
   const { state } = useContext(AppContext);
   const [hideBalance, setHideBalance] = useState(false);
+  const [todaySummary, setTodaySummary] = useState({ omzet: 0, laba: 0, count: 0 });
+
+  useFocusEffect(
+    useCallback(() => {
+      try {
+        const todayStr = new Date().toISOString().split("T")[0];
+        const summary = TransactionRepository.getSummaryByDatePattern(todayStr);
+        setTodaySummary(summary);
+      } catch (e) {
+        console.error("Error loading home stats:", e);
+      }
+    }, [])
+  );
 
   const now = new Date();
   const dayName = now.toLocaleDateString("id-ID", { weekday: "long" });
@@ -38,11 +53,11 @@ const HomeScreen = ({ navigation }) => {
   const greetingText =
     hour < 11 ? "Selamat Pagi" : hour < 15 ? "Selamat Siang" : hour < 18 ? "Selamat Sore" : "Selamat Malam";
   const greetingEmoji =
-    hour < 11 ? "☀️" : hour < 15 ? "🌤️" : hour < 18 ? "🌇" : "🌙";
+    hour < 11 ? "☀️" : hour < 15 ? "🌤️" : hour < 18 ? "box" : "🌙";
 
-  const totalPemasukan = state.totalPemasukan ?? 0;
-  const totalPengeluaran = state.totalPengeluaran ?? 0;
-  const totalSaldo = totalPemasukan - totalPengeluaran;
+  const totalPemasukan = todaySummary.omzet;
+  const totalLaba = todaySummary.laba;
+  const todayTransaksi = todaySummary.count;
 
   return (
     <View style={styles.safe}>
@@ -109,23 +124,14 @@ const HomeScreen = ({ navigation }) => {
 
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Saldo</Text>
+              <Text style={styles.statLabel}>Omset Hari Ini</Text>
               <Text
                 style={[
                   styles.statValue,
-                  { color: totalSaldo >= 0 ? colors.success : colors.error },
+                  { color: colors.primary },
                 ]}
                 numberOfLines={1}
               >
-                {hideBalance ? "Rp ••••••" : formatRupiah(totalSaldo)}
-              </Text>
-            </View>
-
-            <View style={styles.statDividerV} />
-
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Pemasukan</Text>
-              <Text style={[styles.statValue, { color: colors.success }]} numberOfLines={1}>
                 {hideBalance ? "Rp ••••••" : formatRupiah(totalPemasukan)}
               </Text>
             </View>
@@ -133,9 +139,18 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.statDividerV} />
 
             <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Pengeluaran</Text>
-              <Text style={[styles.statValue, { color: colors.error }]} numberOfLines={1}>
-                {hideBalance ? "Rp ••••••" : formatRupiah(totalPengeluaran)}
+              <Text style={styles.statLabel}>Laba Bersih</Text>
+              <Text style={[styles.statValue, { color: colors.success }]} numberOfLines={1}>
+                {hideBalance ? "Rp ••••••" : formatRupiah(totalLaba)}
+              </Text>
+            </View>
+
+            <View style={styles.statDividerV} />
+
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Transaksi</Text>
+              <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>
+                {todayTransaksi}x
               </Text>
             </View>
           </View>
