@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import HomeScreen from '../screens/HomeScreen';
@@ -21,20 +20,6 @@ import { colors, fonts } from '../theme/colors';
 const Stack = createStackNavigator();
 const ONBOARDING_COMPLETED_KEY = '@TokoKelontong:HasCompletedOnboarding';
 
-const HeaderBadgeRight = ({ label, icon }) => () => (
-  <View style={headerStyles.badgeRightContainer}>
-    {icon && (
-      <MaterialCommunityIcons
-        name={icon}
-        size={14}
-        color={colors.textSecondary}
-        style={{ marginRight: 5 }}
-      />
-    )}
-    <Text style={headerStyles.badgeRightText}>{label}</Text>
-  </View>
-);
-
 const defaultHeaderOptions = {
   headerStyle: {
     backgroundColor: '#FFFFFF',
@@ -47,31 +32,12 @@ const defaultHeaderOptions = {
   headerTitleStyle: {
     fontFamily: fonts.bold,
     fontSize: 17,
-    fontWeight: '700',
     color: colors.text,
   },
   headerTitleAlign: 'left',
   headerBackTitleVisible: false,
+  headerBackTitle: '',
 };
-
-const headerStyles = StyleSheet.create({
-  badgeRightContainer: {
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-    marginRight: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  badgeRightText: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: colors.text,
-  },
-});
 
 export default function AppNavigator() {
   const [initialRoute, setInitialRoute] = useState(null);
@@ -99,84 +65,15 @@ export default function AppNavigator() {
     >
       <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
-      
-      <Stack.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{
-          title: '',
-          headerRight: HeaderBadgeRight({ label: 'Dashboard', icon: 'view-dashboard-outline' }),
-        }}
-      />
-      
-      <Stack.Screen
-        name="Kasir"
-        component={KasirScreen}
-        options={{
-          title: '',
-          headerRight: HeaderBadgeRight({ label: 'Kasir', icon: 'cash-register' }),
-        }}
-      />
-      
-      <Stack.Screen
-        name="Gudang"
-        component={GudangScreen}
-        options={{
-          title: '',
-          headerRight: HeaderBadgeRight({ label: 'Gudang Stok', icon: 'warehouse' }),
-        }}
-      />
-      
-      <Stack.Screen
-        name="AddProductScreen"
-        component={AddProductScreen}
-        options={{
-          title: '',
-          headerRight: HeaderBadgeRight({ label: 'Form Barang', icon: 'package-variant-plus' }),
-        }}
-      />
-      
-      <Stack.Screen
-        name="SettingNota"
-        component={SettingNotaScreen}
-        options={{
-          title: '',
-          headerRight: HeaderBadgeRight({ label: 'Pengaturan Nota', icon: 'receipt' }),
-        }}
-      />
-      
-      <Stack.Screen
-        name="Laporan"
-        component={LaporanScreen}
-        options={{
-          title: '',
-          headerRight: HeaderBadgeRight({ label: 'Laporan Penjualan', icon: 'chart-bar' }),
-        }}
-      />
-      
-      <Stack.Screen
-        name="Pengaturan"
-        component={PengaturanScreen}
-        options={{
-          title: '',
-          headerRight: HeaderBadgeRight({ label: 'Pengaturan', icon: 'cog-outline' }),
-        }}
-      />
-      
-      <Stack.Screen
-        name="Panduan"
-        component={PanduanScreen}
-        options={{
-          title: '',
-          headerRight: HeaderBadgeRight({ label: 'Buku Panduan', icon: 'book-open-page-variant' }),
-        }}
-      />
-      
-      <Stack.Screen
-        name="BarcodeScanner"
-        component={BarcodeScannerScreen}
-        options={{ headerShown: false, presentation: 'modal' }}
-      />
+      <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
+      <Stack.Screen name="Kasir" component={KasirScreen} options={{ title: 'Kasir POS' }} />
+      <Stack.Screen name="Gudang" component={GudangScreen} options={{ title: 'Gudang Stok' }} />
+      <Stack.Screen name="AddProductScreen" component={AddProductScreen} options={{ title: 'Form Barang' }} />
+      <Stack.Screen name="SettingNota" component={SettingNotaScreen} options={{ title: 'Pengaturan Nota' }} />
+      <Stack.Screen name="Laporan" component={LaporanScreen} options={{ title: 'Laporan Penjualan' }} />
+      <Stack.Screen name="Pengaturan" component={PengaturanScreen} options={{ title: 'Pengaturan' }} />
+      <Stack.Screen name="Panduan" component={PanduanScreen} options={{ title: 'Buku Panduan' }} />
+      <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} options={{ headerShown: false, presentation: 'modal' }} />
     </Stack.Navigator>
   );
 }
