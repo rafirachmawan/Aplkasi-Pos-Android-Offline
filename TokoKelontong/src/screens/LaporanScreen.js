@@ -296,7 +296,7 @@ const LaporanScreen = () => {
       )}
 
       {/* Modal Detail Transaksi */}
-      <Modal visible={!!selectedTx} animationType="slide" transparent onRequestClose={() => setSelectedTx(null)}>
+      <Modal visible={!!selectedTx} animationType="slide" transparent statusBarTranslucent={true} onRequestClose={() => setSelectedTx(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>

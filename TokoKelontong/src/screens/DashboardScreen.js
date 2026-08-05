@@ -312,6 +312,7 @@ const DashboardScreen = ({ navigation }) => {
       <Modal
         visible={isPickerVisible}
         transparent
+        statusBarTranslucent
         animationType="fade"
         onRequestClose={() => setIsPickerVisible(false)}
       >

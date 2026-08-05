@@ -150,7 +150,7 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>Transaksi</Text>
               <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>
-                {todayTransaksi}x
+                {hideBalance ? "••x" : `${todayTransaksi}x`}
               </Text>
             </View>
           </View>
