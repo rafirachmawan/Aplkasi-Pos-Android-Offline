@@ -8,18 +8,25 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ProductRepository from '../database/productRepository';
 import ProductCard from '../components/ProductCard';
 import { colors, fonts } from '../theme/colors';
 
 const GudangScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(['Semua']);
   const [selectedCategory, setSelectedCategory] = useState('Semua');
+
+  const fabBottom = Platform.OS === 'android'
+    ? Math.max(insets.bottom + 24, 32)
+    : Math.max(insets.bottom + 16, 24);
 
   const fetchProducts = useCallback(() => {
     try {
@@ -190,12 +197,12 @@ const GudangScreen = ({ navigation }) => {
             </Text>
           </View>
         }
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: fabBottom + 70 }}
       />
 
       {/* ── FAB Tambah Barang ── */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: fabBottom }]}
         onPress={() => navigation.navigate('AddProductScreen')}
         activeOpacity={0.85}
       >

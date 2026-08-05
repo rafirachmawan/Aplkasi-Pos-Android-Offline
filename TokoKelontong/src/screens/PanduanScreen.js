@@ -223,7 +223,7 @@ const PanduanScreen = () => {
         <View style={styles.footerWrap}>
           <MaterialCommunityIcons name="shield-check" size={18} color={colors.primary} />
           <Text style={styles.footerText}>
-            TokoKelontong POS — 100% Pure Offline Kasir Android
+            MarketPos - 100% Pure Offline Kasir Android
           </Text>
         </View>
 

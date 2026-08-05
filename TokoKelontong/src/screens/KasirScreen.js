@@ -20,7 +20,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppContext } from "../context/AppContext";
 import ProductRepository from "../database/productRepository";
 import TransactionRepository from "../database/transactionRepository";
@@ -48,6 +48,11 @@ const parseRpToNumber = (formatted) => {
 };
 
 const KasirScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const floatingBottom = Platform.OS === 'android'
+    ? Math.max(insets.bottom + 24, 32)
+    : Math.max(insets.bottom + 16, 24);
+
   const { state, dispatch } = useContext(AppContext);
   const cart = state.cart;
 
@@ -465,7 +470,7 @@ const KasirScreen = ({ navigation }) => {
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderProductGrid}
         numColumns={isTablet ? 3 : 2}
-        contentContainerStyle={styles.productGrid}
+        contentContainerStyle={[styles.productGrid, { paddingBottom: floatingBottom + 70 }]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={{ alignItems: "center", marginTop: 50 }}>
@@ -483,7 +488,7 @@ const KasirScreen = ({ navigation }) => {
 
       {/* ── Floating Cart Footer ── */}
       {cart.length > 0 && (
-        <View style={styles.floatingCart}>
+        <View style={[styles.floatingCart, { bottom: floatingBottom }]}>
           <View style={styles.floatingCartInfo}>
             <Text style={styles.floatingCartTotal}>
               {formatRupiah(totalHarga)}

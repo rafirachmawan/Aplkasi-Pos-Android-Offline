@@ -341,11 +341,11 @@ const HomeScreen = ({ navigation }) => {
         {/* Footer info */}
         <View style={styles.footerNote}>
           <MaterialCommunityIcons
-            name="check-decagram"
+            name="shield-check"
             size={16}
             color={colors.primary}
           />
-          <Text style={styles.footerText}> Sistem Offline Aktif</Text>
+          <Text style={styles.footerText}> MarketPos - 100% Pure Offline Kasir Android</Text>
         </View>
       </ScrollView>
     </View>

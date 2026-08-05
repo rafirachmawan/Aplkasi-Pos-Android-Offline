@@ -7,13 +7,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Switch,
   Image,
   Modal,
+  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppContext } from '../context/AppContext';
 import { colors, fonts } from '../theme/colors';
 import { BackupService } from '../utils/backupService';
@@ -31,11 +32,12 @@ const SettingRow = ({ icon, iconColor = colors.primary, iconBg = '#F1F5F9', labe
 );
 
 const PengaturanScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const { state, dispatch } = useContext(AppContext);
-  const [storeNameInput, setStoreNameInput] = useState(state.storeName);
+
+  const [storeNameInput, setStoreNameInput] = useState(state.storeName || '');
   const [printerInput, setPrinterInput] = useState(state.printerAddress || '');
-  const [logoUri, setLogoUri] = useState(state.storeLogo);
-  const [autoSync, setAutoSync] = useState(false);
+  const [logoUri, setLogoUri] = useState(state.storeLogo || null);
   const [saved, setSaved] = useState(false);
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
 
@@ -46,9 +48,9 @@ const PengaturanScreen = ({ navigation }) => {
   const [isRestoring, setIsRestoring] = useState(false);
 
   useEffect(() => {
-    setStoreNameInput(state.storeName);
+    setStoreNameInput(state.storeName || '');
     setPrinterInput(state.printerAddress || '');
-    setLogoUri(state.storeLogo);
+    setLogoUri(state.storeLogo || null);
   }, [state.storeName, state.printerAddress, state.storeLogo]);
 
   const handlePickLogo = () => {
@@ -62,7 +64,7 @@ const PengaturanScreen = ({ navigation }) => {
         if (source === 'gallery') {
           const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert('Akses Ditolak', 'Izin galeri diperlukan.');
+            Alert.alert('Akses Ditolak', 'Izin akses galeri diperlukan.');
             return;
           }
           const result = await ImagePicker.launchImageLibraryAsync({
@@ -104,7 +106,7 @@ const PengaturanScreen = ({ navigation }) => {
         await AsyncStorage.removeItem('storeLogo');
       }
 
-      // Selaraskan juga ke objek @TokoKelontong:StoreProfile agar nota & laporan konsisten
+      // Selaraskan ke StoreProfile object
       const storeProfileObj = {
         name: storeNameInput.trim(),
         printerAddress: printerInput.trim() || null,
@@ -123,7 +125,7 @@ const PengaturanScreen = ({ navigation }) => {
     }
   };
 
-  // 📦 Handle Export Backup
+  // Export Backup
   const handleExportBackup = async () => {
     try {
       setIsExporting(true);
@@ -142,7 +144,7 @@ const PengaturanScreen = ({ navigation }) => {
     }
   };
 
-  // 📥 Handle Process Restore
+  // Restore
   const handleProcessRestore = async () => {
     if (!restoreJsonInput.trim()) {
       Alert.alert('Peringatan', 'Silakan tempel (paste) kode JSON backup ke dalam kolom.');
@@ -162,8 +164,7 @@ const PengaturanScreen = ({ navigation }) => {
               setIsRestoring(true);
               const res = await BackupService.restoreBackupFromJson(restoreJsonInput.trim());
               if (res.success) {
-                // Refresh App Context
-                const newStoreName = (await AsyncStorage.getItem('storeName')) || 'Toko Kelontong';
+                const newStoreName = (await AsyncStorage.getItem('storeName')) || 'MarketPos';
                 const newLogo = await AsyncStorage.getItem('storeLogo');
                 const newPrinter = await AsyncStorage.getItem('printerAddress');
 
@@ -195,14 +196,6 @@ const PengaturanScreen = ({ navigation }) => {
     );
   };
 
-  const handleManualSync = () => {
-    Alert.alert(
-      '🔄 Sinkronisasi Manual',
-      'Fitur sinkronisasi cloud belum terhubung ke server. Di versi MVP ini, semua data disimpan lokal di perangkat.\n\nPastikan koneksi internet aktif untuk versi berikutnya.',
-      [{ text: 'Mengerti', style: 'default' }]
-    );
-  };
-
   const handleResetData = () => {
     Alert.alert(
       '⚠️ Reset Database',
@@ -212,70 +205,70 @@ const PengaturanScreen = ({ navigation }) => {
         {
           text: 'Hapus Semua Data',
           style: 'destructive',
-          onPress: () => Alert.alert('Info', 'Fitur ini aman dikunci di mode demo.'),
+          onPress: () => Alert.alert('Info', 'Fitur ini aman dikunci pada versi rilis untuk mencegah data terhapus tak sengaja.'),
         },
       ]
     );
   };
 
+  const bottomPadding = Platform.OS === 'android'
+    ? Math.max(insets.bottom + 24, 40)
+    : Math.max(insets.bottom + 16, 28);
+
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingBottom: 40 }}
+      contentContainerStyle={[styles.contentContainer, { paddingBottom: bottomPadding }]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Profile Toko Hero Header ── */}
-      <View style={styles.profileHeaderCard}>
-        <View style={styles.avatarContainer}>
-          <TouchableOpacity style={styles.storeAvatar} onPress={handlePickLogo} activeOpacity={0.8}>
+      {/* ── Store Profile Card ── */}
+      <View style={styles.profileCard}>
+        <View style={styles.avatarWrap}>
+          <TouchableOpacity style={styles.avatarBtn} onPress={handlePickLogo} activeOpacity={0.8}>
             {logoUri ? (
-              <Image source={{ uri: logoUri }} style={styles.storeLogoImage} />
+              <Image source={{ uri: logoUri }} style={styles.avatarImg} />
             ) : (
-              <MaterialCommunityIcons name="store-outline" size={32} color={colors.primary} />
+              <MaterialCommunityIcons name="storefront-outline" size={32} color="#0F172A" />
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.avatarBadge} onPress={handlePickLogo} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.cameraBadge} onPress={handlePickLogo} activeOpacity={0.8}>
             <MaterialCommunityIcons name="camera" size={12} color="#FFFFFF" />
           </TouchableOpacity>
           {logoUri && (
-            <TouchableOpacity
-              style={styles.removeLogoBtn}
-              onPress={() => setLogoUri(null)}
-              activeOpacity={0.7}
-            >
-              <MaterialCommunityIcons name="close-circle" size={20} color="#EF4444" />
+            <TouchableOpacity style={styles.removeLogoBadge} onPress={() => setLogoUri(null)} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="close-circle" size={18} color="#EF4444" />
             </TouchableOpacity>
           )}
         </View>
 
-        <View style={styles.profileTextContainer}>
-          <Text style={styles.storeName}>{state.storeName}</Text>
-          <View style={styles.badgeOffline}>
-            <View style={styles.dotOffline} />
-            <Text style={styles.storeSubtitle}>System POS Offline Active</Text>
+        <View style={styles.profileInfo}>
+          <Text style={styles.profileStoreName}>{state.storeName || 'MarketPos'}</Text>
+          <View style={styles.badgeRow}>
+            <View style={styles.greenDot} />
+            <Text style={styles.badgeText}>Sistem POS Offline Aktif</Text>
           </View>
         </View>
       </View>
 
-      {/* ── Seksi Informasi Toko ── */}
-      <Text style={styles.sectionHeaderTitle}>INFORMASI TOKO</Text>
+      {/* ── Informasi Toko ── */}
+      <Text style={styles.sectionTitle}>INFORMASI TOKO</Text>
       <View style={styles.card}>
-        <SettingRow icon="store-edit-outline" label="Nama Toko">
+        <SettingRow icon="store-edit-outline" iconColor="#0F172A" iconBg="#F1F5F9" label="Nama Toko">
           <TextInput
             style={styles.input}
             value={storeNameInput}
             onChangeText={setStoreNameInput}
-            placeholder="Masukkan nama toko"
+            placeholder="Masukkan nama toko Anda"
             placeholderTextColor="#94A3B8"
           />
         </SettingRow>
       </View>
 
-      {/* ── Seksi Hardware & Printer ── */}
-      <Text style={styles.sectionHeaderTitle}>PRINTER BLUETOOTH</Text>
+      {/* ── Hardware & Printer ── */}
+      <Text style={styles.sectionTitle}>PRINTER BLUETOOTH</Text>
       <View style={styles.card}>
-        <SettingRow icon="printer-wireless" label="Alamat MAC Printer (opsional)">
+        <SettingRow icon="printer-pos-network-outline" iconColor="#0F172A" iconBg="#F1F5F9" label="Alamat MAC Printer (Opsional)">
           <TextInput
             style={styles.input}
             value={printerInput}
@@ -285,25 +278,27 @@ const PengaturanScreen = ({ navigation }) => {
             autoCapitalize="characters"
           />
         </SettingRow>
-        <View style={styles.cardDivider} />
+
+        <View style={styles.divider} />
+
         <TouchableOpacity
-          style={styles.linkRowBtn}
-          onPress={() => Alert.alert('Scan Bluetooth', 'Fitur scan perangkat tersedia di build Android native.')}
+          style={styles.linkRow}
+          onPress={() => Alert.alert('Scan Bluetooth', 'Fitur pencarian Bluetooth aktif otomatis pada build Android native.')}
           activeOpacity={0.7}
         >
           <View style={[styles.settingIconWrap, { backgroundColor: '#F1F5F9' }]}>
-            <MaterialCommunityIcons name="bluetooth-connect" size={20} color={colors.primary} />
+            <MaterialCommunityIcons name="bluetooth-connect" size={20} color="#0F172A" />
           </View>
-          <Text style={styles.linkRowText}>Cari perangkat Bluetooth tersedia</Text>
+          <Text style={styles.linkText}>Cari Perangkat Bluetooth Terdekat</Text>
           <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
         </TouchableOpacity>
       </View>
 
-      {/* ── Seksi Backup & Restore File ── */}
-      <Text style={styles.sectionHeaderTitle}>BACKUP & RESTORE DATA LOKAL</Text>
+      {/* ── Backup & Restore ── */}
+      <Text style={styles.sectionTitle}>BACKUP & RESTORE DATA</Text>
       <View style={styles.card}>
         <TouchableOpacity
-          style={styles.linkRowBtn}
+          style={styles.linkRow}
           onPress={handleExportBackup}
           disabled={isExporting}
           activeOpacity={0.7}
@@ -312,16 +307,16 @@ const PengaturanScreen = ({ navigation }) => {
             <MaterialCommunityIcons name="export-variant" size={20} color="#2563EB" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkRowText}>Buat File Backup (.json)</Text>
-            <Text style={styles.linkSubText}>Simpan data ke WA / Google Drive / Memori HP</Text>
+            <Text style={styles.linkText}>Ekspor Backup File (.json)</Text>
+            <Text style={styles.linkSubText}>Simpan data ke WA, Google Drive, atau Memori HP</Text>
           </View>
           <MaterialCommunityIcons name="share-variant-outline" size={18} color="#2563EB" />
         </TouchableOpacity>
 
-        <View style={styles.cardDivider} />
+        <View style={styles.divider} />
 
         <TouchableOpacity
-          style={styles.linkRowBtn}
+          style={styles.linkRow}
           onPress={() => setShowRestoreModal(true)}
           activeOpacity={0.7}
         >
@@ -329,17 +324,18 @@ const PengaturanScreen = ({ navigation }) => {
             <MaterialCommunityIcons name="import" size={20} color="#16A34A" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkRowText}>Restore Data dari Backup</Text>
-            <Text style={styles.linkSubText}>Pulihkan database toko dari kode / file backup</Text>
+            <Text style={styles.linkText}>Impor / Restore Data Backup</Text>
+            <Text style={styles.linkSubText}>Pulihkan data produk & transaksi dari backup</Text>
           </View>
           <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
         </TouchableOpacity>
       </View>
-      {/* ── Seksi Bantuan & Panduan ── */}
-      <Text style={styles.sectionHeaderTitle}>BANTUAN & PANDUAN</Text>
+
+      {/* ── Bantuan & Onboarding ── */}
+      <Text style={styles.sectionTitle}>BANTUAN & INFORMASI</Text>
       <View style={styles.card}>
         <TouchableOpacity
-          style={styles.linkRowBtn}
+          style={styles.linkRow}
           onPress={() => navigation.navigate('Panduan')}
           activeOpacity={0.7}
         >
@@ -347,16 +343,16 @@ const PengaturanScreen = ({ navigation }) => {
             <MaterialCommunityIcons name="book-open-page-variant" size={20} color="#D97706" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkRowText}>Buku Panduan Kasir</Text>
-            <Text style={styles.linkSubText}>Penjelasan rinci seluruh fitur & alur toko</Text>
+            <Text style={styles.linkText}>Buku Panduan Kasir</Text>
+            <Text style={styles.linkSubText}>Panduan operasional fitur & alur transaksi</Text>
           </View>
           <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
         </TouchableOpacity>
 
-        <View style={styles.cardDivider} />
+        <View style={styles.divider} />
 
         <TouchableOpacity
-          style={styles.linkRowBtn}
+          style={styles.linkRow}
           onPress={() => navigation.navigate('Onboarding')}
           activeOpacity={0.7}
         >
@@ -364,38 +360,46 @@ const PengaturanScreen = ({ navigation }) => {
             <MaterialCommunityIcons name="presentation-play" size={20} color="#4F46E5" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkRowText}>Tampilkan Onboarding Awal</Text>
-            <Text style={styles.linkSubText}>Ulangi 3 slide perkenalan aplikasi</Text>
+            <Text style={styles.linkText}>Putar Ulang Onboarding</Text>
+            <Text style={styles.linkSubText}>Tampilkan kembali slide pengenalan aplikasi</Text>
           </View>
           <MaterialCommunityIcons name="chevron-right" size={20} color="#94A3B8" />
         </TouchableOpacity>
       </View>
+
       {/* ── Tombol Simpan ── */}
       <TouchableOpacity
         style={[styles.saveBtn, saved && { backgroundColor: '#059669' }]}
         onPress={handleSave}
-        activeOpacity={0.8}
+        activeOpacity={0.85}
       >
-        <MaterialCommunityIcons name={saved ? 'check-circle-outline' : 'content-save-outline'} size={20} color="#FFFFFF" />
-        <Text style={styles.saveBtnText}>{saved ? 'Tersimpan!' : 'SIMPAN PENGATURAN'}</Text>
+        <MaterialCommunityIcons
+          name={saved ? 'check-circle-outline' : 'content-save-outline'}
+          size={20}
+          color="#FFFFFF"
+        />
+        <Text style={styles.saveBtnText}>{saved ? 'TERSIMPAN!' : 'SIMPAN PENGATURAN'}</Text>
       </TouchableOpacity>
 
-      {/* ── Zona Berbahaya ── */}
-      <Text style={styles.sectionHeaderTitle}>ZONA BERBAHAYA</Text>
-      <View style={[styles.card, { borderColor: '#FEE2E2' }]}>
-        <TouchableOpacity style={styles.dangerRowBtn} onPress={handleResetData} activeOpacity={0.7}>
+      {/* ── Zona Risiko ── */}
+      <Text style={styles.sectionTitle}>ZONA RISIKO</Text>
+      <View style={[styles.card, { borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' }]}>
+        <TouchableOpacity style={styles.dangerRow} onPress={handleResetData} activeOpacity={0.7}>
           <View style={styles.dangerIconWrap}>
             <MaterialCommunityIcons name="delete-forever-outline" size={20} color="#DC2626" />
           </View>
-          <Text style={styles.dangerRowText}>Reset Semua Data Database</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dangerText}>Reset Semua Data Database</Text>
+            <Text style={styles.dangerSubText}>Hapus seluruh produk & riwayat transaksi</Text>
+          </View>
           <MaterialCommunityIcons name="chevron-right" size={20} color="#DC2626" />
         </TouchableOpacity>
       </View>
 
-      {/* ── Footer Version Info ── */}
-      <Text style={styles.versionText}>TokoKelontong POS v1.0.0 · Pro Offline Edition</Text>
+      {/* ── Footer ── */}
+      <Text style={styles.versionText}>MarketPos - 100% Pure Offline Kasir Android</Text>
 
-      {/* ── Modal Pilih Sumber Gambar ── */}
+      {/* ── Modal Pilih Foto Logo ── */}
       <Modal
         visible={showImageSourceModal}
         transparent
@@ -408,22 +412,22 @@ const PengaturanScreen = ({ navigation }) => {
           onPress={() => setShowImageSourceModal(false)}
         >
           <View style={styles.sourceModalCard}>
-            <Text style={styles.sourceModalTitle}>Pilih Sumber Foto</Text>
-            <Text style={styles.sourceModalDesc}>Pilih dari mana Anda ingin mengambil foto logo toko.</Text>
+            <Text style={styles.sourceModalTitle}>Pilih Foto Logo Toko</Text>
+            <Text style={styles.sourceModalDesc}>Foto akan ditampilkan di header aplikasi & nota cetak.</Text>
 
             <View style={styles.sourceOptionsRow}>
               <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('gallery')}>
                 <View style={styles.sourceIconWrap}>
-                  <MaterialCommunityIcons name="image-outline" size={28} color={colors.primary} />
+                  <MaterialCommunityIcons name="image-outline" size={28} color="#0F172A" />
                 </View>
-                <Text style={styles.sourceOptionText}>Galeri</Text>
+                <Text style={styles.sourceOptionText}>Galeri HP</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('camera')}>
                 <View style={styles.sourceIconWrap}>
-                  <MaterialCommunityIcons name="camera-outline" size={28} color={colors.primary} />
+                  <MaterialCommunityIcons name="camera-outline" size={28} color="#0F172A" />
                 </View>
-                <Text style={styles.sourceOptionText}>Kamera</Text>
+                <Text style={styles.sourceOptionText}>Kamera HP</Text>
               </TouchableOpacity>
             </View>
 
@@ -437,7 +441,7 @@ const PengaturanScreen = ({ navigation }) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* ── Modal Restore Backup JSON ── */}
+      {/* ── Modal Restore Backup ── */}
       <Modal
         visible={showRestoreModal}
         transparent
@@ -452,7 +456,7 @@ const PengaturanScreen = ({ navigation }) => {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.restoreTitle}>Restore Data Kasir</Text>
-                <Text style={styles.restoreSub}>Tempelkan isi file backup (.json)</Text>
+                <Text style={styles.restoreSub}>Tempelkan kode/isi file backup (.json)</Text>
               </View>
               <TouchableOpacity onPress={() => setShowRestoreModal(false)}>
                 <MaterialCommunityIcons name="close-circle" size={22} color="#94A3B8" />
@@ -499,50 +503,52 @@ const PengaturanScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F8FAFC',
+  },
+  contentContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
 
   // Profile Header Card
-  profileHeaderCard: {
+  profileCard: {
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
     borderRadius: 20,
-    padding: 18,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
     borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.08)',
+    borderColor: '#E2E8F0',
+    marginBottom: 8,
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 1,
   },
-  avatarContainer: {
+  avatarWrap: {
     position: 'relative',
   },
-  storeAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+  avatarBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
     overflow: 'hidden',
   },
-  storeLogoImage: {
+  avatarImg: {
     width: '100%',
     height: '100%',
   },
-  avatarBadge: {
+  cameraBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
+    bottom: -3,
+    right: -3,
     backgroundColor: '#0F172A',
     width: 22,
     height: 22,
@@ -552,71 +558,70 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
   },
-  removeLogoBtn: {
+  removeLogoBadge: {
     position: 'absolute',
-    top: -6,
-    left: -6,
+    top: -5,
+    left: -5,
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
+    borderRadius: 9,
   },
-  profileTextContainer: {
+  profileInfo: {
     flex: 1,
   },
-  storeName: {
+  profileStoreName: {
     fontFamily: fonts.extraBold,
     fontSize: 18,
-    color: colors.text,
+    color: '#0F172A',
     marginBottom: 4,
   },
-  badgeOffline: {
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  dotOffline: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  greenDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: '#10B981',
   },
-  storeSubtitle: {
+  badgeText: {
     fontFamily: fonts.medium,
     fontSize: 12,
     color: '#64748B',
   },
 
   // Section Headers
-  sectionHeaderTitle: {
+  sectionTitle: {
     fontFamily: fonts.extraBold,
     fontSize: 10,
     color: '#64748B',
     letterSpacing: 0.8,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    marginTop: 18,
+    marginBottom: 8,
+    marginLeft: 4,
   },
 
   // Cards
   card: {
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    borderRadius: 18,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.07)',
+    borderColor: '#E2E8F0',
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
     elevation: 1,
   },
-  cardDivider: {
+  divider: {
     height: 1,
     backgroundColor: '#F1F5F9',
-    marginLeft: 64,
+    marginLeft: 56,
   },
 
-  // Setting Row Items
+  // Setting Row
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -624,10 +629,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   settingIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -635,34 +639,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingLabel: {
-    fontFamily: fonts.medium,
+    fontFamily: fonts.semiBold,
     fontSize: 12,
     color: '#64748B',
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     fontFamily: fonts.semiBold,
     fontSize: 14,
-    color: colors.text,
+    color: '#0F172A',
     backgroundColor: '#F8FAFC',
   },
 
   // Link Row Button
-  linkRowBtn: {
+  linkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
     gap: 12,
   },
-  linkRowText: {
+  linkText: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: colors.text,
+    color: '#0F172A',
   },
   linkSubText: {
     fontFamily: fonts.regular,
@@ -677,45 +681,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 16,
-    marginTop: 20,
+    marginTop: 22,
     paddingVertical: 14,
-    borderRadius: 16,
+    borderRadius: 14,
     gap: 8,
+    elevation: 3,
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowRadius: 8,
   },
   saveBtnText: {
     color: '#FFFFFF',
     fontFamily: fonts.bold,
     fontSize: 14,
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
 
   // Danger Row
-  dangerRowBtn: {
+  dangerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
     gap: 12,
-    backgroundColor: '#FEF2F2',
   },
   dangerIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: '#FEE2E2',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dangerRowText: {
-    flex: 1,
+  dangerText: {
     fontFamily: fonts.bold,
     fontSize: 13,
     color: '#DC2626',
+  },
+  dangerSubText: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: '#EF4444',
+    marginTop: 2,
   },
 
   versionText: {
@@ -724,7 +731,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#94A3B8',
     marginTop: 20,
-    marginBottom: 8,
+    marginBottom: 10,
   },
 
   // Modal Source Options
@@ -736,7 +743,7 @@ const styles = StyleSheet.create({
   },
   sourceModalCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 24,
     alignItems: 'center',
     elevation: 10,
@@ -746,10 +753,10 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
   },
   sourceModalTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: fonts.extraBold,
-    color: colors.text,
-    marginBottom: 6,
+    color: '#0F172A',
+    marginBottom: 4,
   },
   sourceModalDesc: {
     fontSize: 12,
@@ -762,7 +769,7 @@ const styles = StyleSheet.create({
   sourceOptionsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 24,
+    gap: 28,
     width: '100%',
     marginBottom: 20,
   },
@@ -770,9 +777,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sourceIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
+    width: 58,
+    height: 58,
+    borderRadius: 16,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -781,19 +788,19 @@ const styles = StyleSheet.create({
   sourceOptionText: {
     fontSize: 13,
     fontFamily: fonts.bold,
-    color: colors.text,
+    color: '#0F172A',
   },
   sourceCancelBtn: {
     width: '100%',
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     alignItems: 'center',
     backgroundColor: '#F8FAFC',
   },
   sourceCancelText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: fonts.bold,
     color: '#64748B',
   },
@@ -801,7 +808,7 @@ const styles = StyleSheet.create({
   // Restore Modal
   restoreModalCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 20,
     elevation: 10,
     shadowColor: '#000',
@@ -818,7 +825,7 @@ const styles = StyleSheet.create({
   restoreTitle: {
     fontFamily: fonts.extraBold,
     fontSize: 16,
-    color: colors.text,
+    color: '#0F172A',
   },
   restoreSub: {
     fontFamily: fonts.regular,
@@ -827,13 +834,13 @@ const styles = StyleSheet.create({
   },
   jsonTextArea: {
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 14,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
     backgroundColor: '#F8FAFC',
     padding: 12,
     fontFamily: fonts.regular,
     fontSize: 12,
-    color: colors.text,
+    color: '#0F172A',
     minHeight: 120,
     marginBottom: 16,
   },
@@ -844,7 +851,7 @@ const styles = StyleSheet.create({
   cancelRestoreBtn: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
@@ -858,7 +865,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#16A34A',
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
