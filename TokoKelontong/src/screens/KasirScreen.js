@@ -70,11 +70,20 @@ const KasirScreen = ({ navigation }) => {
   const [lastTxDetails, setLastTxDetails] = useState([]);
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
 
-  // Refresh saat screen difokus
+  // Refresh saat screen difokus & auto reset keranjang/filter saat keluar screen
   useFocusEffect(
     useCallback(() => {
       loadProducts();
-    }, []),
+
+      return () => {
+        dispatch({ type: 'CLEAR_CART' });
+        setSearchQuery('');
+        setSelectedCategory('Semua');
+        setShowCartModal(false);
+        setCashInput('');
+        setDiscountInput('');
+      };
+    }, [dispatch]),
   );
 
   const loadProducts = () => {

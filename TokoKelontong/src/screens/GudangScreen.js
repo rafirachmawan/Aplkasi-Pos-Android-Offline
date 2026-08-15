@@ -51,6 +51,10 @@ const GudangScreen = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       fetchProducts();
+      return () => {
+        setSearchQuery('');
+        setSelectedCategory('Semua');
+      };
     }, [fetchProducts])
   );
 

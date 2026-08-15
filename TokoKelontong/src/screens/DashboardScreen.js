@@ -234,77 +234,80 @@ const DashboardScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* ── Peringatan Stok Menipis ── */}
-      {lowStockProducts.length > 0 && (
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.warningHeaderLeft}>
-              <View style={styles.warningIconSquircle}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#DC2626" />
-              </View>
-              <Text style={styles.warningTitle}>
-                Stok Menipis ({lowStockProducts.length})
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.actionBtnPill}
-              onPress={() => navigation.navigate('Gudang')}
-            >
-              <Text style={styles.actionBtnText}>Kelola →</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.warningList}>
-            {lowStockProducts.slice(0, 3).map((p) => (
-              <View key={p.id} style={styles.lowStockRow}>
-                <Text style={styles.lowStockName} numberOfLines={1}>
-                  {p.product_name}
-                </Text>
-                <View style={styles.lowStockBadge}>
-                  <Text style={styles.lowStockBadgeText}>
-                    Sisa: {p.stock_quantity} {p.unit || 'pcs'}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* ── Transaksi Terakhir ── */}
+      {/* ── Section Stok Menipis (Peringatan Stok & Kelola Gudang) ── */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
-          <View style={styles.sectionHeaderLeft}>
-            <View style={styles.sectionIconSquircle}>
-              <MaterialCommunityIcons name="history" size={18} color={colors.primary} />
+          <View style={styles.warningHeaderLeft}>
+            <View style={[
+              styles.warningIconSquircle,
+              lowStockProducts.length === 0 && { backgroundColor: '#F1F5F9' }
+            ]}>
+              <MaterialCommunityIcons
+                name={lowStockProducts.length > 0 ? "alert-circle-outline" : "package-variant-closed-check"}
+                size={18}
+                color={lowStockProducts.length > 0 ? "#DC2626" : colors.primary}
+              />
             </View>
-            <Text style={styles.sectionTitle}>Riwayat Transaksi</Text>
+            <Text style={[
+              styles.warningTitle,
+              lowStockProducts.length === 0 && { color: colors.text }
+            ]}>
+              {lowStockProducts.length > 0 ? `Stok Menipis (${lowStockProducts.length})` : "Status Stok Barang"}
+            </Text>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Laporan')}>
-            <Text style={styles.seeAllText}>Lihat Semua →</Text>
+          <TouchableOpacity
+            style={[
+              styles.actionBtnPill,
+              lowStockProducts.length === 0 && { backgroundColor: '#F1F5F9' }
+            ]}
+            onPress={() => navigation.navigate('Gudang')}
+          >
+            <Text style={[
+              styles.actionBtnText,
+              lowStockProducts.length === 0 && { color: colors.primary }
+            ]}>Buka Gudang →</Text>
           </TouchableOpacity>
         </View>
 
-        {recentTx.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="text-box-remove-outline" size={40} color="#CBD5E1" />
-            <Text style={styles.emptyText}>Tidak ada transaksi pada periode ini</Text>
+        {lowStockProducts.length === 0 ? (
+          <View style={styles.emptyStockContainer}>
+            <View style={styles.emptyStockIconCircle}>
+              <MaterialCommunityIcons name="package-variant-closed-check" size={32} color={colors.primary} />
+            </View>
+            <Text style={styles.emptyStockTitle}>Semua Stok Aman</Text>
+            <Text style={styles.emptyStockSub}>Tidak ada barang yang habis atau di bawah batas minimum.</Text>
           </View>
         ) : (
-          recentTx.map((tx) => (
-            <View key={tx.id} style={styles.txCardRow}>
-              <View style={styles.txIconBox}>
-                <MaterialCommunityIcons name="receipt" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.txInfo}>
-                <Text style={styles.txInvoice}>{tx.invoice_number}</Text>
-                <Text style={styles.txTime}>
-                  {tx.created_at ? tx.created_at.slice(0, 16) : ''}
-                </Text>
-              </View>
-              <Text style={styles.txAmount}>{formatRupiah(tx.grand_total)}</Text>
-            </View>
-          ))
+          <View style={styles.warningList}>
+            {lowStockProducts.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={styles.lowStockRow}
+                onPress={() => navigation.navigate('AddProductScreen', { product: p })}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.lowStockName} numberOfLines={1}>
+                    {p.product_name}
+                  </Text>
+                  {p.category && (
+                    <Text style={styles.lowStockCategory}>Kategori: {p.category}</Text>
+                  )}
+                </View>
+                <View style={[
+                  styles.lowStockBadge,
+                  p.stock_quantity <= 0 && { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' }
+                ]}>
+                  <Text style={[
+                    styles.lowStockBadgeText,
+                    p.stock_quantity <= 0 && { color: '#DC2626' }
+                  ]}>
+                    {p.stock_quantity <= 0 ? 'Habis (0)' : `Sisa: ${p.stock_quantity} ${p.unit || 'pcs'}`}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
       </View>
 
@@ -694,21 +697,57 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F1F5F9',
   },
   lowStockName: {
-    fontFamily: fonts.medium,
+    fontFamily: fonts.semiBold,
     fontSize: 13,
     color: colors.text,
-    flex: 1,
+  },
+  lowStockCategory: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 1,
   },
   lowStockBadge: {
     backgroundColor: '#FEF2F2',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
   },
   lowStockBadgeText: {
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.bold,
     fontSize: 11,
     color: '#DC2626',
+  },
+  emptyStockContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  emptyStockIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  emptyStockTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.text,
+  },
+  emptyStockSub: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 
   // Transactions list
