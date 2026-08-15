@@ -9,6 +9,8 @@ import {
   TextInput,
   ScrollView,
   Platform,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -23,6 +25,9 @@ const GudangScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(['Semua']);
   const [selectedCategory, setSelectedCategory] = useState('Semua');
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+
+  const screenWidth = Dimensions.get('window').width;
 
   const fabBottom = Platform.OS === 'android'
     ? Math.max(insets.bottom + 24, 32)
@@ -129,51 +134,64 @@ const GudangScreen = ({ navigation }) => {
         )}
       </View>
 
-      {/* ── Filter Kategori ── */}
-      <View style={styles.categoryScrollWrapper}>
+      {/* ── Filter Kategori: Smart Pill + Grid Button ── */}
+      <View style={styles.categoryBarRow}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 12 }}
+          contentContainerStyle={{ paddingLeft: 12, paddingRight: 8 }}
+          style={{ flex: 1 }}
         >
-          {categories.map((cat, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={[
-                styles.categoryPill,
-                selectedCategory === cat && styles.categoryPillActive,
-              ]}
-              onPress={() => setSelectedCategory(cat)}
-            >
-              <Text
+          {categories.slice(0, 5).map((cat, idx) => {
+            const count = cat === 'Semua'
+              ? products.length
+              : products.filter(p => p.category === cat).length;
+            return (
+              <TouchableOpacity
+                key={idx}
                 style={[
-                  styles.categoryPillText,
-                  selectedCategory === cat && styles.categoryPillTextActive,
+                  styles.categoryPill,
+                  selectedCategory === cat && styles.categoryPillActive,
                 ]}
-              >
-                {cat}
-              </Text>
-              {/* Badge jumlah produk per kategori */}
-              <View
-                style={[
-                  styles.categoryCount,
-                  selectedCategory === cat && styles.categoryCountActive,
-                ]}
+                onPress={() => setSelectedCategory(cat)}
               >
                 <Text
                   style={[
-                    styles.categoryCountText,
-                    selectedCategory === cat && styles.categoryCountTextActive,
+                    styles.categoryPillText,
+                    selectedCategory === cat && styles.categoryPillTextActive,
                   ]}
                 >
-                  {cat === 'Semua'
-                    ? products.length
-                    : products.filter((p) => p.category === cat).length}
+                  {cat}
                 </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+                <View style={[
+                  styles.categoryCount,
+                  selectedCategory === cat && styles.categoryCountActive,
+                ]}>
+                  <Text style={[
+                    styles.categoryCountText,
+                    selectedCategory === cat && styles.categoryCountTextActive,
+                  ]}>
+                    {count}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
+
+        {/* Grid Button */}
+        <TouchableOpacity
+          style={styles.categoryGridBtn}
+          onPress={() => setShowCategoryModal(true)}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="view-grid-outline" size={18} color={colors.primary} />
+          {categories.length > 5 && (
+            <View style={styles.categoryGridBtnBadge}>
+              <Text style={styles.categoryGridBtnBadgeText}>{categories.length - 1}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* ── List Produk ── */}
@@ -209,6 +227,106 @@ const GudangScreen = ({ navigation }) => {
         <MaterialCommunityIcons name="plus" size={24} color="#fff" />
         <Text style={styles.fabText}>TAMBAH BARANG</Text>
       </TouchableOpacity>
+
+      {/* ── Modal Kategori Grid (Centered Card) ── */}
+      <Modal
+        visible={showCategoryModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCategoryModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.catModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCategoryModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.catModalCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <View style={styles.catModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={styles.catModalIconWrap}>
+                  <MaterialCommunityIcons name="shape-outline" size={20} color={colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.catModalTitle}>Pilih Kategori</Text>
+                  <Text style={styles.catModalSubtitle}>{categories.length - 1} kategori • {products.length} produk</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowCategoryModal(false)}
+                style={styles.catModalCloseBtn}
+              >
+                <MaterialCommunityIcons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Grid */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.catModalGrid}
+            >
+              {categories.map((cat, idx) => {
+                const count = cat === 'Semua'
+                  ? products.length
+                  : products.filter(p => p.category === cat).length;
+                const isActive = selectedCategory === cat;
+                const iconName = cat === 'Semua' ? 'apps' : 'tag-outline';
+
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    style={[
+                      styles.catGridItem(screenWidth),
+                      isActive && styles.catGridItemActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedCategory(cat);
+                      setShowCategoryModal(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[
+                      styles.catGridIconWrap,
+                      isActive && styles.catGridIconWrapActive,
+                    ]}>
+                      <MaterialCommunityIcons
+                        name={iconName}
+                        size={22}
+                        color={isActive ? '#FFFFFF' : colors.iconColor}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.catGridLabel,
+                        isActive && styles.catGridLabelActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {cat}
+                    </Text>
+                    <Text style={[
+                      styles.catGridCount2,
+                      isActive && styles.catGridCountActive,
+                    ]}>
+                      {count} produk
+                    </Text>
+                    {isActive && (
+                      <View style={styles.catGridCheckmark}>
+                        <MaterialCommunityIcons name="check-circle" size={16} color={colors.primary} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -278,8 +396,12 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
-  // Kategori
-  categoryScrollWrapper: { marginBottom: 6 },
+  // Kategori - Smart Pill + Grid
+  categoryBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -325,6 +447,154 @@ const styles = StyleSheet.create({
   },
   categoryCountTextActive: {
     color: '#fff',
+  },
+  categoryGridBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    position: 'relative',
+  },
+  categoryGridBtnBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  categoryGridBtnBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+
+  // Category Grid Modal (Centered Card)
+  catModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  catModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    width: '92%',
+    maxWidth: 420,
+    maxHeight: '75%',
+    paddingBottom: 16,
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+  },
+  catModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  catModalIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  catModalSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  catModalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  catModalGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 10,
+  },
+  catGridItem: (screenWidth) => ({
+    width: (screenWidth - 32 - 20) / 3,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    position: 'relative',
+  }),
+  catGridItemActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  catGridIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  catGridIconWrapActive: {
+    backgroundColor: colors.primary,
+  },
+  catGridLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  catGridLabelActive: {
+    color: colors.primary,
+  },
+  catGridCount2: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  catGridCountActive: {
+    color: colors.primary,
+  },
+  catGridCheckmark: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
   },
 
   // Empty state

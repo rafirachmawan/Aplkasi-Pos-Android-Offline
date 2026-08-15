@@ -513,6 +513,7 @@ const PengaturanScreen = ({ navigation }) => {
       <Modal
         visible={showImageSourceModal}
         transparent
+        statusBarTranslucent={true}
         animationType="fade"
         onRequestClose={() => setShowImageSourceModal(false)}
       >
@@ -554,6 +555,7 @@ const PengaturanScreen = ({ navigation }) => {
       <Modal
         visible={showRestoreModal}
         transparent
+        statusBarTranslucent={true}
         animationType="fade"
         onRequestClose={() => {
           setShowRestoreModal(false);

@@ -61,6 +61,7 @@ const KasirScreen = ({ navigation }) => {
   const [selectedCategory, setSelectedCategory] = useState("Semua");
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showCartModal, setShowCartModal] = useState(false);
   const [cashInput, setCashInput] = useState("");
   const [discountInput, setDiscountInput] = useState("");
@@ -435,34 +436,163 @@ const KasirScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* ── Filter Kategori ── */}
-      <View style={styles.categoryScrollWrapper}>
+      {/* ── Filter Kategori: Smart Pill + Grid Button ── */}
+      <View style={styles.categoryBarRow}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 12 }}
+          contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
+          style={{ flex: 1 }}
         >
-          {categories.map((cat, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={[
-                styles.categoryPill,
-                selectedCategory === cat && styles.categoryPillActive,
-              ]}
-              onPress={() => setSelectedCategory(cat)}
-            >
-              <Text
+          {categories.slice(0, 5).map((cat, idx) => {
+            const count = cat === 'Semua'
+              ? allProducts.length
+              : allProducts.filter(p => p.category === cat).length;
+            return (
+              <TouchableOpacity
+                key={idx}
                 style={[
-                  styles.categoryPillText,
-                  selectedCategory === cat && styles.categoryPillTextActive,
+                  styles.categoryPill,
+                  selectedCategory === cat && styles.categoryPillActive,
                 ]}
+                onPress={() => setSelectedCategory(cat)}
               >
-                {cat}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.categoryPillText,
+                    selectedCategory === cat && styles.categoryPillTextActive,
+                  ]}
+                >
+                  {cat}
+                </Text>
+                <View style={[
+                  styles.categoryCountBadge,
+                  selectedCategory === cat && styles.categoryCountBadgeActive,
+                ]}>
+                  <Text style={[
+                    styles.categoryCountText,
+                    selectedCategory === cat && styles.categoryCountTextActive,
+                  ]}>{count}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
+
+        {/* Grid Button - always visible */}
+        <TouchableOpacity
+          style={styles.categoryGridBtn}
+          onPress={() => setShowCategoryModal(true)}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="view-grid-outline" size={18} color={colors.primary} />
+          {categories.length > 5 && (
+            <View style={styles.categoryGridBtnBadge}>
+              <Text style={styles.categoryGridBtnBadgeText}>{categories.length - 1}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
+
+      {/* ── Modal Kategori Grid (Centered Card) ── */}
+      <Modal
+        visible={showCategoryModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCategoryModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.catModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCategoryModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.catModalCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <View style={styles.catModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={styles.catModalIconWrap}>
+                  <MaterialCommunityIcons name="shape-outline" size={20} color={colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.catModalTitle}>Pilih Kategori</Text>
+                  <Text style={styles.catModalSubtitle}>{categories.length - 1} kategori • {allProducts.length} produk</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowCategoryModal(false)}
+                style={styles.catModalCloseBtn}
+              >
+                <MaterialCommunityIcons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Grid */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.catModalGrid}
+            >
+              {categories.map((cat, idx) => {
+                const count = cat === 'Semua'
+                  ? allProducts.length
+                  : allProducts.filter(p => p.category === cat).length;
+                const isActive = selectedCategory === cat;
+                const iconName = cat === 'Semua' ? 'apps' : 'tag-outline';
+
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    style={[
+                      styles.catGridItem,
+                      isActive && styles.catGridItemActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedCategory(cat);
+                      setShowCategoryModal(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[
+                      styles.catGridIconWrap,
+                      isActive && styles.catGridIconWrapActive,
+                    ]}>
+                      <MaterialCommunityIcons
+                        name={iconName}
+                        size={22}
+                        color={isActive ? '#FFFFFF' : colors.iconColor}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.catGridLabel,
+                        isActive && styles.catGridLabelActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {cat}
+                    </Text>
+                    <Text style={[
+                      styles.catGridCount,
+                      isActive && styles.catGridCountActive,
+                    ]}>
+                      {count} produk
+                    </Text>
+                    {isActive && (
+                      <View style={styles.catGridCheckmark}>
+                        <MaterialCommunityIcons name="check-circle" size={16} color={colors.primary} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* ── Grid Produk ── */}
       <FlatList
@@ -907,17 +1037,23 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 15, color: colors.text },
 
-  // Categories
-  categoryScrollWrapper: { marginBottom: 12 },
+  // Categories - Smart Pill + Grid
+  categoryBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   categoryPill: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 24,
-    backgroundColor: "#F8FAFC",
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.04)",
-    marginRight: 10,
-    elevation: 0,
+    borderColor: 'rgba(0,0,0,0.06)',
+    marginRight: 8,
+    gap: 6,
   },
   categoryPillActive: {
     backgroundColor: colors.primary,
@@ -925,10 +1061,177 @@ const styles = StyleSheet.create({
   },
   categoryPillText: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: '600',
     color: colors.textSecondary,
   },
-  categoryPillTextActive: { color: "#fff" },
+  categoryPillTextActive: { color: '#fff' },
+  categoryCountBadge: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  categoryCountBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  categoryCountText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  categoryCountTextActive: {
+    color: '#FFFFFF',
+  },
+  categoryGridBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    position: 'relative',
+  },
+  categoryGridBtnBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  categoryGridBtnBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+
+  // Category Grid Modal (Centered Card)
+  catModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  catModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    width: '92%',
+    maxWidth: 420,
+    maxHeight: '75%',
+    paddingBottom: 16,
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+  },
+  catModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  catModalIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  catModalSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  catModalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  catModalGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 10,
+  },
+  catGridItem: {
+    width: (width - 32 - 20) / 3,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    position: 'relative',
+  },
+  catGridItemActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  catGridIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  catGridIconWrapActive: {
+    backgroundColor: colors.primary,
+  },
+  catGridLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  catGridLabelActive: {
+    color: colors.primary,
+  },
+  catGridCount: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  catGridCountActive: {
+    color: colors.primary,
+  },
+  catGridCheckmark: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+  },
 
   // Grid
   productGrid: { paddingHorizontal: 8, paddingBottom: 100 },

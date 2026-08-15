@@ -769,6 +769,7 @@ const AddProductScreen = ({ navigation, route }) => {
         <Modal
           visible={showBarcodeModal}
           transparent
+          statusBarTranslucent={true}
           animationType="slide"
           onRequestClose={() => setShowBarcodeModal(false)}
         >
@@ -804,6 +805,7 @@ const AddProductScreen = ({ navigation, route }) => {
         <Modal
           visible={showAddUnitModal}
           transparent
+          statusBarTranslucent={true}
           animationType="fade"
           onRequestClose={() => setShowAddUnitModal(false)}
         >
@@ -846,6 +848,7 @@ const AddProductScreen = ({ navigation, route }) => {
         <Modal
           visible={showEditUnitModal}
           transparent
+          statusBarTranslucent={true}
           animationType="fade"
           onRequestClose={() => setShowEditUnitModal(false)}
         >
@@ -890,6 +893,7 @@ const AddProductScreen = ({ navigation, route }) => {
         <Modal
           visible={showAddCategoryModal}
           transparent
+          statusBarTranslucent={true}
           animationType="fade"
           onRequestClose={() => setShowAddCategoryModal(false)}
         >
@@ -932,6 +936,7 @@ const AddProductScreen = ({ navigation, route }) => {
         <Modal
           visible={showEditCategoryModal}
           transparent
+          statusBarTranslucent={true}
           animationType="fade"
           onRequestClose={() => setShowEditCategoryModal(false)}
         >
@@ -976,6 +981,7 @@ const AddProductScreen = ({ navigation, route }) => {
         <Modal
           visible={showImageSourceModal}
           transparent
+          statusBarTranslucent={true}
           animationType="fade"
           onRequestClose={() => setShowImageSourceModal(false)}
         >
