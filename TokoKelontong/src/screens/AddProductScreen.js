@@ -11,6 +11,7 @@ import {
   Modal,
   TextInput as RNTextInput,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { TextInput, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -145,6 +146,7 @@ const AddProductScreen = ({ navigation, route }) => {
 
   // Image Source Selection Modal state
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
+  const [pendingSource, setPendingSource] = useState(null);
 
   // Category CRUD state
   const [category, setCategory] = useState('makanan');
@@ -305,42 +307,106 @@ const AddProductScreen = ({ navigation, route }) => {
 
   // ── Image picker ──
   const handlePickImage = () => {
-    setShowImageSourceModal(true);
+    Alert.alert(
+      'Foto Produk',
+      'Pilih lokasi pengambilan foto produk:',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Galeri Foto',
+          onPress: () => executePicker('gallery'),
+        },
+        {
+          text: 'Kamera HP',
+          onPress: () => executePicker('camera'),
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
-  const launchPicker = async (source) => {
+  const handleSelectSource = (source) => {
     setShowImageSourceModal(false);
-    setTimeout(async () => {
-      try {
-        if (source === 'gallery') {
-          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (status !== 'granted') {
-            Alert.alert('Akses Ditolak', 'Aplikasi butuh izin untuk mengakses galeri Anda.');
-            return;
-          }
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: false,
-            quality: 0.8,
-          });
-          if (!result.canceled) setImageUri(result.assets[0].uri);
-        } else {
-          const { status } = await ImagePicker.requestCameraPermissionsAsync();
-          if (status !== 'granted') {
-            Alert.alert('Akses Ditolak', 'Aplikasi butuh izin untuk menggunakan kamera Anda.');
-            return;
-          }
-          const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: false,
-            quality: 0.8,
-          });
-          if (!result.canceled) setImageUri(result.assets[0].uri);
+    setTimeout(() => {
+      executePicker(source);
+    }, 400);
+  };
+
+  const executePicker = async (source) => {
+    try {
+      if (source === 'gallery') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Akses Galeri Ditolak',
+            'Aplikasi membutuhkan izin untuk mengakses galeri foto. Silakan izinkan di Pengaturan HP Anda.',
+            [
+              { text: 'Batal', style: 'cancel' },
+              { text: 'Buka Pengaturan', onPress: () => Linking.openSettings() },
+            ]
+          );
+          return;
         }
-      } catch (e) {
-        Alert.alert('Error', 'Gagal membuka ' + (source === 'gallery' ? 'galeri' : 'kamera') + ': ' + e.message);
+
+        let result;
+        try {
+          result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 0.8,
+          });
+        } catch (cropErr) {
+          result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false,
+            quality: 0.8,
+          });
+        }
+
+        if (result && !result.canceled && result.assets && result.assets.length > 0) {
+          setImageUri(result.assets[0].uri);
+        }
+      } else if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Akses Kamera Ditolak',
+            'Aplikasi membutuhkan izin untuk menggunakan kamera. Silakan izinkan di Pengaturan HP Anda.',
+            [
+              { text: 'Batal', style: 'cancel' },
+              { text: 'Buka Pengaturan', onPress: () => Linking.openSettings() },
+            ]
+          );
+          return;
+        }
+
+        let result;
+        try {
+          result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 0.8,
+          });
+        } catch (cropErr) {
+          result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false,
+            quality: 0.8,
+          });
+        }
+
+        if (result && !result.canceled && result.assets && result.assets.length > 0) {
+          setImageUri(result.assets[0].uri);
+        }
       }
-    }, 300);
+    } catch (e) {
+      console.error('ImagePicker Error:', e);
+      let errorMsg = e.message || 'Gagal membuka media';
+      if (errorMsg.toLowerCase().includes('camera is not available') || errorMsg.toLowerCase().includes('simulator')) {
+        errorMsg = 'Kamera tidak tersedia (misal di Simulator iOS). Gunakan HP fisik atau pilih dari Galeri.';
+      }
+      Alert.alert('Gagal Mengambil Foto', errorMsg);
+    }
   };
 
   // ── Barcode scanner ──
@@ -923,14 +989,14 @@ const AddProductScreen = ({ navigation, route }) => {
               <Text style={styles.sourceModalDesc}>Pilih dari mana Anda ingin mengambil foto produk.</Text>
               
               <View style={styles.sourceOptionsRow}>
-                <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('gallery')}>
+                <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => handleSelectSource('gallery')}>
                   <View style={[styles.sourceIconWrap, { backgroundColor: colors.iconBg }]}>
                     <MaterialCommunityIcons name="image" size={32} color={colors.iconColor} />
                   </View>
                   <Text style={styles.sourceOptionText}>Galeri</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('camera')}>
+                <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => handleSelectSource('camera')}>
                   <View style={[styles.sourceIconWrap, { backgroundColor: colors.iconBg }]}>
                     <MaterialCommunityIcons name="camera" size={32} color={colors.iconColor} />
                   </View>

@@ -7,7 +7,12 @@
     "icon": "./assets/MarketPos.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Aplikasi membutuhkan akses kamera untuk mengambil foto produk dan scan barcode.",
+        "NSPhotoLibraryUsageDescription": "Aplikasi membutuhkan akses galeri foto untuk memilih foto produk dan logo toko.",
+        "NSPhotoLibraryAddUsageDescription": "Aplikasi membutuhkan izin untuk menyimpan foto ke galeri."
+      }
     },
     "android": {
       "package": "com.rafi.marketpos",
@@ -24,6 +29,7 @@
         "BLUETOOTH_CONNECT",
         "BLUETOOTH_SCAN",
         "WRITE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
@@ -37,6 +43,13 @@
         "expo-camera",
         {
           "cameraPermission": "Izinkan aplikasi mengakses kamera untuk scan barcode produk."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Izinkan aplikasi mengakses galeri foto untuk memilih foto produk dan logo toko.",
+          "cameraPermission": "Izinkan aplikasi mengakses kamera untuk mengambil foto produk."
         }
       ],
       "expo-font"

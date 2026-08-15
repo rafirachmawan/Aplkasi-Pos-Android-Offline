@@ -43,6 +43,7 @@ const PengaturanScreen = ({ navigation }) => {
   const [logoUri, setLogoUri] = useState(state.storeLogo || null);
   const [saved, setSaved] = useState(false);
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
+  const [pendingSource, setPendingSource] = useState(null);
 
   // Backup & Restore states
   const [isExporting, setIsExporting] = useState(false);
@@ -57,42 +58,106 @@ const PengaturanScreen = ({ navigation }) => {
   }, [state.storeName, state.printerAddress, state.storeLogo]);
 
   const handlePickLogo = () => {
-    setShowImageSourceModal(true);
+    Alert.alert(
+      'Foto Logo Toko',
+      'Pilih lokasi pengambilan foto logo toko:',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Galeri Foto',
+          onPress: () => executePicker('gallery'),
+        },
+        {
+          text: 'Kamera HP',
+          onPress: () => executePicker('camera'),
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
-  const launchPicker = async (source) => {
+  const handleSelectSource = (source) => {
     setShowImageSourceModal(false);
-    setTimeout(async () => {
-      try {
-        if (source === 'gallery') {
-          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (status !== 'granted') {
-            Alert.alert('Akses Ditolak', 'Izin akses galeri diperlukan.');
-            return;
-          }
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            allowsEditing: false,
-            quality: 0.8,
-          });
-          if (!result.canceled) setLogoUri(result.assets[0].uri);
-        } else {
-          const { status } = await ImagePicker.requestCameraPermissionsAsync();
-          if (status !== 'granted') {
-            Alert.alert('Akses Ditolak', 'Izin kamera diperlukan.');
-            return;
-          }
-          const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ['images'],
-            allowsEditing: false,
-            quality: 0.8,
-          });
-          if (!result.canceled) setLogoUri(result.assets[0].uri);
+    setTimeout(() => {
+      executePicker(source);
+    }, 400);
+  };
+
+  const executePicker = async (source) => {
+    try {
+      if (source === 'gallery') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Akses Galeri Ditolak',
+            'Izin akses galeri diperlukan. Silakan izinkan di Pengaturan HP Anda.',
+            [
+              { text: 'Batal', style: 'cancel' },
+              { text: 'Buka Pengaturan', onPress: () => Linking.openSettings() },
+            ]
+          );
+          return;
         }
-      } catch (e) {
-        Alert.alert('Error', 'Gagal membuka ' + source);
+
+        let result;
+        try {
+          result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 0.8,
+          });
+        } catch (cropErr) {
+          result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false,
+            quality: 0.8,
+          });
+        }
+
+        if (result && !result.canceled && result.assets && result.assets.length > 0) {
+          setLogoUri(result.assets[0].uri);
+        }
+      } else if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Akses Kamera Ditolak',
+            'Izin kamera diperlukan. Silakan izinkan di Pengaturan HP Anda.',
+            [
+              { text: 'Batal', style: 'cancel' },
+              { text: 'Buka Pengaturan', onPress: () => Linking.openSettings() },
+            ]
+          );
+          return;
+        }
+
+        let result;
+        try {
+          result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 0.8,
+          });
+        } catch (cropErr) {
+          result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false,
+            quality: 0.8,
+          });
+        }
+
+        if (result && !result.canceled && result.assets && result.assets.length > 0) {
+          setLogoUri(result.assets[0].uri);
+        }
       }
-    }, 300);
+    } catch (e) {
+      console.error('ImagePicker Error:', e);
+      let errorMsg = e.message || 'Gagal membuka media';
+      if (errorMsg.toLowerCase().includes('camera is not available') || errorMsg.toLowerCase().includes('simulator')) {
+        errorMsg = 'Kamera tidak tersedia (misal di Simulator iOS). Gunakan HP fisik atau pilih dari Galeri.';
+      }
+      Alert.alert('Gagal Mengambil Foto', errorMsg);
+    }
   };
 
   const handleSave = async () => {
@@ -461,14 +526,14 @@ const PengaturanScreen = ({ navigation }) => {
             <Text style={styles.sourceModalDesc}>Foto akan ditampilkan di header aplikasi & nota cetak.</Text>
 
             <View style={styles.sourceOptionsRow}>
-              <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('gallery')}>
+              <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => handleSelectSource('gallery')}>
                 <View style={styles.sourceIconWrap}>
                   <MaterialCommunityIcons name="image-outline" size={28} color="#0F172A" />
                 </View>
                 <Text style={styles.sourceOptionText}>Galeri HP</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => launchPicker('camera')}>
+              <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => handleSelectSource('camera')}>
                 <View style={styles.sourceIconWrap}>
                   <MaterialCommunityIcons name="camera-outline" size={28} color="#0F172A" />
                 </View>

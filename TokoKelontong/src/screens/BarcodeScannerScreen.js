@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  Linking,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
@@ -68,9 +69,14 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
         <MaterialCommunityIcons name="camera-off" size={64} color={colors.error} />
         <Text style={styles.errorText}>Izin kamera ditolak.</Text>
         <Text style={styles.subText}>Aktifkan izin kamera di Pengaturan HP.</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtnText}>Kembali</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+          <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]} onPress={() => navigation.goBack()}>
+            <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>Kembali</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.backBtn} onPress={() => Linking.openSettings()}>
+            <Text style={styles.backBtnText}>Buka Pengaturan</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
