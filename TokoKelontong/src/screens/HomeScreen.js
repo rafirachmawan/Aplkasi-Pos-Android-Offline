@@ -27,7 +27,11 @@ const formatRupiah = (value) => {
 const HomeScreen = ({ navigation }) => {
   const { state } = useContext(AppContext);
   const [hideBalance, setHideBalance] = useState(false);
-  const [todaySummary, setTodaySummary] = useState({ omzet: 0, laba: 0, count: 0 });
+  const [todaySummary, setTodaySummary] = useState({
+    omzet: 0,
+    laba: 0,
+    count: 0,
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -38,7 +42,7 @@ const HomeScreen = ({ navigation }) => {
       } catch (e) {
         console.error("Error loading home stats:", e);
       }
-    }, [])
+    }, []),
   );
 
   const now = new Date();
@@ -51,7 +55,13 @@ const HomeScreen = ({ navigation }) => {
 
   const hour = now.getHours();
   const greetingText =
-    hour < 11 ? "Selamat Pagi" : hour < 15 ? "Selamat Siang" : hour < 18 ? "Selamat Sore" : "Selamat Malam";
+    hour < 11
+      ? "Selamat Pagi"
+      : hour < 15
+        ? "Selamat Siang"
+        : hour < 18
+          ? "Selamat Sore"
+          : "Selamat Malam";
   const greetingEmoji =
     hour < 11 ? "☀️" : hour < 15 ? "🌤️" : hour < 18 ? "box" : "🌙";
 
@@ -96,7 +106,11 @@ const HomeScreen = ({ navigation }) => {
                 style={styles.storeLogoImage}
               />
             ) : (
-              <MaterialCommunityIcons name="store" size={26} color={colors.iconColor} />
+              <MaterialCommunityIcons
+                name="store"
+                size={26}
+                color={colors.iconColor}
+              />
             )}
           </View>
         </View>
@@ -126,10 +140,7 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>Omset Hari Ini</Text>
               <Text
-                style={[
-                  styles.statValue,
-                  { color: colors.primary },
-                ]}
+                style={[styles.statValue, { color: colors.primary }]}
                 numberOfLines={1}
               >
                 {hideBalance ? "Rp ••••••" : formatRupiah(totalPemasukan)}
@@ -140,7 +151,10 @@ const HomeScreen = ({ navigation }) => {
 
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>Laba Bersih</Text>
-              <Text style={[styles.statValue, { color: colors.success }]} numberOfLines={1}>
+              <Text
+                style={[styles.statValue, { color: colors.success }]}
+                numberOfLines={1}
+              >
                 {hideBalance ? "Rp ••••••" : formatRupiah(totalLaba)}
               </Text>
             </View>
@@ -149,7 +163,10 @@ const HomeScreen = ({ navigation }) => {
 
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>Transaksi</Text>
-              <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>
+              <Text
+                style={[styles.statValue, { color: colors.text }]}
+                numberOfLines={1}
+              >
                 {hideBalance ? "••x" : `${todayTransaksi}x`}
               </Text>
             </View>
@@ -345,7 +362,10 @@ const HomeScreen = ({ navigation }) => {
             size={16}
             color={colors.primary}
           />
-          <Text style={styles.footerText}> MarketPos - 100% Pure Offline Kasir Android</Text>
+          <Text style={styles.footerText}>
+            {" "}
+            MarketPos - 100% Pure Offline Kasir Android
+          </Text>
         </View>
       </ScrollView>
     </View>
@@ -359,9 +379,9 @@ const styles = StyleSheet.create({
   },
   headerWhite: {
     backgroundColor: colors.surface,
-    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 16 : 56,
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 24 : 56,
     paddingBottom: 20,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -387,7 +407,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: colors.text,
     letterSpacing: 0.2,
-    marginBottom: 4,
+    marginBottom: 8,
   },
   dateRow: {
     flexDirection: "row",
@@ -401,14 +421,19 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   headerIcon: {
-    width: 54,
-    height: 54,
+    width: 56,
+    height: 56,
     borderRadius: 18,
-    backgroundColor: colors.iconBg,
+    backgroundColor: colors.primaryContainer,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 2,
+    borderColor: colors.primaryContainer,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   headerDivider: {
     height: 1,
@@ -418,29 +443,38 @@ const styles = StyleSheet.create({
   },
   statsCardWrapper: {
     backgroundColor: "#F8FAFC",
-    borderRadius: 16,
+    borderRadius: 12,
     paddingTop: 10,
     paddingBottom: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
+    marginTop: 12,
+    shadowColor: "transparent",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   statsCardTopBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 6,
     paddingHorizontal: 4,
   },
   statsCardTopTitle: {
     fontFamily: fonts.extraBold,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
-    color: "#64748B",
-    letterSpacing: 0.8,
+    color: colors.textSecondary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   eyeToggleBtn: {
-    padding: 2,
+    padding: 3,
+    borderRadius: 6,
+    backgroundColor: "rgba(0,0,0,0.02)",
   },
   statsRow: {
     flexDirection: "row",
@@ -452,24 +486,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 10,
-    color: "#64748B",
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 3,
+    fontFamily: fonts.medium,
+    fontSize: 9,
+    color: colors.textSecondary,
+    fontWeight: "500",
+    marginBottom: 2,
+    textAlign: "center",
   },
   statValue: {
     fontFamily: fonts.bold,
     fontSize: 13,
     fontWeight: "700",
     color: colors.text,
+    textAlign: "center",
+    lineHeight: 16,
   },
   statDividerV: {
     width: 1,
-    height: 26,
-    backgroundColor: "#CBD5E1",
+    height: 24,
+    backgroundColor: colors.border,
+    marginHorizontal: 6,
   },
   storeLogoImage: {
     width: "100%",
@@ -480,60 +516,62 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   body: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 48,
   },
   primaryHeroCard: {
-    backgroundColor: "#0F172A",
-    borderRadius: 22,
-    padding: 20,
-    marginBottom: 24,
+    backgroundColor: colors.primary,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 20,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 6,
   },
   primaryCardLeft: {
     flexDirection: "row",
     alignItems: "center",
   },
   primaryIconWrapper: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
+    marginRight: 16,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
   },
   primaryCardTitle: {
     fontFamily: fonts.extraBold,
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "900",
     color: "#FFFFFF",
-    marginBottom: 2,
+    marginBottom: 4,
     letterSpacing: 0.2,
   },
   primaryCardDesc: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: "#94A3B8",
-    fontWeight: "500",
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "400",
   },
   heroArrowBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
   },
   sectionTitle: {
     fontFamily: fonts.extraBold,
@@ -552,42 +590,43 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   bentoCard: {
-    width: (width - 40 - 12) / 2,
+    width: (width - 40 - 16) / 2,
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 16,
-    shadowColor: "#0F172A",
+    borderRadius: 22,
+    padding: 18,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.07)",
+    borderColor: colors.border,
+    transition: "all 0.2s ease",
   },
   bentoHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 16,
   },
   iconSquircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: colors.primaryContainer,
   },
   bentoTitle: {
     fontFamily: fonts.bold,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: colors.text,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   bentoDesc: {
     fontFamily: fonts.regular,
-    fontSize: 12,
+    fontSize: 13,
     color: colors.textSecondary,
     fontWeight: "400",
   },
