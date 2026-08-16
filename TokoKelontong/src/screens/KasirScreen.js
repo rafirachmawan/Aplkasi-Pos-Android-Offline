@@ -36,22 +36,23 @@ const isTablet = width > 600;
 
 // ── Helper: Format angka ke tampilan Rp (Rp 50.000) ──
 const formatToRpDisplay = (raw) => {
-  const num = String(raw).replace(/\D/g, '').replace(/^0+/, '');
-  if (!num) return '';
-  return 'Rp ' + num.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const num = String(raw).replace(/\D/g, "").replace(/^0+/, "");
+  if (!num) return "";
+  return "Rp " + num.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
 // ── Helper: Ambil angka murni dari string Rp (Rp 50.000 → 50000) ──
 const parseRpToNumber = (formatted) => {
-  const num = String(formatted).replace(/\D/g, '');
+  const num = String(formatted).replace(/\D/g, "");
   return parseInt(num) || 0;
 };
 
 const KasirScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const floatingBottom = Platform.OS === 'android'
-    ? Math.max(insets.bottom + 24, 32)
-    : Math.max(insets.bottom + 16, 24);
+  const floatingBottom =
+    Platform.OS === "android"
+      ? Math.max(insets.bottom + 24, 32)
+      : Math.max(insets.bottom + 16, 24);
 
   const { state, dispatch } = useContext(AppContext);
   const cart = state.cart;
@@ -76,12 +77,12 @@ const KasirScreen = ({ navigation }) => {
       loadProducts();
 
       return () => {
-        dispatch({ type: 'CLEAR_CART' });
-        setSearchQuery('');
-        setSelectedCategory('Semua');
+        dispatch({ type: "CLEAR_CART" });
+        setSearchQuery("");
+        setSelectedCategory("Semua");
         setShowCartModal(false);
-        setCashInput('');
-        setDiscountInput('');
+        setCashInput("");
+        setDiscountInput("");
       };
     }, [dispatch]),
   );
@@ -299,6 +300,89 @@ const KasirScreen = ({ navigation }) => {
     }
   };
 
+  // Helper: Get icon name based on category
+  const getPlaceholderIcon = (category) => {
+    if (!category) return "package-variant";
+
+    const categoryIcons = {
+      makanan: "apple",
+      minuman: "glass-wine",
+      kebersihan: "sparkles",
+      batik: "shirt-tank-top",
+      baju: "t-shirt-outlined",
+      aksesoris: "ring",
+      sepatu: "shoe-formal",
+      tas: "bag-personal",
+      elektronik: "monitor",
+      "alat tulis": "pencil-box",
+      lainnya: "cube-outline",
+    };
+
+    return categoryIcons[category.toLowerCase()] || "package-variant";
+  };
+
+  // Helper: Get color tint based on category
+  const getCategoryColor = (category) => {
+    if (!category) return colors.textSecondary;
+
+    const categoryColors = {
+      makanan: "#EF4444", // Red
+      minuman: "#3B82F6", // Blue
+      kebersihan: "#10B981", // Green
+      batik: "#F59E0B", // Orange
+      baju: "#EC4899", // Pink
+      aksesoris: "#8B5CF6", // Purple
+      sepatu: "#06B6D4", // Cyan
+      tas: "#84CC16", // Lime
+      elektronik: "#6366F1", // Indigo
+      "alat tulis": "#14B8A6", // Teal
+      lainnya: "#64748B", // Slate
+    };
+
+    return categoryColors[category.toLowerCase()] || colors.textSecondary;
+  };
+
+  // Helper: Get icon for category card
+  const getCategoryIconForCard = (category) => {
+    const cardIcons = {
+      Semua: "apps",
+      makanan: "apple",
+      minuman: "glass-wine",
+      kebersihan: "sparkles",
+      batik: "hanger",
+      baju: "t-shirt",
+      aksesoris: "ring",
+      sepatu: "shoe-heel",
+      tas: "bag-marked",
+      elektronik: "monitor",
+      "alat tulis": "pen-tool",
+      lainnya: "cube-outline",
+    };
+    return cardIcons[category] || "package-variant";
+  };
+
+  // Helper: Get color for category card icon
+  const getCategoryColorForCard = (category) => {
+    if (!category) return colors.textSecondary;
+
+    const colorsMap = {
+      makanan: "#DC2626", // Red-600
+      minuman: "#2563EB", // Blue-600
+      kebersihan: "#059669", // Green-600
+      batik: "#D97706", // Orange-600
+      baju: "#DB2777", // Pink-600
+      aksesoris: "#7C3AED", // Purple-600
+      sepatu: "#0891B2", // Cyan-600
+      tas: "#65A30D", // Lime-600
+      elektronik: "#4F46E5", // Indigo-600
+      "alat tulis": "#0D9488", // Teal-600
+      lainnya: "#475569", // Slate-600
+      Semua: colors.text,
+    };
+
+    return colorsMap[category] || colors.textSecondary;
+  };
+
   // Render POS Grid Item
   const renderProductGrid = ({ item }) => {
     const lowStock = item.stock_quantity <= item.min_stock_threshold;
@@ -321,11 +405,14 @@ const KasirScreen = ({ navigation }) => {
               style={{ width: "100%", height: "100%", resizeMode: "cover" }}
             />
           ) : (
-            <MaterialCommunityIcons
-              name="image-outline"
-              size={32}
-              color={colors.textSecondary}
-            />
+            <View style={styles.productCardImgPlaceholder}>
+              <MaterialCommunityIcons
+                name={getPlaceholderIcon(item.category)}
+                size={56}
+                color={getCategoryColor(item.category)}
+                style={{ opacity: 0.4 }}
+              />
+            </View>
           )}
           {item.category && (
             <View style={styles.gridCategoryBadge}>
@@ -407,7 +494,6 @@ const KasirScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-
       {/* ── Search Bar ── */}
       <View style={styles.searchContainer}>
         <MaterialCommunityIcons
@@ -445,18 +531,19 @@ const KasirScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* ── Filter Kategori: Smart Pill + Grid Button ── */}
-      <View style={styles.categoryBarRow}>
+      {/* ── Filter Kategori: Simple Horizontal Pills ── */}
+      <View style={styles.categoryContainer}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
-          style={{ flex: 1 }}
+          contentContainerStyle={{ gap: 8 }}
         >
-          {categories.slice(0, 5).map((cat, idx) => {
-            const count = cat === 'Semua'
-              ? allProducts.length
-              : allProducts.filter(p => p.category === cat).length;
+          {categories.map((cat, idx) => {
+            const count =
+              cat === "Semua"
+                ? allProducts.length
+                : allProducts.filter((p) => p.category === cat).length;
+
             return (
               <TouchableOpacity
                 key={idx}
@@ -465,6 +552,7 @@ const KasirScreen = ({ navigation }) => {
                   selectedCategory === cat && styles.categoryPillActive,
                 ]}
                 onPress={() => setSelectedCategory(cat)}
+                activeOpacity={0.7}
               >
                 <Text
                   style={[
@@ -472,35 +560,28 @@ const KasirScreen = ({ navigation }) => {
                     selectedCategory === cat && styles.categoryPillTextActive,
                   ]}
                 >
-                  {cat}
+                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
                 </Text>
-                <View style={[
-                  styles.categoryCountBadge,
-                  selectedCategory === cat && styles.categoryCountBadgeActive,
-                ]}>
-                  <Text style={[
-                    styles.categoryCountText,
-                    selectedCategory === cat && styles.categoryCountTextActive,
-                  ]}>{count}</Text>
+                <View
+                  style={[
+                    styles.categoryCountBadge,
+                    selectedCategory === cat && styles.categoryCountBadgeActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.categoryCountText,
+                      selectedCategory === cat &&
+                        styles.categoryCountTextActive,
+                    ]}
+                  >
+                    {count}
+                  </Text>
                 </View>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
-
-        {/* Grid Button - always visible */}
-        <TouchableOpacity
-          style={styles.categoryGridBtn}
-          onPress={() => setShowCategoryModal(true)}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons name="view-grid-outline" size={18} color={colors.primary} />
-          {categories.length > 5 && (
-            <View style={styles.categoryGridBtnBadge}>
-              <Text style={styles.categoryGridBtnBadgeText}>{categories.length - 1}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
       </View>
 
       {/* ── Modal Kategori Grid (Centered Card) ── */}
@@ -523,20 +604,33 @@ const KasirScreen = ({ navigation }) => {
           >
             {/* Header */}
             <View style={styles.catModalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
                 <View style={styles.catModalIconWrap}>
-                  <MaterialCommunityIcons name="shape-outline" size={20} color={colors.primary} />
+                  <MaterialCommunityIcons
+                    name="shape-outline"
+                    size={20}
+                    color={colors.primary}
+                  />
                 </View>
                 <View>
                   <Text style={styles.catModalTitle}>Pilih Kategori</Text>
-                  <Text style={styles.catModalSubtitle}>{categories.length - 1} kategori • {allProducts.length} produk</Text>
+                  <Text style={styles.catModalSubtitle}>
+                    {categories.length - 1} kategori • {allProducts.length}{" "}
+                    produk
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity
                 onPress={() => setShowCategoryModal(false)}
                 style={styles.catModalCloseBtn}
               >
-                <MaterialCommunityIcons name="close" size={20} color={colors.textSecondary} />
+                <MaterialCommunityIcons
+                  name="close"
+                  size={20}
+                  color={colors.textSecondary}
+                />
               </TouchableOpacity>
             </View>
 
@@ -546,11 +640,12 @@ const KasirScreen = ({ navigation }) => {
               contentContainerStyle={styles.catModalGrid}
             >
               {categories.map((cat, idx) => {
-                const count = cat === 'Semua'
-                  ? allProducts.length
-                  : allProducts.filter(p => p.category === cat).length;
+                const count =
+                  cat === "Semua"
+                    ? allProducts.length
+                    : allProducts.filter((p) => p.category === cat).length;
                 const isActive = selectedCategory === cat;
-                const iconName = cat === 'Semua' ? 'apps' : 'tag-outline';
+                const iconName = cat === "Semua" ? "apps" : "tag-outline";
 
                 return (
                   <TouchableOpacity
@@ -565,14 +660,16 @@ const KasirScreen = ({ navigation }) => {
                     }}
                     activeOpacity={0.7}
                   >
-                    <View style={[
-                      styles.catGridIconWrap,
-                      isActive && styles.catGridIconWrapActive,
-                    ]}>
+                    <View
+                      style={[
+                        styles.catGridIconWrap,
+                        isActive && styles.catGridIconWrapActive,
+                      ]}
+                    >
                       <MaterialCommunityIcons
                         name={iconName}
                         size={22}
-                        color={isActive ? '#FFFFFF' : colors.iconColor}
+                        color={isActive ? "#FFFFFF" : colors.iconColor}
                       />
                     </View>
                     <Text
@@ -584,15 +681,21 @@ const KasirScreen = ({ navigation }) => {
                     >
                       {cat}
                     </Text>
-                    <Text style={[
-                      styles.catGridCount,
-                      isActive && styles.catGridCountActive,
-                    ]}>
+                    <Text
+                      style={[
+                        styles.catGridCount,
+                        isActive && styles.catGridCountActive,
+                      ]}
+                    >
                       {count} produk
                     </Text>
                     {isActive && (
                       <View style={styles.catGridCheckmark}>
-                        <MaterialCommunityIcons name="check-circle" size={16} color={colors.primary} />
+                        <MaterialCommunityIcons
+                          name="check-circle"
+                          size={16}
+                          color={colors.primary}
+                        />
                       </View>
                     )}
                   </TouchableOpacity>
@@ -609,7 +712,10 @@ const KasirScreen = ({ navigation }) => {
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderProductGrid}
         numColumns={isTablet ? 3 : 2}
-        contentContainerStyle={[styles.productGrid, { paddingBottom: floatingBottom + 70 }]}
+        contentContainerStyle={[
+          styles.productGrid,
+          { paddingBottom: floatingBottom + 70 },
+        ]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={{ alignItems: "center", marginTop: 50 }}>
@@ -654,47 +760,100 @@ const KasirScreen = ({ navigation }) => {
         statusBarTranslucent={true}
         onRequestClose={() => setShowCartModal(false)}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
           <View style={styles.modalOverlayCart}>
             <View style={styles.cartBottomSheet}>
-
               {/* Header */}
               <View style={styles.modalHeaderBottomSheet}>
                 <Text style={styles.modalTitleBottomSheet}>🛒 Keranjang</Text>
-                <View style={{ flexDirection: 'row', gap: 4 }}>
-                  <TouchableOpacity onPress={clearCart} style={styles.modalIconBtn}>
-                    <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.error} />
+                <View style={{ flexDirection: "row", gap: 4 }}>
+                  <TouchableOpacity
+                    onPress={clearCart}
+                    style={styles.modalIconBtn}
+                  >
+                    <MaterialCommunityIcons
+                      name="trash-can-outline"
+                      size={20}
+                      color={colors.error}
+                    />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setShowCartModal(false)} style={styles.modalIconBtn}>
-                    <MaterialCommunityIcons name="close" size={20} color={colors.text} />
+                  <TouchableOpacity
+                    onPress={() => setShowCartModal(false)}
+                    style={styles.modalIconBtn}
+                  >
+                    <MaterialCommunityIcons
+                      name="close"
+                      size={20}
+                      color={colors.text}
+                    />
                   </TouchableOpacity>
                 </View>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
-
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 16 }}
+              >
                 {/* Daftar Item Keranjang */}
                 <View style={{ padding: 12 }}>
                   {cart.map((item) => (
                     <View key={item.product_id} style={styles.cartItem}>
                       {item.image_uri ? (
-                        <Image source={{ uri: item.image_uri }} style={styles.cartItemImage} />
+                        <Image
+                          source={{ uri: item.image_uri }}
+                          style={styles.cartItemImage}
+                        />
                       ) : (
-                        <View style={[styles.cartItemImage, { backgroundColor: colors.surfaceVariant, alignItems: 'center', justifyContent: 'center' }]}>
-                          <MaterialCommunityIcons name="image-outline" size={18} color={colors.textSecondary} />
+                        <View
+                          style={[
+                            styles.cartItemImage,
+                            styles.cartItemImagePlaceholder,
+                          ]}
+                        >
+                          <MaterialCommunityIcons
+                            name={getPlaceholderIcon(item.category)}
+                            size={28}
+                            color={getCategoryColor(item.category)}
+                            style={{ opacity: 0.35 }}
+                          />
                         </View>
                       )}
                       <View style={styles.cartItemInfo}>
-                        <Text style={styles.cartItemName} numberOfLines={1}>{item.product_name}</Text>
-                        <Text style={styles.cartItemPrice}>{formatRupiah(item.selling_price)}</Text>
+                        <Text style={styles.cartItemName} numberOfLines={1}>
+                          {item.product_name}
+                        </Text>
+                        <Text style={styles.cartItemPrice}>
+                          {formatRupiah(item.selling_price)}
+                        </Text>
                       </View>
                       <View style={styles.qtyControl}>
-                        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.product_id, item.quantity - 1)}>
-                          <MaterialCommunityIcons name="minus" size={14} color={colors.error} />
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() =>
+                            updateQty(item.product_id, item.quantity - 1)
+                          }
+                        >
+                          <MaterialCommunityIcons
+                            name="minus"
+                            size={14}
+                            color={colors.error}
+                          />
                         </TouchableOpacity>
                         <Text style={styles.qtyText}>{item.quantity}</Text>
-                        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.product_id, item.quantity + 1)}>
-                          <MaterialCommunityIcons name="plus" size={14} color={colors.primary} />
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() =>
+                            updateQty(item.product_id, item.quantity + 1)
+                          }
+                        >
+                          <MaterialCommunityIcons
+                            name="plus"
+                            size={14}
+                            color={colors.primary}
+                          />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -702,40 +861,68 @@ const KasirScreen = ({ navigation }) => {
                 </View>
 
                 {/* Divider */}
-                <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 12, marginBottom: 12 }} />
+                <View
+                  style={{
+                    height: 1,
+                    backgroundColor: colors.border,
+                    marginHorizontal: 12,
+                    marginBottom: 12,
+                  }}
+                />
 
                 {/* Kalkulasi */}
                 <View style={{ paddingHorizontal: 14, gap: 8 }}>
-
                   {/* Subtotal */}
                   <View style={styles.calcRow}>
                     <Text style={styles.calcLabel}>Subtotal</Text>
-                    <Text style={styles.calcValue}>{formatRupiah(totalHarga)}</Text>
+                    <Text style={styles.calcValue}>
+                      {formatRupiah(totalHarga)}
+                    </Text>
                   </View>
 
                   {/* Total Tagihan */}
                   <View style={styles.grandTotalContainer}>
                     <Text style={styles.grandTotalLabel}>TOTAL TAGIHAN</Text>
-                    <Text style={styles.grandTotalValue}>{formatRupiah(grandTotal)}</Text>
+                    <Text style={styles.grandTotalValue}>
+                      {formatRupiah(grandTotal)}
+                    </Text>
                   </View>
 
                   {/* Diskon */}
-                  <Text style={[styles.calcLabel, { fontWeight: '700', marginTop: 4 }]}>Diskon (Rp)</Text>
+                  <Text
+                    style={[
+                      styles.calcLabel,
+                      { fontWeight: "700", marginTop: 4 },
+                    ]}
+                  >
+                    Diskon (Rp)
+                  </Text>
                   <TextInput
                     style={styles.cashInputBig}
                     value={discountInput}
-                    onChangeText={(text) => setDiscountInput(formatToRpDisplay(text))}
+                    onChangeText={(text) =>
+                      setDiscountInput(formatToRpDisplay(text))
+                    }
                     keyboardType="numeric"
                     placeholder="Rp 0"
                     placeholderTextColor={colors.textSecondary}
                   />
 
                   {/* Pembayaran */}
-                  <Text style={[styles.calcLabel, { fontWeight: '700', marginTop: 8 }]}>Pembayaran (Uang Diterima)</Text>
+                  <Text
+                    style={[
+                      styles.calcLabel,
+                      { fontWeight: "700", marginTop: 8 },
+                    ]}
+                  >
+                    Pembayaran (Uang Diterima)
+                  </Text>
                   <TextInput
                     style={styles.cashInputBig}
                     value={cashInput}
-                    onChangeText={(text) => setCashInput(formatToRpDisplay(text))}
+                    onChangeText={(text) =>
+                      setCashInput(formatToRpDisplay(text))
+                    }
                     keyboardType="numeric"
                     placeholder="Rp 50.000"
                     placeholderTextColor={colors.textSecondary}
@@ -743,24 +930,55 @@ const KasirScreen = ({ navigation }) => {
 
                   {/* Quick Amount */}
                   <View style={styles.quickAmountRow}>
-                    <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput(formatToRpDisplay(grandTotal))}>
+                    <TouchableOpacity
+                      style={styles.quickAmountBtn}
+                      onPress={() =>
+                        setCashInput(formatToRpDisplay(grandTotal))
+                      }
+                    >
                       <Text style={styles.quickAmountText}>Uang Pas</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput(formatToRpDisplay(50000))}>
+                    <TouchableOpacity
+                      style={styles.quickAmountBtn}
+                      onPress={() => setCashInput(formatToRpDisplay(50000))}
+                    >
                       <Text style={styles.quickAmountText}>50 Ribu</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.quickAmountBtn} onPress={() => setCashInput(formatToRpDisplay(100000))}>
+                    <TouchableOpacity
+                      style={styles.quickAmountBtn}
+                      onPress={() => setCashInput(formatToRpDisplay(100000))}
+                    >
                       <Text style={styles.quickAmountText}>100 Ribu</Text>
                     </TouchableOpacity>
                   </View>
 
                   {/* Kembalian */}
                   {cashReceived > 0 && (
-                    <View style={[styles.kembalianBox, { backgroundColor: kembalian >= 0 ? '#D1FAE5' : '#FEE2E2' }]}>
-                      <Text style={{ fontWeight: 'bold', fontSize: 13, color: kembalian >= 0 ? '#065F46' : '#991B1B' }}>
-                        {kembalian >= 0 ? 'KEMBALIAN' : 'UANG KURANG'}
+                    <View
+                      style={[
+                        styles.kembalianBox,
+                        {
+                          backgroundColor:
+                            kembalian >= 0 ? "#D1FAE5" : "#FEE2E2",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontWeight: "bold",
+                          fontSize: 13,
+                          color: kembalian >= 0 ? "#065F46" : "#991B1B",
+                        }}
+                      >
+                        {kembalian >= 0 ? "KEMBALIAN" : "UANG KURANG"}
                       </Text>
-                      <Text style={{ fontWeight: 'bold', fontSize: 20, color: kembalian >= 0 ? '#065F46' : '#991B1B' }}>
+                      <Text
+                        style={{
+                          fontWeight: "bold",
+                          fontSize: 20,
+                          color: kembalian >= 0 ? "#065F46" : "#991B1B",
+                        }}
+                      >
                         {formatRupiah(Math.abs(kembalian))}
                       </Text>
                     </View>
@@ -768,15 +986,24 @@ const KasirScreen = ({ navigation }) => {
 
                   {/* Tombol Bayar */}
                   <TouchableOpacity
-                    style={[styles.bayarBtn, { opacity: cashReceived >= grandTotal ? 1 : 0.5, marginTop: 12 }]}
+                    style={[
+                      styles.bayarBtn,
+                      {
+                        opacity: cashReceived >= grandTotal ? 1 : 0.5,
+                        marginTop: 12,
+                      },
+                    ]}
                     onPress={handleBayar}
                     disabled={cashReceived < grandTotal}
                   >
-                    <MaterialCommunityIcons name="check-circle" size={20} color="#fff" />
+                    <MaterialCommunityIcons
+                      name="check-circle"
+                      size={20}
+                      color="#fff"
+                    />
                     <Text style={styles.bayarText}>SELESAIKAN TRANSAKSI</Text>
                   </TouchableOpacity>
                 </View>
-
               </ScrollView>
             </View>
           </View>
@@ -1046,21 +1273,20 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 15, color: colors.text },
 
-  // Categories - Smart Pill + Grid
-  categoryBarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Categories - Simple Horizontal Pills
+  categoryContainer: {
     marginBottom: 12,
+    paddingHorizontal: 16,
   },
   categoryPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderColor: colors.border,
     marginRight: 8,
     gap: 6,
   },
@@ -1070,103 +1296,75 @@ const styles = StyleSheet.create({
   },
   categoryPillText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.textSecondary,
   },
-  categoryPillTextActive: { color: '#fff' },
+  categoryPillTextActive: {
+    color: "#fff",
+    fontWeight: "700",
+  },
   categoryCountBadge: {
-    backgroundColor: '#E2E8F0',
-    borderRadius: 10,
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: 12,
     paddingHorizontal: 6,
-    paddingVertical: 1,
-    minWidth: 20,
-    alignItems: 'center',
+    paddingVertical: 2,
+    minWidth: 22,
+    alignItems: "center",
   },
   categoryCountBadgeActive: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: "rgba(255,255,255,0.3)",
   },
   categoryCountText: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: "700",
     color: colors.textSecondary,
   },
   categoryCountTextActive: {
-    color: '#FFFFFF',
-  },
-  categoryGridBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    position: 'relative',
-  },
-  categoryGridBtnBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-  categoryGridBtnBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    color: "#fff",
   },
 
   // Category Grid Modal (Centered Card)
   catModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 16,
   },
   catModalCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 24,
-    width: '92%',
+    width: "92%",
     maxWidth: 420,
-    maxHeight: '75%',
+    maxHeight: "75%",
     paddingBottom: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     elevation: 10,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
   },
   catModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: "#F1F5F9",
   },
   catModalIconWrap: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
   },
   catModalTitle: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: colors.text,
   },
   catModalSubtitle: {
@@ -1178,31 +1376,31 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: "#E2E8F0",
   },
   catModalGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: 16,
     paddingTop: 16,
     gap: 10,
   },
   catGridItem: {
     width: (width - 32 - 20) / 3,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
     borderRadius: 16,
     padding: 14,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    position: 'relative',
+    borderColor: "#E2E8F0",
+    position: "relative",
   },
   catGridItemActive: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: "#EFF6FF",
     borderColor: colors.primary,
     borderWidth: 2,
   },
@@ -1210,9 +1408,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 8,
   },
   catGridIconWrapActive: {
@@ -1220,9 +1418,9 @@ const styles = StyleSheet.create({
   },
   catGridLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.text,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 2,
   },
   catGridLabelActive: {
@@ -1231,13 +1429,13 @@ const styles = StyleSheet.create({
   catGridCount: {
     fontSize: 10,
     color: colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   catGridCountActive: {
     color: colors.primary,
   },
   catGridCheckmark: {
-    position: 'absolute',
+    position: "absolute",
     top: 6,
     right: 6,
   },
@@ -1259,6 +1457,12 @@ const styles = StyleSheet.create({
     height: 120,
     width: "100%",
     backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  productCardImgPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1345,24 +1549,48 @@ const styles = StyleSheet.create({
 
   // Modal Keranjang Centered Card
   modalOverlayCart: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.6)",
     paddingHorizontal: 16,
   },
   cartBottomSheet: {
-    backgroundColor: colors.background, borderRadius: 24, width: '92%',
-    maxHeight: '75%', elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20,
+    backgroundColor: colors.background,
+    borderRadius: 24,
+    width: "92%",
+    maxHeight: "75%",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
   },
   modalIconBtn: {
-    width: 34, height: 34, borderRadius: 17, backgroundColor: '#F8FAFC',
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   modalHeaderBottomSheet: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 14, borderBottomWidth: 1, borderBottomColor: colors.border,
-    backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
-  modalTitleBottomSheet: { fontSize: 16, fontWeight: '800', color: colors.text },
+  modalTitleBottomSheet: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: colors.text,
+  },
   cartListContainer: { padding: 12 },
   cartItem: {
     flexDirection: "row",
@@ -1375,6 +1603,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   cartItemImage: { width: 50, height: 50, borderRadius: 8, marginRight: 12 },
+  cartItemImagePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   cartItemInfo: { flex: 1, marginRight: 8 },
   cartItemName: { fontSize: 14, fontWeight: "600", color: colors.text },
   cartItemPrice: {
