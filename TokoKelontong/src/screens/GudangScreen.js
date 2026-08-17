@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,27 +11,29 @@ import {
   Platform,
   Modal,
   Dimensions,
-} from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import ProductRepository from '../database/productRepository';
-import ProductCard from '../components/ProductCard';
-import { colors, fonts } from '../theme/colors';
+} from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import ProductRepository from "../database/productRepository";
+import ProductCard from "../components/ProductCard";
+import { colors, fonts } from "../theme/colors";
 
 const GudangScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState(['Semua']);
-  const [selectedCategory, setSelectedCategory] = useState('Semua');
+  const [categories, setCategories] = useState(["Semua"]);
+  const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [stockFilter, setStockFilter] = useState("all"); // 'all' | 'low' | 'out'
 
-  const screenWidth = Dimensions.get('window').width;
+  const screenWidth = Dimensions.get("window").width;
 
-  const fabBottom = Platform.OS === 'android'
-    ? Math.max(insets.bottom + 24, 32)
-    : Math.max(insets.bottom + 16, 24);
+  const fabBottom =
+    Platform.OS === "android"
+      ? Math.max(insets.bottom + 24, 32)
+      : Math.max(insets.bottom + 16, 24);
 
   const fetchProducts = useCallback(() => {
     try {
@@ -40,11 +42,11 @@ const GudangScreen = ({ navigation }) => {
 
       // Ambil kategori unik dari produk
       const uniqueCats = Array.from(
-        new Set(data.map((p) => p.category).filter(Boolean))
+        new Set(data.map((p) => p.category).filter(Boolean)),
       );
-      setCategories(['Semua', ...uniqueCats]);
+      setCategories(["Semua", ...uniqueCats]);
     } catch (error) {
-      console.error('Failed to fetch products:', error);
+      console.error("Failed to fetch products:", error);
     }
   }, []);
 
@@ -52,68 +54,141 @@ const GudangScreen = ({ navigation }) => {
     useCallback(() => {
       fetchProducts();
       return () => {
-        setSearchQuery('');
-        setSelectedCategory('Semua');
+        setSearchQuery("");
+        setSelectedCategory("Semua");
+        setStockFilter("all");
       };
-    }, [fetchProducts])
+    }, [fetchProducts]),
   );
 
-  // Filter berdasarkan kategori + search
+  // Filter berdasarkan kategori + search + status stok
   const displayedProducts = products.filter((p) => {
     const matchCat =
-      selectedCategory === 'Semua' || p.category === selectedCategory;
+      selectedCategory === "Semua" || p.category === selectedCategory;
     const matchSearch =
       p.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.barcode && p.barcode.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchCat && matchSearch;
+      (p.barcode &&
+        p.barcode.toLowerCase().includes(searchQuery.toLowerCase()));
+    let matchStock = true;
+    if (stockFilter === "low") {
+      matchStock =
+        p.stock_quantity > 0 &&
+        p.stock_quantity <= (p.min_stock_threshold || 5);
+    } else if (stockFilter === "out") {
+      matchStock = p.stock_quantity <= 0;
+    }
+    return matchCat && matchSearch && matchStock;
   });
 
   const handleDelete = (id) => {
-    Alert.alert('Hapus Barang', 'Apakah Anda yakin ingin menghapus barang ini?', [
-      { text: 'Batal', style: 'cancel' },
-      {
-        text: 'Hapus',
-        style: 'destructive',
-        onPress: () => {
-          try {
-            ProductRepository.deleteProduct(id);
-            fetchProducts();
-          } catch (error) {
-            Alert.alert('Error', 'Gagal menghapus produk');
-          }
+    Alert.alert(
+      "Hapus Barang",
+      "Apakah Anda yakin ingin menghapus barang ini?",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: () => {
+            try {
+              ProductRepository.deleteProduct(id);
+              fetchProducts();
+            } catch (error) {
+              Alert.alert("Error", "Gagal menghapus produk");
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   // Hitung stok menipis untuk badge
   const lowStockCount = products.filter(
-    (p) => p.stock_quantity > 0 && p.stock_quantity <= (p.min_stock_threshold || 5)
+    (p) =>
+      p.stock_quantity > 0 && p.stock_quantity <= (p.min_stock_threshold || 5),
   ).length;
   const outOfStockCount = products.filter((p) => p.stock_quantity <= 0).length;
 
   return (
     <View style={styles.container}>
-
-      {/* ── Info Bar ── */}
+      {/* ── Info Bar (klik untuk filter isi) ── */}
       <View style={styles.infoBar}>
-        <View style={styles.infoItem}>
-          <MaterialCommunityIcons name="package-variant" size={16} color={colors.primary} />
+        <TouchableOpacity
+          style={[
+            styles.infoItem,
+            stockFilter === "all" && styles.infoItemActiveAll,
+          ]}
+          onPress={() => setStockFilter("all")}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.infoIconWrap, styles.infoIconAll]}>
+            <MaterialCommunityIcons
+              name="package-variant"
+              size={16}
+              color={colors.primary}
+            />
+          </View>
           <Text style={styles.infoValue}>{products.length}</Text>
           <Text style={styles.infoLabel}>Total Item</Text>
-        </View>
+        </TouchableOpacity>
         <View style={styles.infoSep} />
-        <View style={styles.infoItem}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.warning} />
-          <Text style={[styles.infoValue, { color: colors.warning }]}>{lowStockCount}</Text>
+        <TouchableOpacity
+          style={[
+            styles.infoItem,
+            stockFilter === "low" && styles.infoItemActiveLow,
+          ]}
+          onPress={() => {
+            if (stockFilter === "low") {
+              setStockFilter("all");
+            } else {
+              setStockFilter("low");
+              setSelectedCategory("Semua");
+              setSearchQuery("");
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.infoIconWrap, styles.infoIconLow]}>
+            <MaterialCommunityIcons
+              name="alert-circle-outline"
+              size={16}
+              color={colors.warning}
+            />
+          </View>
+          <Text style={[styles.infoValue, { color: colors.warning }]}>
+            {lowStockCount}
+          </Text>
           <Text style={styles.infoLabel}>Stok Menipis</Text>
-        </View>
+        </TouchableOpacity>
         <View style={styles.infoSep} />
-        <View style={styles.infoItem}>
-          <MaterialCommunityIcons name="close-circle-outline" size={16} color={colors.error} />
-          <Text style={[styles.infoValue, { color: colors.error }]}>{outOfStockCount}</Text>
+        <TouchableOpacity
+          style={[
+            styles.infoItem,
+            stockFilter === "out" && styles.infoItemActiveOut,
+          ]}
+          onPress={() => {
+            if (stockFilter === "out") {
+              setStockFilter("all");
+            } else {
+              setStockFilter("out");
+              setSelectedCategory("Semua");
+              setSearchQuery("");
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.infoIconWrap, styles.infoIconOut]}>
+            <MaterialCommunityIcons
+              name="close-circle-outline"
+              size={16}
+              color={colors.error}
+            />
+          </View>
+          <Text style={[styles.infoValue, { color: colors.error }]}>
+            {outOfStockCount}
+          </Text>
           <Text style={styles.infoLabel}>Habis</Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* ── Search Bar ── */}
@@ -132,8 +207,12 @@ const GudangScreen = ({ navigation }) => {
           onChangeText={setSearchQuery}
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <MaterialCommunityIcons name="close-circle" size={18} color={colors.textSecondary} />
+          <TouchableOpacity onPress={() => setSearchQuery("")}>
+            <MaterialCommunityIcons
+              name="close-circle"
+              size={18}
+              color={colors.textSecondary}
+            />
           </TouchableOpacity>
         )}
       </View>
@@ -147,9 +226,10 @@ const GudangScreen = ({ navigation }) => {
           style={{ flex: 1 }}
         >
           {categories.slice(0, 5).map((cat, idx) => {
-            const count = cat === 'Semua'
-              ? products.length
-              : products.filter(p => p.category === cat).length;
+            const count =
+              cat === "Semua"
+                ? products.length
+                : products.filter((p) => p.category === cat).length;
             return (
               <TouchableOpacity
                 key={idx}
@@ -167,14 +247,19 @@ const GudangScreen = ({ navigation }) => {
                 >
                   {cat}
                 </Text>
-                <View style={[
-                  styles.categoryCount,
-                  selectedCategory === cat && styles.categoryCountActive,
-                ]}>
-                  <Text style={[
-                    styles.categoryCountText,
-                    selectedCategory === cat && styles.categoryCountTextActive,
-                  ]}>
+                <View
+                  style={[
+                    styles.categoryCount,
+                    selectedCategory === cat && styles.categoryCountActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.categoryCountText,
+                      selectedCategory === cat &&
+                        styles.categoryCountTextActive,
+                    ]}
+                  >
                     {count}
                   </Text>
                 </View>
@@ -189,10 +274,16 @@ const GudangScreen = ({ navigation }) => {
           onPress={() => setShowCategoryModal(true)}
           activeOpacity={0.7}
         >
-          <MaterialCommunityIcons name="view-grid-outline" size={18} color={colors.primary} />
+          <MaterialCommunityIcons
+            name="view-grid-outline"
+            size={18}
+            color={colors.primary}
+          />
           {categories.length > 5 && (
             <View style={styles.categoryGridBtnBadge}>
-              <Text style={styles.categoryGridBtnBadgeText}>{categories.length - 1}</Text>
+              <Text style={styles.categoryGridBtnBadgeText}>
+                {categories.length - 1}
+              </Text>
             </View>
           )}
         </TouchableOpacity>
@@ -205,17 +296,25 @@ const GudangScreen = ({ navigation }) => {
         renderItem={({ item }) => (
           <ProductCard
             product={item}
-            onEdit={() => navigation.navigate('AddProductScreen', { product: item })}
+            onEdit={() =>
+              navigation.navigate("AddProductScreen", { product: item })
+            }
             onDelete={() => handleDelete(item.id)}
           />
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="package-variant-remove" size={56} color={colors.border} />
+            <MaterialCommunityIcons
+              name="package-variant-remove"
+              size={56}
+              color={colors.border}
+            />
             <Text style={styles.emptyText}>
-              {searchQuery || selectedCategory !== 'Semua'
-                ? 'Tidak ada barang ditemukan.'
-                : 'Belum ada barang di gudang.'}
+              {searchQuery ||
+              selectedCategory !== "Semua" ||
+              stockFilter !== "all"
+                ? "Tidak ada barang ditemukan."
+                : "Belum ada barang di gudang."}
             </Text>
           </View>
         }
@@ -225,7 +324,7 @@ const GudangScreen = ({ navigation }) => {
       {/* ── FAB Tambah Barang ── */}
       <TouchableOpacity
         style={[styles.fab, { bottom: fabBottom }]}
-        onPress={() => navigation.navigate('AddProductScreen')}
+        onPress={() => navigation.navigate("AddProductScreen")}
         activeOpacity={0.85}
       >
         <MaterialCommunityIcons name="plus" size={24} color="#fff" />
@@ -252,20 +351,32 @@ const GudangScreen = ({ navigation }) => {
           >
             {/* Header */}
             <View style={styles.catModalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
                 <View style={styles.catModalIconWrap}>
-                  <MaterialCommunityIcons name="shape-outline" size={20} color={colors.primary} />
+                  <MaterialCommunityIcons
+                    name="shape-outline"
+                    size={20}
+                    color={colors.primary}
+                  />
                 </View>
                 <View>
                   <Text style={styles.catModalTitle}>Pilih Kategori</Text>
-                  <Text style={styles.catModalSubtitle}>{categories.length - 1} kategori • {products.length} produk</Text>
+                  <Text style={styles.catModalSubtitle}>
+                    {categories.length - 1} kategori • {products.length} produk
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity
                 onPress={() => setShowCategoryModal(false)}
                 style={styles.catModalCloseBtn}
               >
-                <MaterialCommunityIcons name="close" size={20} color={colors.textSecondary} />
+                <MaterialCommunityIcons
+                  name="close"
+                  size={20}
+                  color={colors.textSecondary}
+                />
               </TouchableOpacity>
             </View>
 
@@ -275,11 +386,12 @@ const GudangScreen = ({ navigation }) => {
               contentContainerStyle={styles.catModalGrid}
             >
               {categories.map((cat, idx) => {
-                const count = cat === 'Semua'
-                  ? products.length
-                  : products.filter(p => p.category === cat).length;
+                const count =
+                  cat === "Semua"
+                    ? products.length
+                    : products.filter((p) => p.category === cat).length;
                 const isActive = selectedCategory === cat;
-                const iconName = cat === 'Semua' ? 'apps' : 'tag-outline';
+                const iconName = cat === "Semua" ? "apps" : "tag-outline";
 
                 return (
                   <TouchableOpacity
@@ -294,14 +406,16 @@ const GudangScreen = ({ navigation }) => {
                     }}
                     activeOpacity={0.7}
                   >
-                    <View style={[
-                      styles.catGridIconWrap,
-                      isActive && styles.catGridIconWrapActive,
-                    ]}>
+                    <View
+                      style={[
+                        styles.catGridIconWrap,
+                        isActive && styles.catGridIconWrapActive,
+                      ]}
+                    >
                       <MaterialCommunityIcons
                         name={iconName}
                         size={22}
-                        color={isActive ? '#FFFFFF' : colors.iconColor}
+                        color={isActive ? "#FFFFFF" : colors.iconColor}
                       />
                     </View>
                     <Text
@@ -313,15 +427,21 @@ const GudangScreen = ({ navigation }) => {
                     >
                       {cat}
                     </Text>
-                    <Text style={[
-                      styles.catGridCount2,
-                      isActive && styles.catGridCountActive,
-                    ]}>
+                    <Text
+                      style={[
+                        styles.catGridCount2,
+                        isActive && styles.catGridCountActive,
+                      ]}
+                    >
                       {count} produk
                     </Text>
                     {isActive && (
                       <View style={styles.catGridCheckmark}>
-                        <MaterialCommunityIcons name="check-circle" size={16} color={colors.primary} />
+                        <MaterialCommunityIcons
+                          name="check-circle"
+                          size={16}
+                          color={colors.primary}
+                        />
                       </View>
                     )}
                   </TouchableOpacity>
@@ -340,48 +460,81 @@ const styles = StyleSheet.create({
 
   // Info bar
   infoBar: {
-    flexDirection: 'row',
+    flexDirection: "row",
     backgroundColor: colors.surface,
     marginHorizontal: 12,
     marginTop: 12,
-    marginBottom: 4,
-    borderRadius: 12,
+    marginBottom: 6,
+    borderRadius: 16,
     paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     borderWidth: 1,
     borderColor: colors.border,
-    elevation: 1,
-    alignItems: 'center',
-    justifyContent: 'space-around',
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+    alignItems: "center",
+    justifyContent: "space-around",
   },
   infoItem: {
     flex: 1,
-    alignItems: 'center',
-    gap: 2,
+    alignItems: "center",
+    gap: 3,
+    paddingVertical: 8,
+    marginHorizontal: 3,
+    borderRadius: 12,
+  },
+  infoItemActiveAll: {
+    backgroundColor: "rgba(15, 23, 42, 0.06)",
+  },
+  infoItemActiveLow: {
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+  },
+  infoItemActiveOut: {
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+  },
+  infoIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  infoIconAll: {
+    backgroundColor: "rgba(15, 23, 42, 0.08)",
+  },
+  infoIconLow: {
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+  },
+  infoIconOut: {
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
   },
   infoValue: {
     fontFamily: fonts.extraBold,
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: "800",
     color: colors.text,
-    marginTop: 2,
   },
   infoLabel: {
     fontFamily: fonts.medium,
     fontSize: 10,
     color: colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
+    letterSpacing: 0.2,
   },
   infoSep: {
     width: 1,
-    height: 36,
+    height: 44,
     backgroundColor: colors.border,
   },
 
   // Search
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.surface,
     marginHorizontal: 12,
     marginTop: 10,
@@ -402,13 +555,13 @@ const styles = StyleSheet.create({
 
   // Kategori - Smart Pill + Grid
   categoryBarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 6,
   },
   categoryPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
@@ -426,11 +579,11 @@ const styles = StyleSheet.create({
   categoryPillText: {
     fontFamily: fonts.semiBold,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.textSecondary,
   },
   categoryPillTextActive: {
-    color: '#fff',
+    color: "#fff",
   },
   categoryCount: {
     backgroundColor: colors.border,
@@ -438,94 +591,94 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 1,
     minWidth: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   categoryCountActive: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: "rgba(255,255,255,0.3)",
   },
   categoryCountText: {
     fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.textSecondary,
   },
   categoryCountTextActive: {
-    color: '#fff',
+    color: "#fff",
   },
   categoryGridBtn: {
     width: 40,
     height: 40,
     borderRadius: 14,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    position: 'relative',
+    borderColor: "#E2E8F0",
+    position: "relative",
   },
   categoryGridBtnBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: -4,
     right: -4,
     backgroundColor: colors.primary,
     borderRadius: 8,
     minWidth: 16,
     height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    borderColor: "#FFFFFF",
   },
   categoryGridBtnBadgeText: {
     fontSize: 9,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontWeight: "800",
+    color: "#FFFFFF",
   },
 
   // Category Grid Modal (Centered Card)
   catModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 16,
   },
   catModalCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 24,
-    width: '92%',
+    width: "92%",
     maxWidth: 420,
-    maxHeight: '75%',
+    maxHeight: "75%",
     paddingBottom: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     elevation: 10,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
   },
   catModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: "#F1F5F9",
   },
   catModalIconWrap: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
   },
   catModalTitle: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     color: colors.text,
   },
   catModalSubtitle: {
@@ -537,31 +690,31 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: "#E2E8F0",
   },
   catModalGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: 16,
     paddingTop: 16,
     gap: 10,
   },
   catGridItem: (screenWidth) => ({
     width: (screenWidth - 32 - 20) / 3,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
     borderRadius: 16,
     padding: 14,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    position: 'relative',
+    borderColor: "#E2E8F0",
+    position: "relative",
   }),
   catGridItemActive: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: "#EFF6FF",
     borderColor: colors.primary,
     borderWidth: 2,
   },
@@ -569,9 +722,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 8,
   },
   catGridIconWrapActive: {
@@ -579,9 +732,9 @@ const styles = StyleSheet.create({
   },
   catGridLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.text,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 2,
   },
   catGridLabelActive: {
@@ -590,20 +743,20 @@ const styles = StyleSheet.create({
   catGridCount2: {
     fontSize: 10,
     color: colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   catGridCountActive: {
     color: colors.primary,
   },
   catGridCheckmark: {
-    position: 'absolute',
+    position: "absolute",
     top: 6,
     right: 6,
   },
 
   // Empty state
   emptyContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingTop: 60,
     gap: 12,
   },
@@ -611,20 +764,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 14,
     color: colors.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
   },
 
   // FAB
   fab: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 24,
     left: 16,
     right: 16,
     backgroundColor: colors.primary,
     borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 14,
     gap: 8,
     elevation: 6,
@@ -635,8 +788,8 @@ const styles = StyleSheet.create({
   },
   fabText: {
     fontFamily: fonts.extraBold,
-    color: '#fff',
-    fontWeight: '800',
+    color: "#fff",
+    fontWeight: "800",
     fontSize: 14,
     letterSpacing: 0.5,
   },
