@@ -35,9 +35,9 @@ const GudangScreen = ({ navigation }) => {
       ? Math.max(insets.bottom + 24, 32)
       : Math.max(insets.bottom + 16, 24);
 
-  const fetchProducts = useCallback(() => {
+  const fetchProducts = useCallback(async () => {
     try {
-      const data = ProductRepository.getAllProducts();
+      const data = await ProductRepository.getAllProducts();
       setProducts(data);
 
       // Ambil kategori unik dari produk
@@ -89,9 +89,9 @@ const GudangScreen = ({ navigation }) => {
         {
           text: "Hapus",
           style: "destructive",
-          onPress: () => {
+          onPress: async () => {
             try {
-              ProductRepository.deleteProduct(id);
+              await ProductRepository.deleteProduct(id);
               fetchProducts();
             } catch (error) {
               Alert.alert("Error", "Gagal menghapus produk");

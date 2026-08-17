@@ -55,12 +55,12 @@ const DashboardScreen = ({ navigation }) => {
     return `${y}-${m}-${d}`;
   };
 
-  const loadDashboardData = useCallback(() => {
+  const loadDashboardData = useCallback(async () => {
     try {
       // 1. Data Produk & Stok
-      const products = ProductRepository.getAllProducts();
+      const products = await ProductRepository.getAllProducts();
       setTotalProducts(products.length);
-      const lowStock = ProductRepository.getLowStockProducts();
+      const lowStock = await ProductRepository.getLowStockProducts();
       setLowStockProducts(lowStock);
 
       // 2. Filter transaksi sesuai mode yang dipilih
@@ -69,7 +69,7 @@ const DashboardScreen = ({ navigation }) => {
 
       if (filterMode === "daily") {
         const dateStr = formatYMD(selectedYear, selectedMonth, selectedDay);
-        filteredTx = TransactionRepository.getTransactionsByDate(dateStr);
+        filteredTx = await TransactionRepository.getTransactionsByDate(dateStr);
 
         const dateObj = new Date(selectedYear, selectedMonth, selectedDay);
         subtitle = dateObj.toLocaleDateString("id-ID", {
@@ -80,10 +80,11 @@ const DashboardScreen = ({ navigation }) => {
         });
       } else if (filterMode === "monthly") {
         const yearMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
-        filteredTx = TransactionRepository.getMonthlyTransactions(yearMonthStr);
+        filteredTx =
+          await TransactionRepository.getMonthlyTransactions(yearMonthStr);
         subtitle = `Bulan ${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
       } else if (filterMode === "all") {
-        filteredTx = TransactionRepository.getMonthlyTransactions(""); // Semua
+        filteredTx = await TransactionRepository.getMonthlyTransactions(""); // Semua
         subtitle = "Semua Transaksi";
       }
 
@@ -97,7 +98,7 @@ const DashboardScreen = ({ navigation }) => {
       let laba = 0;
 
       try {
-        const fullReport = TransactionRepository.getFullReportForExport();
+        const fullReport = await TransactionRepository.getFullReportForExport();
         const invoiceSet = new Set(filteredTx.map((t) => t.invoice_number));
         laba = fullReport
           .filter((r) => invoiceSet.has(r.No_Nota))

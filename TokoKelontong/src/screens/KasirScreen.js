@@ -87,9 +87,9 @@ const KasirScreen = ({ navigation }) => {
     }, [dispatch]),
   );
 
-  const loadProducts = () => {
+  const loadProducts = async () => {
     try {
-      const products = ProductRepository.getAllProducts();
+      const products = await ProductRepository.getAllProducts();
       setAllProducts(products);
 
       const uniqueCats = Array.from(
@@ -120,15 +120,19 @@ const KasirScreen = ({ navigation }) => {
       return;
     }
     navigation.navigate("BarcodeScanner", {
-      onBarcodeScanned: (code) => {
-        const product = ProductRepository.getProductByBarcode(code);
-        if (product) {
-          addToCart(product);
-        } else {
-          Alert.alert(
-            "Tidak Ditemukan",
-            `Produk dengan barcode ${code} belum terdaftar di gudang.`,
-          );
+      onBarcodeScanned: async (code) => {
+        try {
+          const product = await ProductRepository.getProductByBarcode(code);
+          if (product) {
+            addToCart(product);
+          } else {
+            Alert.alert(
+              "Tidak Ditemukan",
+              `Produk dengan barcode ${code} belum terdaftar di gudang.`,
+            );
+          }
+        } catch (e) {
+          Alert.alert("Error", "Gagal mencari produk: " + e.message);
         }
       },
     });
@@ -207,7 +211,7 @@ const KasirScreen = ({ navigation }) => {
       return;
     }
     try {
-      const txId = TransactionRepository.createTransaction(
+      const txId = await TransactionRepository.createTransaction(
         cart,
         totalHarga,
         diskon,
@@ -216,8 +220,10 @@ const KasirScreen = ({ navigation }) => {
         kembalian,
       );
 
-      const todayStr = new Date().toISOString().split("T")[0];
-      const todayTxs = TransactionRepository.getTransactionsByDate(todayStr);
+      const nowDate = new Date();
+      const todayStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
+      const todayTxs =
+        await TransactionRepository.getTransactionsByDate(todayStr);
       const fullTx = todayTxs.find((t) => t.id === txId);
 
       setShowCartModal(false);
@@ -226,7 +232,7 @@ const KasirScreen = ({ navigation }) => {
       dispatch({ type: "CLEAR_CART" });
 
       try {
-        const details = TransactionRepository.getTransactionDetails(txId);
+        const details = await TransactionRepository.getTransactionDetails(txId);
         setLastTxDetails(details);
       } catch (_) {
         setLastTxDetails([]);

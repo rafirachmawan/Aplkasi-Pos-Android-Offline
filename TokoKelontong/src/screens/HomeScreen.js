@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 
 import { AppContext } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 import TransactionRepository from "../database/transactionRepository";
 import { colors, fonts } from "../theme/colors";
 
@@ -26,6 +27,8 @@ const formatRupiah = (value) => {
 
 const HomeScreen = ({ navigation }) => {
   const { state } = useContext(AppContext);
+  const { profile } = useAuth();
+  const cloudStoreName = profile?.stores?.store_name;
   const [hideBalance, setHideBalance] = useState(false);
   const [todaySummary, setTodaySummary] = useState({
     omzet: 0,
@@ -35,13 +38,18 @@ const HomeScreen = ({ navigation }) => {
 
   useFocusEffect(
     useCallback(() => {
-      try {
-        const todayStr = new Date().toISOString().split("T")[0];
-        const summary = TransactionRepository.getSummaryByDatePattern(todayStr);
-        setTodaySummary(summary);
-      } catch (e) {
-        console.error("Error loading home stats:", e);
-      }
+      const load = async () => {
+        try {
+          const nowDate = new Date();
+          const todayStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
+          const summary =
+            await TransactionRepository.getSummaryByDatePattern(todayStr);
+          setTodaySummary(summary);
+        } catch (e) {
+          console.error("Error loading home stats:", e);
+        }
+      };
+      load();
     }, []),
   );
 
@@ -83,7 +91,7 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.headerTopRow}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {state.storeName || "MarketPos"}
+              {cloudStoreName || state.storeName || "MarketPos"}
             </Text>
 
             <View style={styles.dateRow}>

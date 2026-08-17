@@ -1,78 +1,158 @@
-import db from './db';
+import { supabase } from "../services/supabaseClient";
+
+// store_id toko milik user yang sedang login (di-cache setelah diambil).
+let cachedStoreId = null;
+async function getStoreId() {
+  if (cachedStoreId) return cachedStoreId;
+  const { data, error } = await supabase.rpc("current_store_id");
+  if (error) throw error;
+  if (!data) throw new Error("Akun belum terdaftar ke toko mana pun.");
+  cachedStoreId = data;
+  return cachedStoreId;
+}
 
 class ProductRepository {
   /**
-   * Mengambil semua produk dari database, diurutkan berdasarkan nama (A-Z)
+   * Mengambil semua produk dari Supabase, diurutkan berdasarkan nama (A-Z)
    */
-  getAllProducts() {
-    return db.getAllSync('SELECT * FROM products ORDER BY product_name ASC');
+  async getAllProducts() {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("product_name", { ascending: true });
+    if (error) throw error;
+    return data || [];
   }
 
   /**
    * Mencari produk berdasarkan barcode
    */
-  getProductByBarcode(barcode) {
-    return db.getFirstSync('SELECT * FROM products WHERE barcode = ?', [barcode]);
+  async getProductByBarcode(barcode) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("barcode", barcode)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
   }
 
   /**
    * Mencari produk berdasarkan nama (sebagian atau penuh)
    */
-  searchProductByName(keyword) {
-    const searchPattern = `%${keyword}%`;
-    return db.getAllSync('SELECT * FROM products WHERE product_name LIKE ? ORDER BY product_name ASC', [searchPattern]);
+  async searchProductByName(keyword) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .ilike("product_name", `%${keyword}%`)
+      .order("product_name", { ascending: true });
+    if (error) throw error;
+    return data || [];
   }
 
   /**
-   * Mengambil produk yang stoknya menipis
+   * Mengambil produk yang stoknya menipis (termasuk habis)
    */
-  getLowStockProducts() {
-    return db.getAllSync('SELECT * FROM products WHERE stock_quantity <= min_stock_threshold ORDER BY stock_quantity ASC');
+  async getLowStockProducts() {
+    const all = await this.getAllProducts();
+    return all
+      .filter((p) => p.stock_quantity <= (p.min_stock_threshold || 5))
+      .sort((a, b) => a.stock_quantity - b.stock_quantity);
   }
 
   /**
-   * Menambahkan produk baru
+   * Menambahkan produk baru (store_id otomatis milik akun login)
    */
-  addProduct(product) {
-    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold = 5, image_uri = null, unit = 'pack', category = 'makanan' } = product;
-    
-    // Validasi barcode unik
+  async addProduct(product) {
+    const {
+      barcode,
+      product_name,
+      capital_price,
+      selling_price,
+      stock_quantity,
+      min_stock_threshold = 5,
+      image_uri = null,
+      unit = "pack",
+      category = "makanan",
+    } = product;
+
+    // Validasi barcode unik (pesan ramah seperti versi lokal)
     if (barcode) {
-      const existing = this.getProductByBarcode(barcode);
+      const existing = await this.getProductByBarcode(barcode);
       if (existing) {
-        throw new Error(`Barcode sudah terdaftar untuk produk: ${existing.product_name}.`);
+        throw new Error(
+          `Barcode sudah terdaftar untuk produk: ${existing.product_name}.`,
+        );
       }
     }
 
-    const result = db.runSync(
-      `INSERT INTO products (barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit, category)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit, category]
-    );
-    return result.lastInsertRowId;
+    const storeId = await getStoreId();
+    const { data, error } = await supabase
+      .from("products")
+      .insert({
+        store_id: storeId,
+        barcode,
+        product_name,
+        capital_price,
+        selling_price,
+        stock_quantity,
+        min_stock_threshold,
+        image_uri,
+        unit,
+        category,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data.id;
   }
 
   /**
    * Memperbarui data produk berdasarkan ID
    */
-  updateProduct(id, product) {
-    const { barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri = null, unit = 'pack', category = 'makanan' } = product;
-    
-    const result = db.runSync(
-      `UPDATE products 
-       SET barcode = ?, product_name = ?, capital_price = ?, selling_price = ?, stock_quantity = ?, min_stock_threshold = ?, image_uri = ?, unit = ?, category = ?
-       WHERE id = ?`,
-      [barcode, product_name, capital_price, selling_price, stock_quantity, min_stock_threshold, image_uri, unit, category, id]
-    );
-    return result.changes > 0;
+  async updateProduct(id, product) {
+    const {
+      barcode,
+      product_name,
+      capital_price,
+      selling_price,
+      stock_quantity,
+      min_stock_threshold,
+      image_uri = null,
+      unit = "pack",
+      category = "makanan",
+    } = product;
+
+    const { data, error } = await supabase
+      .from("products")
+      .update({
+        barcode,
+        product_name,
+        capital_price,
+        selling_price,
+        stock_quantity,
+        min_stock_threshold,
+        image_uri,
+        unit,
+        category,
+      })
+      .eq("id", id)
+      .select();
+    if (error) throw error;
+    return (data || []).length > 0;
   }
 
   /**
    * Menghapus produk berdasarkan ID
    */
-  deleteProduct(id) {
-    const result = db.runSync('DELETE FROM products WHERE id = ?', [id]);
-    return result.changes > 0;
+  async deleteProduct(id) {
+    const { data, error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", id)
+      .select();
+    if (error) throw error;
+    return (data || []).length > 0;
   }
 }
 

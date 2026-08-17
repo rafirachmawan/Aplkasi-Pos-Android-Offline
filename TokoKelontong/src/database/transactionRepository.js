@@ -1,133 +1,168 @@
-import db from './db';
-import { generateInvoiceNumber } from '../utils/helpers';
+import { supabase } from "../services/supabaseClient";
+
+// Konversi pola tanggal ('YYYY-MM-DD' / 'YYYY-MM' / '') menjadi rentang
+// timestamp ISO sesuai ZONA WAKTU PERANGKAT, agar query "hari ini / bulan ini"
+// cocok dengan jam toko (created_at di server disimpan dalam UTC).
+function rangeFromPattern(pattern = "") {
+  const p = String(pattern || "");
+  let start = null;
+  let end = null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p)) {
+    const [y, m, d] = p.split("-").map(Number);
+    start = new Date(y, m - 1, d, 0, 0, 0, 0);
+    end = new Date(y, m - 1, d + 1, 0, 0, 0, 0);
+  } else if (/^\d{4}-\d{2}$/.test(p)) {
+    const [y, m] = p.split("-").map(Number);
+    start = new Date(y, m - 1, 1, 0, 0, 0, 0);
+    end = new Date(y, m, 1, 0, 0, 0, 0);
+  }
+  return {
+    start: start ? start.toISOString() : null,
+    end: end ? end.toISOString() : null,
+  };
+}
+
+async function fetchTransactions(pattern) {
+  const { start, end } = rangeFromPattern(pattern);
+  let query = supabase
+    .from("transactions")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (start) query = query.gte("created_at", start);
+  if (end) query = query.lt("created_at", end);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
 
 class TransactionRepository {
   /**
-   * Membuat transaksi baru secara atomik (menggunakan SQLite transaction)
-   * Menyimpan ke tabel `transactions` dan `transaction_details`, serta memotong `stock_quantity` di tabel `products`.
+   * Membuat transaksi via fungsi `checkout` di Supabase:
+   * stok divalidasi & dikurangi atomik di server (anti bentrok 2 HP),
+   * nomor nota dibuat unik per toko per hari.
+   * Return: id transaksi (uuid).
    */
-  createTransaction(items, total_price, discount_amount, grand_total, cash_received, cash_return) {
-    let transactionId = null;
-    
-    // expo-sqlite with runSync inside a transaction block
-    // We can simulate transaction logic using BEGIN and COMMIT if needed, but modern expo-sqlite provides explicit transactions if available.
-    // Assuming simple BEGIN / COMMIT.
-    try {
-      db.execSync('BEGIN TRANSACTION;');
+  async createTransaction(
+    items,
+    total_price,
+    discount_amount,
+    grand_total,
+    cash_received,
+    cash_return,
+  ) {
+    const pItems = items.map((i) => ({
+      product_id: i.product_id,
+      product_name: i.product_name || "",
+      quantity: i.quantity,
+      price_at_sale: i.selling_price,
+      capital_at_sale: i.capital_price,
+    }));
 
-      const invoice_number = generateInvoiceNumber();
-
-      // Dapatkan waktu lokal HP dengan format YYYY-MM-DD HH:MM:SS
-      const now = new Date();
-      const tzOffset = now.getTimezoneOffset() * 60000; // offset in milliseconds
-      const localTimeStr = (new Date(Date.now() - tzOffset)).toISOString().replace('T', ' ').slice(0, 19);
-      
-      // 1. Insert ke transactions
-      const txResult = db.runSync(
-        `INSERT INTO transactions (invoice_number, total_price, discount_amount, grand_total, cash_received, cash_return, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [invoice_number, total_price, discount_amount, grand_total, cash_received, cash_return, localTimeStr]
-      );
-      
-      transactionId = txResult.lastInsertRowId;
-
-      // 2. Loop per item untuk insert detail dan update stok
-      for (const item of items) {
-        db.runSync(
-          `INSERT INTO transaction_details (transaction_id, product_id, quantity, price_at_sale, capital_at_sale)
-           VALUES (?, ?, ?, ?, ?)`,
-          [transactionId, item.product_id, item.quantity, item.selling_price, item.capital_price]
-        );
-
-        db.runSync(
-          `UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?`,
-          [item.quantity, item.product_id]
+    const { data, error } = await supabase.rpc("checkout", {
+      p_items: pItems,
+      p_total_price: total_price,
+      p_discount_amount: discount_amount,
+      p_grand_total: grand_total,
+      p_cash_received: cash_received,
+      p_cash_return: cash_return,
+    });
+    if (error) {
+      const msg = String(error.message || "");
+      if (msg.includes("insufficient_stock")) {
+        throw new Error(
+          "Stok tidak mencukupi untuk salah satu item (mungkin baru terjual di kasir lain). Muat ulang produk.",
         );
       }
-
-      db.execSync('COMMIT;');
-      return transactionId;
-    } catch (error) {
-      db.execSync('ROLLBACK;');
       throw new Error(`Gagal menyimpan transaksi: ${error.message}`);
     }
+    return data.id;
   }
 
   /**
-   * Mendapatkan transaksi berdasarkan tanggal tertentu
+   * Mendapatkan transaksi pada tanggal tertentu (YYYY-MM-DD waktu lokal)
    */
-  getTransactionsByDate(dateStr) { // dateStr format: YYYY-MM-DD
-    const searchPattern = `${dateStr}%`;
-    return db.getAllSync('SELECT * FROM transactions WHERE created_at LIKE ? ORDER BY created_at DESC', [searchPattern]);
+  getTransactionsByDate(dateStr) {
+    return fetchTransactions(dateStr);
   }
 
   /**
-   * Mendapatkan transaksi untuk bulan tertentu
+   * Mendapatkan transaksi untuk bulan tertentu (YYYY-MM), atau semua bila ''
    */
-  getMonthlyTransactions(yearMonthStr) { // yearMonthStr format: YYYY-MM
-    const searchPattern = `${yearMonthStr}%`;
-    return db.getAllSync('SELECT * FROM transactions WHERE created_at LIKE ? ORDER BY created_at DESC', [searchPattern]);
+  getMonthlyTransactions(yearMonthStr) {
+    return fetchTransactions(yearMonthStr);
   }
 
   /**
-   * Mengambil data lengkap untuk ekspor CSV (JOIN 3 tabel)
+   * Data lengkap untuk ekspor CSV (nota + detail, nama barang snapshot)
    */
-  getFullReportForExport() {
-    return db.getAllSync(`
-      SELECT 
-        date(t.created_at) as Tanggal,
-        t.invoice_number as No_Nota,
-        p.product_name as Nama_Barang,
-        td.quantity as Qty,
-        td.capital_at_sale as Harga_Modal,
-        td.price_at_sale as Harga_Jual,
-        (td.quantity * td.price_at_sale) as Total_Penjualan,
-        (td.quantity * (td.price_at_sale - td.capital_at_sale)) as Total_Keuntungan
-      FROM transactions t
-      JOIN transaction_details td ON t.id = td.transaction_id
-      JOIN products p ON td.product_id = p.id
-      ORDER BY t.created_at DESC
-    `);
+  async getFullReportForExport() {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select(
+        "invoice_number, created_at, transaction_details(product_name, quantity, price_at_sale, capital_at_sale)",
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+
+    const rows = [];
+    for (const t of data || []) {
+      const d = new Date(t.created_at); // tanggal lokal perangkat
+      const tanggal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      for (const td of t.transaction_details || []) {
+        rows.push({
+          Tanggal: tanggal,
+          No_Nota: t.invoice_number,
+          Nama_Barang: td.product_name,
+          Qty: td.quantity,
+          Harga_Modal: td.capital_at_sale,
+          Harga_Jual: td.price_at_sale,
+          Total_Penjualan: td.quantity * td.price_at_sale,
+          Total_Keuntungan:
+            td.quantity * (td.price_at_sale - td.capital_at_sale),
+        });
+      }
+    }
+    return rows;
   }
 
   /**
    * Mengambil detail item untuk satu transaksi
    */
-  getTransactionDetails(transactionId) {
-    return db.getAllSync(`
-      SELECT td.*, p.product_name 
-      FROM transaction_details td
-      JOIN products p ON td.product_id = p.id
-      WHERE td.transaction_id = ?
-    `, [transactionId]);
+  async getTransactionDetails(transactionId) {
+    const { data, error } = await supabase
+      .from("transaction_details")
+      .select("*")
+      .eq("transaction_id", transactionId);
+    if (error) throw error;
+    return data || [];
   }
 
   /**
-   * Menghitung total Omzet & Laba Bersih secara langsung via SQL Aggregation
+   * Total Omzet, Laba Bersih, dan jumlah transaksi sesuai pola tanggal
+   * ('' = semua, 'YYYY-MM' = bulan, 'YYYY-MM-DD' = hari)
    */
-  getSummaryByDatePattern(datePattern = '') {
-    const pattern = `${datePattern}%`;
+  async getSummaryByDatePattern(datePattern = "") {
+    const { start, end } = rangeFromPattern(datePattern);
+    let query = supabase
+      .from("transactions")
+      .select(
+        "grand_total, transaction_details(quantity, price_at_sale, capital_at_sale)",
+      );
+    if (start) query = query.gte("created_at", start);
+    if (end) query = query.lt("created_at", end);
+    const { data, error } = await query;
+    if (error) throw error;
 
-    // 1. Total Omzet & Count Transaksi
-    const txRow = db.getFirstSync(
-      `SELECT COALESCE(SUM(grand_total), 0) as omzet, COUNT(id) as count FROM transactions WHERE created_at LIKE ?`,
-      [pattern]
-    ) || { omzet: 0, count: 0 };
-
-    // 2. Total Laba Bersih (Total Jual - Total Modal) dari transaksi yang sesuai
-    const profitRow = db.getFirstSync(
-      `SELECT COALESCE(SUM(td.quantity * (td.price_at_sale - td.capital_at_sale)), 0) as laba
-       FROM transactions t
-       JOIN transaction_details td ON t.id = td.transaction_id
-       WHERE t.created_at LIKE ?`,
-      [pattern]
-    ) || { laba: 0 };
-
-    return {
-      omzet: txRow.omzet || 0,
-      laba: profitRow.laba || 0,
-      count: txRow.count || 0,
-    };
+    let omzet = 0;
+    let laba = 0;
+    for (const t of data || []) {
+      omzet += t.grand_total || 0;
+      for (const td of t.transaction_details || []) {
+        laba +=
+          td.quantity * ((td.price_at_sale || 0) - (td.capital_at_sale || 0));
+      }
+    }
+    return { omzet, laba, count: (data || []).length };
   }
 }
 

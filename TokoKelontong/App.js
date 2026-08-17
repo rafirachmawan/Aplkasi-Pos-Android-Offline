@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { Provider as PaperProvider, DefaultTheme } from 'react-native-paper';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import React from "react";
+import { NavigationContainer } from "@react-navigation/native";
+import { Provider as PaperProvider, DefaultTheme } from "react-native-paper";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
   useFonts,
   Inter_400Regular,
@@ -9,11 +9,11 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
   Inter_800ExtraBold,
-} from '@expo-google-fonts/inter';
-import { AppProvider } from './src/context/AppContext';
-import AppNavigator from './src/navigation/AppNavigator';
-import { colors } from './src/theme/colors';
-import { initDB } from './src/database/db';
+} from "@expo-google-fonts/inter";
+import { AppProvider } from "./src/context/AppContext";
+import { AuthProvider } from "./src/context/AuthContext";
+import AppNavigator from "./src/navigation/AppNavigator";
+import { colors } from "./src/theme/colors";
 
 const theme = {
   ...DefaultTheme,
@@ -37,30 +37,21 @@ export default function App() {
     Inter_800ExtraBold,
   });
 
-  useEffect(() => {
-    // Inisialisasi Database saat aplikasi pertama kali dibuka
-    try {
-      initDB();
-      console.log('Database initialized successfully');
-    } catch (e) {
-      console.error('Failed to initialize database', e);
-    }
-  }, []);
-
   if (!fontsLoaded) {
     return null;
   }
 
   return (
     <SafeAreaProvider>
-      <AppProvider>
-        <PaperProvider theme={theme}>
-          <NavigationContainer>
-            <AppNavigator />
-          </NavigationContainer>
-        </PaperProvider>
-      </AppProvider>
+      <AuthProvider>
+        <AppProvider>
+          <PaperProvider theme={theme}>
+            <NavigationContainer>
+              <AppNavigator />
+            </NavigationContainer>
+          </PaperProvider>
+        </AppProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }
-

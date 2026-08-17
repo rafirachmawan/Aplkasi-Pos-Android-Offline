@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   ScrollView,
@@ -12,33 +12,33 @@ import {
   TextInput as RNTextInput,
   StatusBar,
   Linking,
-} from 'react-native';
-import { TextInput, Button } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import * as Print from 'expo-print';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import ProductRepository from '../database/productRepository';
-import { colors, fonts } from '../theme/colors';
+} from "react-native";
+import { TextInput, Button } from "react-native-paper";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import * as Print from "expo-print";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import ProductRepository from "../database/productRepository";
+import { colors, fonts } from "../theme/colors";
 
 // ─── Helper: format angka menjadi format Rupiah saat diketik ───────────────
 const formatToRp = (raw) => {
-  const num = raw.replace(/\D/g, '');
-  if (!num) return '';
-  return parseInt(num, 10).toLocaleString('id-ID');
+  const num = raw.replace(/\D/g, "");
+  if (!num) return "";
+  return parseInt(num, 10).toLocaleString("id-ID");
 };
 
 const parseRp = (formatted) => {
   if (!formatted) return 0;
-  const cleaned = String(formatted).replace(/\D/g, '');
+  const cleaned = String(formatted).replace(/\D/g, "");
   return parseInt(cleaned, 10) || 0;
 };
 
-const DEFAULT_UNITS = ['pack'];
-const UNITS_STORAGE_KEY = 'product_units';
+const DEFAULT_UNITS = ["pack"];
+const UNITS_STORAGE_KEY = "product_units";
 
-const DEFAULT_CATEGORIES = ['makanan', 'minuman'];
-const CATEGORIES_STORAGE_KEY = 'product_categories';
+const DEFAULT_CATEGORIES = ["makanan", "minuman"];
+const CATEGORIES_STORAGE_KEY = "product_categories";
 
 // ─── Komponen BarcodeDisplay menggunakan SVG ───────────────────────────────
 // Barcode Code128 sederhana (batang ganjil & genap) menggunakan SVG manual
@@ -67,9 +67,12 @@ const SimpleBarcodeDisplay = ({ value }) => {
   const totalWidth = x + 15;
 
   const svgBars = bars
-    .filter(b => b.filled)
-    .map((b, i) => `<rect x="${b.x}" y="0" width="${b.width}" height="${height}" fill="black"/>`)
-    .join('');
+    .filter((b) => b.filled)
+    .map(
+      (b, i) =>
+        `<rect x="${b.x}" y="0" width="${b.width}" height="${height}" fill="black"/>`,
+    )
+    .join("");
 
   const svgString = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${height + 20}">
@@ -90,7 +93,7 @@ const SimpleBarcodeDisplay = ({ value }) => {
             style={{
               width: bar.width,
               height: 60,
-              backgroundColor: bar.filled ? '#000' : 'transparent',
+              backgroundColor: bar.filled ? "#000" : "transparent",
             }}
           />
         ))}
@@ -102,22 +105,22 @@ const SimpleBarcodeDisplay = ({ value }) => {
 
 const barcodeStyles = StyleSheet.create({
   container: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 12,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   barcodeArea: {
-    flexDirection: 'row',
+    flexDirection: "row",
     height: 60,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     paddingHorizontal: 8,
   },
   barcodeText: {
     fontSize: 13,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
     marginTop: 6,
     letterSpacing: 2,
-    color: '#000',
+    color: "#000",
   },
 });
 
@@ -126,36 +129,36 @@ const AddProductScreen = ({ navigation, route }) => {
   const existingProduct = route.params?.product;
   const scannedBarcode = route.params?.scannedBarcode;
 
-  const [barcode, setBarcode] = useState('');
-  const [productName, setProductName] = useState('');
-  const [capitalPrice, setCapitalPrice] = useState('');
-  const [sellingPrice, setSellingPrice] = useState('');
-  const [stockQuantity, setStockQuantity] = useState('');
-  const [minStock, setMinStock] = useState('5');
+  const [barcode, setBarcode] = useState("");
+  const [productName, setProductName] = useState("");
+  const [capitalPrice, setCapitalPrice] = useState("");
+  const [sellingPrice, setSellingPrice] = useState("");
+  const [stockQuantity, setStockQuantity] = useState("");
+  const [minStock, setMinStock] = useState("5");
   const [imageUri, setImageUri] = useState(null);
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
-  const [unit, setUnit] = useState('pack');
+  const [unit, setUnit] = useState("pack");
 
   // Unit CRUD state
   const [units, setUnits] = useState(DEFAULT_UNITS);
   const [showAddUnitModal, setShowAddUnitModal] = useState(false);
   const [showEditUnitModal, setShowEditUnitModal] = useState(false);
-  const [newUnitInput, setNewUnitInput] = useState('');
+  const [newUnitInput, setNewUnitInput] = useState("");
   const [editingUnit, setEditingUnit] = useState(null); // { index, value }
-  const [editUnitInput, setEditUnitInput] = useState('');
+  const [editUnitInput, setEditUnitInput] = useState("");
 
   // Image Source Selection Modal state
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
   const [pendingSource, setPendingSource] = useState(null);
 
   // Category CRUD state
-  const [category, setCategory] = useState('makanan');
+  const [category, setCategory] = useState("makanan");
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
-  const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [newCategoryInput, setNewCategoryInput] = useState("");
   const [editingCategory, setEditingCategory] = useState(null);
-  const [editCategoryInput, setEditCategoryInput] = useState('');
+  const [editCategoryInput, setEditCategoryInput] = useState("");
 
   // Load units from storage
   useEffect(() => {
@@ -186,12 +189,12 @@ const AddProductScreen = ({ navigation, route }) => {
     const val = newUnitInput.trim().toLowerCase();
     if (!val) return;
     if (units.includes(val)) {
-      Alert.alert('Duplikat', `Satuan "${val}" sudah ada.`);
+      Alert.alert("Duplikat", `Satuan "${val}" sudah ada.`);
       return;
     }
     await saveUnits([...units, val]);
     setUnit(val);
-    setNewUnitInput('');
+    setNewUnitInput("");
     setShowAddUnitModal(false);
   };
 
@@ -199,7 +202,7 @@ const AddProductScreen = ({ navigation, route }) => {
     const val = editUnitInput.trim().toLowerCase();
     if (!val || editingUnit === null) return;
     if (units.includes(val) && val !== editingUnit.value) {
-      Alert.alert('Duplikat', `Satuan "${val}" sudah ada.`);
+      Alert.alert("Duplikat", `Satuan "${val}" sudah ada.`);
       return;
     }
     const updated = units.map((u, i) => (i === editingUnit.index ? val : u));
@@ -211,25 +214,21 @@ const AddProductScreen = ({ navigation, route }) => {
 
   const handleDeleteUnit = (u, index) => {
     if (units.length <= 1) {
-      Alert.alert('Tidak bisa', 'Minimal harus ada 1 satuan.');
+      Alert.alert("Tidak bisa", "Minimal harus ada 1 satuan.");
       return;
     }
-    Alert.alert(
-      'Hapus Satuan',
-      `Hapus satuan "${u}"?`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: async () => {
-            const updated = units.filter((_, i) => i !== index);
-            await saveUnits(updated);
-            if (unit === u) setUnit(updated[0]);
-          },
+    Alert.alert("Hapus Satuan", `Hapus satuan "${u}"?`, [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus",
+        style: "destructive",
+        onPress: async () => {
+          const updated = units.filter((_, i) => i !== index);
+          await saveUnits(updated);
+          if (unit === u) setUnit(updated[0]);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const saveCategories = async (newCats) => {
@@ -241,12 +240,12 @@ const AddProductScreen = ({ navigation, route }) => {
     const val = newCategoryInput.trim().toLowerCase();
     if (!val) return;
     if (categories.includes(val)) {
-      Alert.alert('Duplikat', `Kategori "${val}" sudah ada.`);
+      Alert.alert("Duplikat", `Kategori "${val}" sudah ada.`);
       return;
     }
     await saveCategories([...categories, val]);
     setCategory(val);
-    setNewCategoryInput('');
+    setNewCategoryInput("");
     setShowAddCategoryModal(false);
   };
 
@@ -254,10 +253,12 @@ const AddProductScreen = ({ navigation, route }) => {
     const val = editCategoryInput.trim().toLowerCase();
     if (!val || editingCategory === null) return;
     if (categories.includes(val) && val !== editingCategory.value) {
-      Alert.alert('Duplikat', `Kategori "${val}" sudah ada.`);
+      Alert.alert("Duplikat", `Kategori "${val}" sudah ada.`);
       return;
     }
-    const updated = categories.map((c, i) => (i === editingCategory.index ? val : c));
+    const updated = categories.map((c, i) =>
+      i === editingCategory.index ? val : c,
+    );
     await saveCategories(updated);
     if (category === editingCategory.value) setCategory(val);
     setShowEditCategoryModal(false);
@@ -266,38 +267,34 @@ const AddProductScreen = ({ navigation, route }) => {
 
   const handleDeleteCategory = (c, index) => {
     if (categories.length <= 1) {
-      Alert.alert('Tidak bisa', 'Minimal harus ada 1 kategori.');
+      Alert.alert("Tidak bisa", "Minimal harus ada 1 kategori.");
       return;
     }
-    Alert.alert(
-      'Hapus Kategori',
-      `Hapus kategori "${c}"?`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: async () => {
-            const updated = categories.filter((_, i) => i !== index);
-            await saveCategories(updated);
-            if (category === c) setCategory(updated[0]);
-          },
+    Alert.alert("Hapus Kategori", `Hapus kategori "${c}"?`, [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus",
+        style: "destructive",
+        onPress: async () => {
+          const updated = categories.filter((_, i) => i !== index);
+          await saveCategories(updated);
+          if (category === c) setCategory(updated[0]);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   useEffect(() => {
     if (existingProduct) {
-      setBarcode(existingProduct.barcode || '');
+      setBarcode(existingProduct.barcode || "");
       setProductName(existingProduct.product_name);
-      setCapitalPrice(existingProduct.capital_price.toLocaleString('id-ID'));
-      setSellingPrice(existingProduct.selling_price.toLocaleString('id-ID'));
+      setCapitalPrice(existingProduct.capital_price.toLocaleString("id-ID"));
+      setSellingPrice(existingProduct.selling_price.toLocaleString("id-ID"));
       setStockQuantity(existingProduct.stock_quantity.toString());
       setMinStock(existingProduct.min_stock_threshold.toString());
       setImageUri(existingProduct.image_uri || null);
-      setUnit(existingProduct.unit || 'pcs');
-      setCategory(existingProduct.category || 'makanan');
+      setUnit(existingProduct.unit || "pcs");
+      setCategory(existingProduct.category || "makanan");
     }
   }, [existingProduct]);
 
@@ -308,20 +305,20 @@ const AddProductScreen = ({ navigation, route }) => {
   // ── Image picker ──
   const handlePickImage = () => {
     Alert.alert(
-      'Foto Produk',
-      'Pilih lokasi pengambilan foto produk:',
+      "Foto Produk",
+      "Pilih lokasi pengambilan foto produk:",
       [
-        { text: 'Batal', style: 'cancel' },
+        { text: "Batal", style: "cancel" },
         {
-          text: 'Galeri Foto',
-          onPress: () => executePicker('gallery'),
+          text: "Galeri Foto",
+          onPress: () => executePicker("gallery"),
         },
         {
-          text: 'Kamera HP',
-          onPress: () => executePicker('camera'),
+          text: "Kamera HP",
+          onPress: () => executePicker("camera"),
         },
       ],
-      { cancelable: true }
+      { cancelable: true },
     );
   };
 
@@ -334,16 +331,20 @@ const AddProductScreen = ({ navigation, route }) => {
 
   const executePicker = async (source) => {
     try {
-      if (source === 'gallery') {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
+      if (source === "gallery") {
+        const { status } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
           Alert.alert(
-            'Akses Galeri Ditolak',
-            'Aplikasi membutuhkan izin untuk mengakses galeri foto. Silakan izinkan di Pengaturan HP Anda.',
+            "Akses Galeri Ditolak",
+            "Aplikasi membutuhkan izin untuk mengakses galeri foto. Silakan izinkan di Pengaturan HP Anda.",
             [
-              { text: 'Batal', style: 'cancel' },
-              { text: 'Buka Pengaturan', onPress: () => Linking.openSettings() },
-            ]
+              { text: "Batal", style: "cancel" },
+              {
+                text: "Buka Pengaturan",
+                onPress: () => Linking.openSettings(),
+              },
+            ],
           );
           return;
         }
@@ -363,19 +364,27 @@ const AddProductScreen = ({ navigation, route }) => {
           });
         }
 
-        if (result && !result.canceled && result.assets && result.assets.length > 0) {
+        if (
+          result &&
+          !result.canceled &&
+          result.assets &&
+          result.assets.length > 0
+        ) {
           setImageUri(result.assets[0].uri);
         }
-      } else if (source === 'camera') {
+      } else if (source === "camera") {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
+        if (status !== "granted") {
           Alert.alert(
-            'Akses Kamera Ditolak',
-            'Aplikasi membutuhkan izin untuk menggunakan kamera. Silakan izinkan di Pengaturan HP Anda.',
+            "Akses Kamera Ditolak",
+            "Aplikasi membutuhkan izin untuk menggunakan kamera. Silakan izinkan di Pengaturan HP Anda.",
             [
-              { text: 'Batal', style: 'cancel' },
-              { text: 'Buka Pengaturan', onPress: () => Linking.openSettings() },
-            ]
+              { text: "Batal", style: "cancel" },
+              {
+                text: "Buka Pengaturan",
+                onPress: () => Linking.openSettings(),
+              },
+            ],
           );
           return;
         }
@@ -395,39 +404,61 @@ const AddProductScreen = ({ navigation, route }) => {
           });
         }
 
-        if (result && !result.canceled && result.assets && result.assets.length > 0) {
+        if (
+          result &&
+          !result.canceled &&
+          result.assets &&
+          result.assets.length > 0
+        ) {
           setImageUri(result.assets[0].uri);
         }
       }
     } catch (e) {
-      console.error('ImagePicker Error:', e);
-      let errorMsg = e.message || 'Gagal membuka media';
-      if (errorMsg.toLowerCase().includes('camera is not available') || errorMsg.toLowerCase().includes('simulator')) {
-        errorMsg = 'Kamera tidak tersedia (misal di Simulator iOS). Gunakan HP fisik atau pilih dari Galeri.';
+      console.error("ImagePicker Error:", e);
+      let errorMsg = e.message || "Gagal membuka media";
+      if (
+        errorMsg.toLowerCase().includes("camera is not available") ||
+        errorMsg.toLowerCase().includes("simulator")
+      ) {
+        errorMsg =
+          "Kamera tidak tersedia (misal di Simulator iOS). Gunakan HP fisik atau pilih dari Galeri.";
       }
-      Alert.alert('Gagal Mengambil Foto', errorMsg);
+      Alert.alert("Gagal Mengambil Foto", errorMsg);
     }
   };
 
   // ── Barcode scanner ──
   const openBarcodeScanner = () => {
-    if (Platform.OS === 'web') {
-      Alert.alert('Info', 'Fitur scan barcode hanya tersedia di build Android.');
+    if (Platform.OS === "web") {
+      Alert.alert(
+        "Info",
+        "Fitur scan barcode hanya tersedia di build Android.",
+      );
       return;
     }
-    navigation.navigate('BarcodeScanner', {
-      onBarcodeScanned: (code) => {
+    navigation.navigate("BarcodeScanner", {
+      onBarcodeScanned: async (code) => {
         setBarcode(code);
         try {
-          const existing = ProductRepository.getProductByBarcode(code);
+          const existing = await ProductRepository.getProductByBarcode(code);
           if (existing && existing.id !== existingProduct?.id) {
             Alert.alert(
-              'Barcode Sudah Terdaftar',
+              "Barcode Sudah Terdaftar",
               `Barcode ini milik produk: "${existing.product_name}"\n\nApakah ingin mengedit produk tersebut?`,
               [
-                { text: 'Batal', style: 'cancel', onPress: () => setBarcode('') },
-                { text: 'Edit Produk', onPress: () => navigation.replace('AddProductScreen', { product: existing }) },
-              ]
+                {
+                  text: "Batal",
+                  style: "cancel",
+                  onPress: () => setBarcode(""),
+                },
+                {
+                  text: "Edit Produk",
+                  onPress: () =>
+                    navigation.replace("AddProductScreen", {
+                      product: existing,
+                    }),
+                },
+              ],
             );
           }
         } catch (_) {}
@@ -438,11 +469,14 @@ const AddProductScreen = ({ navigation, route }) => {
   // ── Cetak Label Barcode via HTML print ──
   const handlePrintBarcode = async () => {
     if (!barcode) {
-      Alert.alert('Barcode Kosong', 'Isi kolom barcode terlebih dahulu sebelum mencetak label.');
+      Alert.alert(
+        "Barcode Kosong",
+        "Isi kolom barcode terlebih dahulu sebelum mencetak label.",
+      );
       return;
     }
-    if (Platform.OS === 'web') {
-      Alert.alert('Info', 'Fitur cetak hanya tersedia di build Android.');
+    if (Platform.OS === "web") {
+      Alert.alert("Info", "Fitur cetak hanya tersedia di build Android.");
       return;
     }
     try {
@@ -463,11 +497,14 @@ const AddProductScreen = ({ navigation, route }) => {
       bars.unshift({ x: 2, width: 3, filled: true });
       bars.push({ x: x, width: 3, filled: true });
       const totalWidth = x + 15;
-      
+
       const svgBars = bars
-        .filter(b => b.filled)
-        .map(b => `<rect x="${b.x}" y="0" width="${b.width}" height="${height}" fill="black"/>`)
-        .join('');
+        .filter((b) => b.filled)
+        .map(
+          (b) =>
+            `<rect x="${b.x}" y="0" width="${b.width}" height="${height}" fill="black"/>`,
+        )
+        .join("");
 
       const svgString = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${height + 20}" style="max-width:260px; height:auto;">
@@ -480,7 +517,7 @@ const AddProductScreen = ({ navigation, route }) => {
         <html>
           <body style="margin:0;display:flex;justify-content:center;align-items:center;height:100vh;">
             <div style="text-align:center;border:1px solid #ccc;padding:16px;border-radius:8px;width:280px;">
-              <p style="font-size:14px;font-weight:bold;margin:0 0 8px;">${productName || 'Produk'}</p>
+              <p style="font-size:14px;font-weight:bold;margin:0 0 8px;">${productName || "Produk"}</p>
               ${svgString}
               <p style="font-family:monospace;letter-spacing:2px;font-size:12px;margin:4px 0 0;">${barcode}</p>
             </div>
@@ -489,14 +526,14 @@ const AddProductScreen = ({ navigation, route }) => {
       `;
       await Print.printAsync({ html });
     } catch (e) {
-      Alert.alert('Error Cetak', e.message);
+      Alert.alert("Error Cetak", e.message);
     }
   };
 
   // ── Save ──
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!productName || !capitalPrice || !sellingPrice || !stockQuantity) {
-      Alert.alert('Error', 'Harap isi semua kolom wajib (*)!');
+      Alert.alert("Error", "Harap isi semua kolom wajib (*)!");
       return;
     }
     const capPrice = parseRp(capitalPrice);
@@ -504,9 +541,18 @@ const AddProductScreen = ({ navigation, route }) => {
     const stock = parseInt(stockQuantity, 10);
     const minStockVal = parseInt(minStock, 10);
 
-    if (isNaN(capPrice) || capPrice < 0) { Alert.alert('Error', 'Harga modal tidak valid.'); return; }
-    if (isNaN(sellPrice) || sellPrice < 0) { Alert.alert('Error', 'Harga jual tidak valid.'); return; }
-    if (isNaN(stock) || stock < 0) { Alert.alert('Error', 'Stok tidak boleh negatif.'); return; }
+    if (isNaN(capPrice) || capPrice < 0) {
+      Alert.alert("Error", "Harga modal tidak valid.");
+      return;
+    }
+    if (isNaN(sellPrice) || sellPrice < 0) {
+      Alert.alert("Error", "Harga jual tidak valid.");
+      return;
+    }
+    if (isNaN(stock) || stock < 0) {
+      Alert.alert("Error", "Stok tidak boleh negatif.");
+      return;
+    }
 
     const data = {
       barcode: barcode.trim() || null,
@@ -522,14 +568,18 @@ const AddProductScreen = ({ navigation, route }) => {
 
     try {
       if (existingProduct) {
-        ProductRepository.updateProduct(existingProduct.id, data);
-        Alert.alert('✅ Sukses', 'Produk berhasil diperbarui.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        await ProductRepository.updateProduct(existingProduct.id, data);
+        Alert.alert("✅ Sukses", "Produk berhasil diperbarui.", [
+          { text: "OK", onPress: () => navigation.goBack() },
+        ]);
       } else {
-        ProductRepository.addProduct(data);
-        Alert.alert('✅ Sukses', 'Produk berhasil ditambahkan.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        await ProductRepository.addProduct(data);
+        Alert.alert("✅ Sukses", "Produk berhasil ditambahkan.", [
+          { text: "OK", onPress: () => navigation.goBack() },
+        ]);
       }
     } catch (error) {
-      Alert.alert('Error', error.message);
+      Alert.alert("Error", error.message);
     }
   };
 
@@ -554,8 +604,14 @@ const AddProductScreen = ({ navigation, route }) => {
             <Image source={{ uri: imageUri }} style={styles.productImage} />
           ) : (
             <View style={styles.imagePlaceholder}>
-              <MaterialCommunityIcons name="camera-plus" size={36} color={colors.primary} />
-              <Text style={styles.imagePlaceholderText}>Upload Foto Produk</Text>
+              <MaterialCommunityIcons
+                name="camera-plus"
+                size={36}
+                color={colors.primary}
+              />
+              <Text style={styles.imagePlaceholderText}>
+                Upload Foto Produk
+              </Text>
             </View>
           )}
           {imageUri && (
@@ -563,7 +619,11 @@ const AddProductScreen = ({ navigation, route }) => {
               style={styles.removeImageBtn}
               onPress={() => setImageUri(null)}
             >
-              <MaterialCommunityIcons name="close-circle" size={24} color="#EF4444" />
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={24}
+                color="#EF4444"
+              />
             </TouchableOpacity>
           )}
         </TouchableOpacity>
@@ -580,11 +640,22 @@ const AddProductScreen = ({ navigation, route }) => {
               style={styles.input}
               keyboardType="default"
               placeholder="Ketik atau scan barcode..."
-              right={barcode ? <TextInput.Icon icon="close-circle" onPress={() => setBarcode('')} /> : null}
+              right={
+                barcode ? (
+                  <TextInput.Icon
+                    icon="close-circle"
+                    onPress={() => setBarcode("")}
+                  />
+                ) : null
+              }
             />
           </View>
           <TouchableOpacity style={styles.iconBtn} onPress={openBarcodeScanner}>
-            <MaterialCommunityIcons name="barcode-scan" size={24} color="#fff" />
+            <MaterialCommunityIcons
+              name="barcode-scan"
+              size={24}
+              color="#fff"
+            />
           </TouchableOpacity>
         </View>
 
@@ -603,9 +674,9 @@ const AddProductScreen = ({ navigation, route }) => {
         <View style={styles.row}>
           <TextInput
             label="Harga Modal (Rp) *"
-            value={capitalPrice ? `Rp ${capitalPrice}` : ''}
+            value={capitalPrice ? `Rp ${capitalPrice}` : ""}
             onChangeText={(text) => {
-              const raw = text.replace(/^Rp\s?/, '');
+              const raw = text.replace(/^Rp\s?/, "");
               setCapitalPrice(formatToRp(raw));
             }}
             mode="outlined"
@@ -614,9 +685,9 @@ const AddProductScreen = ({ navigation, route }) => {
           />
           <TextInput
             label="Harga Jual (Rp) *"
-            value={sellingPrice ? `Rp ${sellingPrice}` : ''}
+            value={sellingPrice ? `Rp ${sellingPrice}` : ""}
             onChangeText={(text) => {
-              const raw = text.replace(/^Rp\s?/, '');
+              const raw = text.replace(/^Rp\s?/, "");
               setSellingPrice(formatToRp(raw));
             }}
             mode="outlined"
@@ -626,15 +697,28 @@ const AddProductScreen = ({ navigation, route }) => {
         </View>
 
         {/* ── Margin Preview ── */}
-        {(capitalPrice !== '' && sellingPrice !== '') && (
-          <View style={[styles.marginPreview, { borderColor: marginPositive ? colors.border : '#FCA5A5', backgroundColor: marginPositive ? colors.iconBg : '#FFF1F2' }]}>
+        {capitalPrice !== "" && sellingPrice !== "" && (
+          <View
+            style={[
+              styles.marginPreview,
+              {
+                borderColor: marginPositive ? colors.border : "#FCA5A5",
+                backgroundColor: marginPositive ? colors.iconBg : "#FFF1F2",
+              },
+            ]}
+          >
             <MaterialCommunityIcons
-              name={marginPositive ? 'trending-up' : 'trending-down'}
+              name={marginPositive ? "trending-up" : "trending-down"}
               size={16}
               color={marginPositive ? colors.primary : colors.error}
             />
-            <Text style={[styles.marginText, { color: marginPositive ? colors.primary : colors.error }]}>
-              Margin: Rp {margin.toLocaleString('id-ID')}  ({marginPct}%)
+            <Text
+              style={[
+                styles.marginText,
+                { color: marginPositive ? colors.primary : colors.error },
+              ]}
+            >
+              Margin: Rp {margin.toLocaleString("id-ID")} ({marginPct}%)
             </Text>
           </View>
         )}
@@ -642,7 +726,7 @@ const AddProductScreen = ({ navigation, route }) => {
         {/* ── Stok ── */}
         <View style={styles.row}>
           <TextInput
-            label={existingProduct ? 'Stok Saat Ini *' : 'Stok Awal *'}
+            label={existingProduct ? "Stok Saat Ini *" : "Stok Awal *"}
             value={stockQuantity}
             onChangeText={setStockQuantity}
             mode="outlined"
@@ -671,10 +755,7 @@ const AddProductScreen = ({ navigation, route }) => {
           {units.map((u, index) => (
             <TouchableOpacity
               key={u + index}
-              style={[
-                styles.unitPill,
-                unit === u && styles.unitPillActive,
-              ]}
+              style={[styles.unitPill, unit === u && styles.unitPillActive]}
               onPress={() => setUnit(u)}
               onLongPress={() => {
                 setEditingUnit({ index, value: u });
@@ -682,10 +763,12 @@ const AddProductScreen = ({ navigation, route }) => {
                 setShowEditUnitModal(true);
               }}
             >
-              <Text style={[
-                styles.unitPillText,
-                unit === u && styles.unitPillTextActive,
-              ]}>
+              <Text
+                style={[
+                  styles.unitPillText,
+                  unit === u && styles.unitPillTextActive,
+                ]}
+              >
                 {u}
               </Text>
             </TouchableOpacity>
@@ -694,7 +777,10 @@ const AddProductScreen = ({ navigation, route }) => {
 
         <Button
           mode="outlined"
-          onPress={() => { setNewUnitInput(''); setShowAddUnitModal(true); }}
+          onPress={() => {
+            setNewUnitInput("");
+            setShowAddUnitModal(true);
+          }}
           style={[styles.saveButton, { marginTop: 16 }]}
           textColor={colors.primary}
           icon="plus"
@@ -710,10 +796,7 @@ const AddProductScreen = ({ navigation, route }) => {
           {categories.map((c, index) => (
             <TouchableOpacity
               key={c + index}
-              style={[
-                styles.unitPill,
-                category === c && styles.unitPillActive,
-              ]}
+              style={[styles.unitPill, category === c && styles.unitPillActive]}
               onPress={() => setCategory(c)}
               onLongPress={() => {
                 setEditingCategory({ index, value: c });
@@ -721,10 +804,12 @@ const AddProductScreen = ({ navigation, route }) => {
                 setShowEditCategoryModal(true);
               }}
             >
-              <Text style={[
-                styles.unitPillText,
-                category === c && styles.unitPillTextActive,
-              ]}>
+              <Text
+                style={[
+                  styles.unitPillText,
+                  category === c && styles.unitPillTextActive,
+                ]}
+              >
                 {c}
               </Text>
             </TouchableOpacity>
@@ -733,7 +818,10 @@ const AddProductScreen = ({ navigation, route }) => {
 
         <Button
           mode="outlined"
-          onPress={() => { setNewCategoryInput(''); setShowAddCategoryModal(true); }}
+          onPress={() => {
+            setNewCategoryInput("");
+            setShowAddCategoryModal(true);
+          }}
           style={[styles.saveButton, { marginTop: 16 }]}
           textColor={colors.primary}
           icon="plus"
@@ -746,11 +834,11 @@ const AddProductScreen = ({ navigation, route }) => {
           onPress={handleSave}
           style={styles.saveButton}
           buttonColor={colors.primary}
-          labelStyle={{ fontWeight: 'bold', fontSize: 16 }}
+          labelStyle={{ fontWeight: "bold", fontSize: 16 }}
           contentStyle={{ paddingVertical: 6 }}
-          icon={existingProduct ? 'content-save' : 'plus'}
+          icon={existingProduct ? "content-save" : "plus"}
         >
-          {existingProduct ? 'SIMPAN PERUBAHAN' : 'TAMBAH BARANG'}
+          {existingProduct ? "SIMPAN PERUBAHAN" : "TAMBAH BARANG"}
         </Button>
 
         {existingProduct && (
@@ -765,340 +853,437 @@ const AddProductScreen = ({ navigation, route }) => {
         )}
       </ScrollView>
 
-        {/* ── Modal Label Barcode ── */}
-        <Modal
-          visible={showBarcodeModal}
-          transparent
-          statusBarTranslucent={true}
-          animationType="slide"
-          onRequestClose={() => setShowBarcodeModal(false)}
+      {/* ── Modal Label Barcode ── */}
+      <Modal
+        visible={showBarcodeModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="slide"
+        onRequestClose={() => setShowBarcodeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Label Barcode</Text>
+              <TouchableOpacity onPress={() => setShowBarcodeModal(false)}>
+                <MaterialCommunityIcons
+                  name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalProductName}>
+              {productName || "Produk"}
+            </Text>
+
+            {/* Barcode Visual */}
+            <SimpleBarcodeDisplay value={barcode} />
+
+            {sellingPrice !== "" && (
+              <Text style={styles.modalPrice}>Rp {sellingPrice}</Text>
+            )}
+
+            <TouchableOpacity
+              style={styles.printBtn}
+              onPress={handlePrintBarcode}
+            >
+              <MaterialCommunityIcons name="printer" size={20} color="#fff" />
+              <Text style={styles.printBtnText}>CETAK LABEL</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Modal Tambah Satuan ── */}
+      <Modal
+        visible={showAddUnitModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowAddUnitModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlayCenter}
+          activeOpacity={1}
+          onPress={() => setShowAddUnitModal(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Label Barcode</Text>
-                <TouchableOpacity onPress={() => setShowBarcodeModal(false)}>
-                  <MaterialCommunityIcons name="close" size={24} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.modalProductName}>{productName || 'Produk'}</Text>
-
-              {/* Barcode Visual */}
-              <SimpleBarcodeDisplay value={barcode} />
-
-              {sellingPrice !== '' && (
-                <Text style={styles.modalPrice}>
-                  Rp {sellingPrice}
-                </Text>
-              )}
-
-              <TouchableOpacity style={styles.printBtn} onPress={handlePrintBarcode}>
-                <MaterialCommunityIcons name="printer" size={20} color="#fff" />
-                <Text style={styles.printBtnText}>CETAK LABEL</Text>
+          <View style={styles.unitModal}>
+            <Text style={styles.unitModalTitle}>Tambah Satuan Baru</Text>
+            <RNTextInput
+              style={styles.unitModalInput}
+              value={newUnitInput}
+              onChangeText={setNewUnitInput}
+              placeholder="Contoh: dus, lusin, pack..."
+              placeholderTextColor={colors.textSecondary}
+              autoFocus
+              autoCapitalize="none"
+              onSubmitEditing={handleAddUnit}
+            />
+            <View style={styles.unitModalActions}>
+              <TouchableOpacity
+                style={styles.unitModalCancelBtn}
+                onPress={() => setShowAddUnitModal(false)}
+              >
+                <Text style={styles.unitModalCancelText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.unitModalConfirmBtn}
+                onPress={handleAddUnit}
+              >
+                <Text style={styles.unitModalConfirmText}>Tambah</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </Modal>
+        </TouchableOpacity>
+      </Modal>
 
-        {/* ── Modal Tambah Satuan ── */}
-        <Modal
-          visible={showAddUnitModal}
-          transparent
-          statusBarTranslucent={true}
-          animationType="fade"
-          onRequestClose={() => setShowAddUnitModal(false)}
+      {/* ── Modal Edit Satuan ── */}
+      <Modal
+        visible={showEditUnitModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowEditUnitModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowEditUnitModal(false)}
         >
-          <TouchableOpacity
-            style={styles.modalOverlayCenter}
-            activeOpacity={1}
-            onPress={() => setShowAddUnitModal(false)}
-          >
-            <View style={styles.unitModal}>
-              <Text style={styles.unitModalTitle}>Tambah Satuan Baru</Text>
-              <RNTextInput
-                style={styles.unitModalInput}
-                value={newUnitInput}
-                onChangeText={setNewUnitInput}
-                placeholder="Contoh: dus, lusin, pack..."
-                placeholderTextColor={colors.textSecondary}
-                autoFocus
-                autoCapitalize="none"
-                onSubmitEditing={handleAddUnit}
-              />
-              <View style={styles.unitModalActions}>
-                <TouchableOpacity
-                  style={styles.unitModalCancelBtn}
-                  onPress={() => setShowAddUnitModal(false)}
-                >
-                  <Text style={styles.unitModalCancelText}>Batal</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.unitModalConfirmBtn}
-                  onPress={handleAddUnit}
-                >
-                  <Text style={styles.unitModalConfirmText}>Tambah</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* ── Modal Edit Satuan ── */}
-        <Modal
-          visible={showEditUnitModal}
-          transparent
-          statusBarTranslucent={true}
-          animationType="fade"
-          onRequestClose={() => setShowEditUnitModal(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowEditUnitModal(false)}
-          >
-            <View style={styles.unitModal}>
-              <Text style={styles.unitModalTitle}>Edit Satuan</Text>
-              <RNTextInput
-                style={styles.unitModalInput}
-                value={editUnitInput}
-                onChangeText={setEditUnitInput}
-                autoFocus
-                autoCapitalize="none"
-                onSubmitEditing={handleEditUnit}
-              />
-              <View style={styles.unitModalActions}>
-                <TouchableOpacity
-                  style={[styles.unitModalCancelBtn, { borderColor: colors.error }]}
-                  onPress={() => {
-                    if (editingUnit) handleDeleteUnit(editingUnit.value, editingUnit.index);
-                    setShowEditUnitModal(false);
-                  }}
-                >
-                  <Text style={[styles.unitModalCancelText, { color: colors.error }]}>Hapus</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.unitModalConfirmBtn}
-                  onPress={handleEditUnit}
-                >
-                  <Text style={styles.unitModalConfirmText}>Simpan</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.unitEditHint}>* Tekan tahan (long press) pada satuan untuk edit/hapus</Text>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* ── Modal Tambah Kategori ── */}
-        <Modal
-          visible={showAddCategoryModal}
-          transparent
-          statusBarTranslucent={true}
-          animationType="fade"
-          onRequestClose={() => setShowAddCategoryModal(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlayCenter}
-            activeOpacity={1}
-            onPress={() => setShowAddCategoryModal(false)}
-          >
-            <View style={styles.unitModal}>
-              <Text style={styles.unitModalTitle}>Tambah Kategori Baru</Text>
-              <RNTextInput
-                style={styles.unitModalInput}
-                value={newCategoryInput}
-                onChangeText={setNewCategoryInput}
-                placeholder="Contoh: makanan, minuman, sabun..."
-                placeholderTextColor={colors.textSecondary}
-                autoFocus
-                autoCapitalize="none"
-                onSubmitEditing={handleAddCategory}
-              />
-              <View style={styles.unitModalActions}>
-                <TouchableOpacity
-                  style={styles.unitModalCancelBtn}
-                  onPress={() => setShowAddCategoryModal(false)}
-                >
-                  <Text style={styles.unitModalCancelText}>Batal</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.unitModalConfirmBtn}
-                  onPress={handleAddCategory}
-                >
-                  <Text style={styles.unitModalConfirmText}>Tambah</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* ── Modal Edit Kategori ── */}
-        <Modal
-          visible={showEditCategoryModal}
-          transparent
-          statusBarTranslucent={true}
-          animationType="fade"
-          onRequestClose={() => setShowEditCategoryModal(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowEditCategoryModal(false)}
-          >
-            <View style={styles.unitModal}>
-              <Text style={styles.unitModalTitle}>Edit Kategori</Text>
-              <RNTextInput
-                style={styles.unitModalInput}
-                value={editCategoryInput}
-                onChangeText={setEditCategoryInput}
-                autoFocus
-                autoCapitalize="none"
-                onSubmitEditing={handleEditCategory}
-              />
-              <View style={styles.unitModalActions}>
-                <TouchableOpacity
-                  style={[styles.unitModalCancelBtn, { borderColor: colors.error }]}
-                  onPress={() => {
-                    if (editingCategory) handleDeleteCategory(editingCategory.value, editingCategory.index);
-                    setShowEditCategoryModal(false);
-                  }}
-                >
-                  <Text style={[styles.unitModalCancelText, { color: colors.error }]}>Hapus</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.unitModalConfirmBtn}
-                  onPress={handleEditCategory}
-                >
-                  <Text style={styles.unitModalConfirmText}>Simpan</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.unitEditHint}>* Tekan tahan (long press) pada kategori untuk edit/hapus</Text>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* ── Modal Pilih Sumber Gambar ── */}
-        <Modal
-          visible={showImageSourceModal}
-          transparent
-          statusBarTranslucent={true}
-          animationType="fade"
-          onRequestClose={() => setShowImageSourceModal(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlayCenter}
-            activeOpacity={1}
-            onPress={() => setShowImageSourceModal(false)}
-          >
-            <View style={styles.sourceModalCard}>
-              <Text style={styles.sourceModalTitle}>Pilih Sumber Foto</Text>
-              <Text style={styles.sourceModalDesc}>Pilih dari mana Anda ingin mengambil foto produk.</Text>
-              
-              <View style={styles.sourceOptionsRow}>
-                <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => handleSelectSource('gallery')}>
-                  <View style={[styles.sourceIconWrap, { backgroundColor: colors.iconBg }]}>
-                    <MaterialCommunityIcons name="image" size={32} color={colors.iconColor} />
-                  </View>
-                  <Text style={styles.sourceOptionText}>Galeri</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.sourceOptionBtn} onPress={() => handleSelectSource('camera')}>
-                  <View style={[styles.sourceIconWrap, { backgroundColor: colors.iconBg }]}>
-                    <MaterialCommunityIcons name="camera" size={32} color={colors.iconColor} />
-                  </View>
-                  <Text style={styles.sourceOptionText}>Kamera</Text>
-                </TouchableOpacity>
-              </View>
-              
+          <View style={styles.unitModal}>
+            <Text style={styles.unitModalTitle}>Edit Satuan</Text>
+            <RNTextInput
+              style={styles.unitModalInput}
+              value={editUnitInput}
+              onChangeText={setEditUnitInput}
+              autoFocus
+              autoCapitalize="none"
+              onSubmitEditing={handleEditUnit}
+            />
+            <View style={styles.unitModalActions}>
               <TouchableOpacity
-                style={styles.sourceCancelBtn}
-                onPress={() => setShowImageSourceModal(false)}
+                style={[
+                  styles.unitModalCancelBtn,
+                  { borderColor: colors.error },
+                ]}
+                onPress={() => {
+                  if (editingUnit)
+                    handleDeleteUnit(editingUnit.value, editingUnit.index);
+                  setShowEditUnitModal(false);
+                }}
               >
-                <Text style={styles.sourceCancelText}>Batal</Text>
+                <Text
+                  style={[styles.unitModalCancelText, { color: colors.error }]}
+                >
+                  Hapus
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.unitModalConfirmBtn}
+                onPress={handleEditUnit}
+              >
+                <Text style={styles.unitModalConfirmText}>Simpan</Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        </Modal>
-      </>
-    );
+            <Text style={styles.unitEditHint}>
+              * Tekan tahan (long press) pada satuan untuk edit/hapus
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Modal Tambah Kategori ── */}
+      <Modal
+        visible={showAddCategoryModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowAddCategoryModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlayCenter}
+          activeOpacity={1}
+          onPress={() => setShowAddCategoryModal(false)}
+        >
+          <View style={styles.unitModal}>
+            <Text style={styles.unitModalTitle}>Tambah Kategori Baru</Text>
+            <RNTextInput
+              style={styles.unitModalInput}
+              value={newCategoryInput}
+              onChangeText={setNewCategoryInput}
+              placeholder="Contoh: makanan, minuman, sabun..."
+              placeholderTextColor={colors.textSecondary}
+              autoFocus
+              autoCapitalize="none"
+              onSubmitEditing={handleAddCategory}
+            />
+            <View style={styles.unitModalActions}>
+              <TouchableOpacity
+                style={styles.unitModalCancelBtn}
+                onPress={() => setShowAddCategoryModal(false)}
+              >
+                <Text style={styles.unitModalCancelText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.unitModalConfirmBtn}
+                onPress={handleAddCategory}
+              >
+                <Text style={styles.unitModalConfirmText}>Tambah</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Modal Edit Kategori ── */}
+      <Modal
+        visible={showEditCategoryModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowEditCategoryModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowEditCategoryModal(false)}
+        >
+          <View style={styles.unitModal}>
+            <Text style={styles.unitModalTitle}>Edit Kategori</Text>
+            <RNTextInput
+              style={styles.unitModalInput}
+              value={editCategoryInput}
+              onChangeText={setEditCategoryInput}
+              autoFocus
+              autoCapitalize="none"
+              onSubmitEditing={handleEditCategory}
+            />
+            <View style={styles.unitModalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.unitModalCancelBtn,
+                  { borderColor: colors.error },
+                ]}
+                onPress={() => {
+                  if (editingCategory)
+                    handleDeleteCategory(
+                      editingCategory.value,
+                      editingCategory.index,
+                    );
+                  setShowEditCategoryModal(false);
+                }}
+              >
+                <Text
+                  style={[styles.unitModalCancelText, { color: colors.error }]}
+                >
+                  Hapus
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.unitModalConfirmBtn}
+                onPress={handleEditCategory}
+              >
+                <Text style={styles.unitModalConfirmText}>Simpan</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.unitEditHint}>
+              * Tekan tahan (long press) pada kategori untuk edit/hapus
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Modal Pilih Sumber Gambar ── */}
+      <Modal
+        visible={showImageSourceModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowImageSourceModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlayCenter}
+          activeOpacity={1}
+          onPress={() => setShowImageSourceModal(false)}
+        >
+          <View style={styles.sourceModalCard}>
+            <Text style={styles.sourceModalTitle}>Pilih Sumber Foto</Text>
+            <Text style={styles.sourceModalDesc}>
+              Pilih dari mana Anda ingin mengambil foto produk.
+            </Text>
+
+            <View style={styles.sourceOptionsRow}>
+              <TouchableOpacity
+                style={styles.sourceOptionBtn}
+                onPress={() => handleSelectSource("gallery")}
+              >
+                <View
+                  style={[
+                    styles.sourceIconWrap,
+                    { backgroundColor: colors.iconBg },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="image"
+                    size={32}
+                    color={colors.iconColor}
+                  />
+                </View>
+                <Text style={styles.sourceOptionText}>Galeri</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.sourceOptionBtn}
+                onPress={() => handleSelectSource("camera")}
+              >
+                <View
+                  style={[
+                    styles.sourceIconWrap,
+                    { backgroundColor: colors.iconBg },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="camera"
+                    size={32}
+                    color={colors.iconColor}
+                  />
+                </View>
+                <Text style={styles.sourceOptionText}>Kamera</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.sourceCancelBtn}
+              onPress={() => setShowImageSourceModal(false)}
+            >
+              <Text style={styles.sourceCancelText}>Batal</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
   sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 0.8,
-    marginBottom: 8, marginTop: 8,
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    marginTop: 8,
   },
 
   // Unit header row
   unitHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8, marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+    marginBottom: 8,
   },
   addUnitBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     backgroundColor: colors.primaryContainer,
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
   },
   addUnitBtnText: {
-    fontSize: 12, color: colors.primary, fontWeight: '700',
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: "700",
   },
 
   // Image
   imagePicker: {
-    position: 'relative',
-    width: '100%', height: 160,
+    position: "relative",
+    width: "100%",
+    height: 160,
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 16,
     borderWidth: 2,
     borderColor: colors.border,
-    borderStyle: 'dashed',
+    borderStyle: "dashed",
   },
-  productImage: { width: '100%', height: '100%' },
+  productImage: { width: "100%", height: "100%" },
   imagePlaceholder: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.primaryContainer,
     gap: 8,
   },
-  imagePlaceholderText: { fontSize: 14, color: colors.primary, fontWeight: '600' },
+  imagePlaceholderText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: "600",
+  },
   removeImageBtn: {
-    position: 'absolute', top: 8, right: 8,
-    backgroundColor: '#fff', borderRadius: 12,
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#fff",
+    borderRadius: 12,
   },
 
   // Barcode row
-  barcodeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 8 },
+  barcodeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+    gap: 8,
+  },
   iconBtn: {
-    width: 52, height: 52,
+    width: 52,
+    height: 52,
     backgroundColor: colors.primary,
     borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     elevation: 3,
   },
 
   // Inputs
   input: { marginBottom: 14 },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  row: { flexDirection: "row", justifyContent: "space-between" },
 
   marginPreview: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
-    marginBottom: 14, borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 14,
+    borderWidth: 1,
   },
-  marginText: { fontSize: 13, fontWeight: '600' },
+  marginText: { fontSize: 13, fontWeight: "600" },
 
-  infoText: { fontSize: 12, color: colors.textSecondary, marginBottom: 16, lineHeight: 18 },
+  infoText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 16,
+    lineHeight: 18,
+  },
   saveButton: { marginTop: 8, paddingVertical: 4 },
 
   // Unit pills
   unitPill: {
-    paddingHorizontal: 16, paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
-    borderWidth: 1.5, borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.border,
     backgroundColor: colors.surface,
   },
   unitPillActive: {
@@ -1106,157 +1291,196 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryContainer,
   },
   unitPillText: {
-    fontSize: 13, fontWeight: '600', color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.textSecondary,
   },
   unitPillTextActive: {
     color: colors.primary,
   },
   unitPillWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginBottom: 16,
   },
 
   // Unit Modal (Add / Edit)
   unitModal: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 20,
     marginHorizontal: 24,
     padding: 24,
     elevation: 10,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 20,
   },
   unitModalTitle: {
-    fontSize: 16, fontWeight: '700', color: colors.text,
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
     marginBottom: 16,
   },
   unitModalInput: {
-    borderWidth: 1.5, borderColor: colors.border, borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 10,
-    fontSize: 15, color: colors.text,
-    marginBottom: 16, backgroundColor: colors.background,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: colors.text,
+    marginBottom: 16,
+    backgroundColor: colors.background,
   },
   unitModalActions: {
-    flexDirection: 'row', gap: 10,
+    flexDirection: "row",
+    gap: 10,
   },
   unitModalCancelBtn: {
-    flex: 1, paddingVertical: 12, borderRadius: 10,
-    borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center',
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: "center",
   },
   unitModalCancelText: {
-    fontSize: 14, fontWeight: '700', color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textSecondary,
   },
   unitModalConfirmBtn: {
-    flex: 1, paddingVertical: 12, borderRadius: 10,
-    backgroundColor: colors.primary, alignItems: 'center',
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: "center",
   },
   unitModalConfirmText: {
-    fontSize: 14, fontWeight: '700', color: '#fff',
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fff",
   },
   unitEditHint: {
-    fontSize: 11, color: colors.textSecondary,
-    textAlign: 'center', marginTop: 12,
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: 12,
   },
 
   // Modal
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
   },
   modalOverlayCenter: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
   },
   modalCard: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 24, paddingBottom: 40,
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
   },
   modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
+  modalTitle: { fontSize: 18, fontWeight: "700", color: colors.text },
   modalProductName: {
-    fontSize: 16, fontWeight: '600', color: colors.text,
-    textAlign: 'center', marginBottom: 8,
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text,
+    textAlign: "center",
+    marginBottom: 8,
   },
   modalPrice: {
-    fontSize: 20, fontWeight: '800', color: colors.primary,
-    textAlign: 'center', marginTop: 8, marginBottom: 20,
+    fontSize: 20,
+    fontWeight: "800",
+    color: colors.primary,
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 20,
   },
   printBtn: {
     backgroundColor: colors.primary,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    padding: 14, borderRadius: 14, gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 14,
+    borderRadius: 14,
+    gap: 8,
   },
-  printBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  
+  printBtnText: { color: "#fff", fontWeight: "bold", fontSize: 15 },
+
   // Image Source Modal
   sourceModalCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 20,
     marginHorizontal: 32,
     padding: 24,
-    alignItems: 'center',
+    alignItems: "center",
     elevation: 10,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 20,
   },
   sourceModalTitle: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: "800",
     color: colors.text,
     marginBottom: 8,
   },
   sourceModalDesc: {
     fontSize: 13,
     color: colors.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 24,
     lineHeight: 20,
   },
   sourceOptionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     gap: 24,
-    width: '100%',
+    width: "100%",
     marginBottom: 24,
   },
   sourceOptionBtn: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   sourceIconWrap: {
     width: 64,
     height: 64,
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 8,
   },
   sourceOptionText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.text,
   },
   sourceCancelBtn: {
-    width: '100%',
+    width: "100%",
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.border,
-    alignItems: 'center',
+    alignItems: "center",
   },
   sourceCancelText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.textSecondary,
   },
 });
