@@ -30,6 +30,11 @@ import {
   generateReceiptHTML,
   generateWAMessage,
 } from "../utils/receiptGenerator";
+import {
+  isPrinterConfigured,
+  isBluetoothPrintingSupported,
+  printReceiptViaBluetooth,
+} from "../utils/bluetoothPrinter";
 import { colors, fonts } from "../theme/colors";
 
 const { width } = Dimensions.get("window");
@@ -72,6 +77,7 @@ const KasirScreen = ({ navigation }) => {
   const [lastTxDetails, setLastTxDetails] = useState([]);
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
   const [storeProfile, setStoreProfile] = useState({});
+  const [btPrinterReady, setBtPrinterReady] = useState(false);
 
   // Refresh saat screen difokus.
   // Catatan: keranjang TIDAK di-reset saat kehilangan fokus (misal buka
@@ -80,6 +86,14 @@ const KasirScreen = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       loadProducts();
+      // Cek apakah printer Bluetooth sudah diatur (untuk tombol cetak langsung)
+      if (isBluetoothPrintingSupported()) {
+        isPrinterConfigured()
+          .then(setBtPrinterReady)
+          .catch(() => setBtPrinterReady(false));
+      } else {
+        setBtPrinterReady(false);
+      }
     }, []),
   );
 
@@ -300,6 +314,24 @@ const KasirScreen = ({ navigation }) => {
       await Print.printAsync({ html });
     } catch (e) {
       Alert.alert("Error", "Gagal cetak: " + e.message);
+    } finally {
+      setIsLoadingReceipt(false);
+    }
+  };
+
+  // Cetak nota langsung ke printer thermal Bluetooth (tanpa dialog print)
+  const handlePrintBluetooth = async () => {
+    if (!lastTx) return;
+    setIsLoadingReceipt(true);
+    try {
+      const profile = await getStoreProfile();
+      await printReceiptViaBluetooth(lastTx, lastTxDetails, profile);
+      Alert.alert("Berhasil", "Nota dikirim ke printer Bluetooth.");
+    } catch (e) {
+      Alert.alert(
+        "Gagal Cetak",
+        e.message || "Terjadi kesalahan saat mencetak ke printer.",
+      );
     } finally {
       setIsLoadingReceipt(false);
     }
@@ -1200,6 +1232,25 @@ const KasirScreen = ({ navigation }) => {
                     <Text style={styles.successBtnText}>Kirim WA</Text>
                   </TouchableOpacity>
                 </View>
+              )}
+
+              {btPrinterReady && Platform.OS === "android" && (
+                <TouchableOpacity
+                  style={[
+                    styles.successBtn,
+                    { backgroundColor: "#0F172A", marginTop: 10 },
+                  ]}
+                  onPress={handlePrintBluetooth}
+                >
+                  <MaterialCommunityIcons
+                    name="bluetooth"
+                    size={20}
+                    color="#fff"
+                  />
+                  <Text style={styles.successBtnText}>
+                    Cetak Langsung (Printer Bluetooth)
+                  </Text>
+                </TouchableOpacity>
               )}
 
               <TouchableOpacity

@@ -16,14 +16,10 @@ import { useFocusEffect } from "@react-navigation/native";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import TransactionRepository from "../database/transactionRepository";
+import { formatRupiah } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
 
 const { width } = Dimensions.get("window");
-
-const formatRupiah = (value) => {
-  if (!value && value !== 0) return "Rp 0";
-  return "Rp " + Number(value).toLocaleString("id-ID");
-};
 
 const HomeScreen = ({ navigation }) => {
   const { state } = useContext(AppContext);

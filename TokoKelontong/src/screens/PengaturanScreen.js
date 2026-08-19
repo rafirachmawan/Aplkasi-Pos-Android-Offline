@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as Updates from "expo-updates";
+import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppContext } from "../context/AppContext";
@@ -23,7 +25,13 @@ import {
   signOut,
   updateStoreName,
 } from "../services/authService";
+import {
+  getPairedPrinters,
+  isBluetoothPrintingSupported,
+} from "../utils/bluetoothPrinter";
 import { colors, fonts } from "../theme/colors";
+
+const appVersion = Constants.expoConfig?.version || "1.0.0";
 
 const SettingRow = ({
   icon,
@@ -63,6 +71,14 @@ const PengaturanScreen = ({ navigation }) => {
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState("");
 
+  // Pemilih printer Bluetooth (daftar perangkat terpairing)
+  const [showPrinterPicker, setShowPrinterPicker] = useState(false);
+  const [pairedDevices, setPairedDevices] = useState([]);
+  const [loadingPaired, setLoadingPaired] = useState(false);
+
+  // Update aplikasi OTA (tanpa install ulang)
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
   useEffect(() => {
     setStoreNameInput(state.storeName || "");
     setPrinterInput(state.printerAddress || "");
@@ -74,6 +90,77 @@ const PengaturanScreen = ({ navigation }) => {
       setStoreNameInput(profile.stores.store_name);
     }
   }, [profile?.stores?.store_name]);
+
+  // ── Pilih printer dari daftar perangkat yang sudah dipairing ──
+  const handleOpenPrinterPicker = async () => {
+    if (!isBluetoothPrintingSupported()) {
+      Alert.alert(
+        "Tidak Tersedia",
+        "Cetak Bluetooth tidak tersedia di Expo Go. Fitur ini aktif pada build APK / development build.",
+      );
+      return;
+    }
+    setShowPrinterPicker(true);
+    setLoadingPaired(true);
+    setPairedDevices([]);
+    try {
+      const devices = await getPairedPrinters();
+      setPairedDevices(devices);
+    } catch (e) {
+      Alert.alert("Bluetooth", e.message || "Gagal membaca daftar perangkat.");
+      setShowPrinterPicker(false);
+    } finally {
+      setLoadingPaired(false);
+    }
+  };
+
+  // ── Cek & pasang update OTA (tanpa install ulang) ──
+  const handleCheckUpdate = async () => {
+    if (!Updates.isEnabled) {
+      Alert.alert(
+        "Tidak Tersedia",
+        "Update otomatis hanya tersedia pada build APK, tidak di Expo Go.",
+      );
+      return;
+    }
+    if (checkingUpdate) return;
+    setCheckingUpdate(true);
+    try {
+      const check = await Updates.checkForUpdateAsync();
+      if (!check.isAvailable) {
+        Alert.alert("Sudah Terbaru", "Aplikasi Anda sudah versi terbaru.");
+        return;
+      }
+      Alert.alert(
+        "Update Tersedia",
+        "Versi baru aplikasi tersedia. Unduh sekarang? Aplikasi akan restart otomatis setelah update selesai.",
+        [
+          { text: "Nanti", style: "cancel" },
+          {
+            text: "Update",
+            onPress: async () => {
+              try {
+                await Updates.fetchUpdateAsync();
+                await Updates.reloadAsync();
+              } catch (e) {
+                Alert.alert(
+                  "Gagal Update",
+                  "Gagal mengunduh update. Periksa koneksi internet lalu coba lagi.",
+                );
+              }
+            },
+          },
+        ],
+      );
+    } catch (e) {
+      Alert.alert(
+        "Gagal Memeriksa",
+        "Tidak dapat memeriksa update. Pastikan HP terhubung ke internet.",
+      );
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   const handlePickLogo = () => {
     Alert.alert(
@@ -500,6 +587,31 @@ const PengaturanScreen = ({ navigation }) => {
           />
         </SettingRow>
 
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={handleOpenPrinterPicker}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.settingIconWrap, { backgroundColor: "#DBEAFE" }]}>
+            <MaterialCommunityIcons
+              name="printer-pos"
+              size={20}
+              color="#1D4ED8"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.linkText}>Pilih dari Printer Terpairing</Text>
+            <Text style={styles.linkSubText}>
+              Isi alamat MAC otomatis dari daftar perangkat HP
+            </Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={20}
+            color="#94A3B8"
+          />
+        </TouchableOpacity>
+
         <View style={styles.divider} />
 
         <TouchableOpacity
@@ -568,6 +680,42 @@ const PengaturanScreen = ({ navigation }) => {
             size={20}
             color="#94A3B8"
           />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Update Aplikasi ── */}
+      <Text style={styles.sectionTitle}>UPDATE APLIKASI</Text>
+      <View style={styles.card}>
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={handleCheckUpdate}
+          activeOpacity={0.7}
+          disabled={checkingUpdate}
+        >
+          <View style={[styles.settingIconWrap, { backgroundColor: "#DBEAFE" }]}>
+            <MaterialCommunityIcons
+              name="cloud-download-outline"
+              size={20}
+              color="#1D4ED8"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.linkText}>
+              {checkingUpdate ? "Memeriksa Update..." : "Periksa Update"}
+            </Text>
+            <Text style={styles.linkSubText}>
+              Versi terpasang v{appVersion} — update tanpa install ulang
+            </Text>
+          </View>
+          {checkingUpdate ? (
+            <MaterialCommunityIcons name="loading" size={20} color="#1D4ED8" />
+          ) : (
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={20}
+              color="#94A3B8"
+            />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -678,6 +826,78 @@ const PengaturanScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.sourceCancelBtn}
               onPress={() => setShowImageSourceModal(false)}
+            >
+              <Text style={styles.sourceCancelText}>Batal</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+      {/* ── Modal Pilih Printer Bluetooth ── */}
+      <Modal
+        visible={showPrinterPicker}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPrinterPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlayCenter}
+          activeOpacity={1}
+          onPress={() => setShowPrinterPicker(false)}
+        >
+          <View style={styles.sourceModalCard}>
+            <Text style={styles.sourceModalTitle}>Pilih Printer Bluetooth</Text>
+            <Text style={styles.sourceModalDesc}>
+              Perangkat yang sudah dipairing dengan HP ini. Ketuk salah satu
+              untuk mengisi alamat MAC otomatis.
+            </Text>
+
+            {loadingPaired ? (
+              <Text
+                style={[
+                  styles.sourceModalDesc,
+                  { textAlign: "center", marginVertical: 16 },
+                ]}
+              >
+                Membaca perangkat Bluetooth...
+              </Text>
+            ) : pairedDevices.length === 0 ? (
+              <Text
+                style={[
+                  styles.sourceModalDesc,
+                  { textAlign: "center", marginVertical: 16 },
+                ]}
+              >
+                Belum ada perangkat terpairing. Pairing printer lewat menu
+                "Buka Pengaturan Bluetooth HP" terlebih dahulu.
+              </Text>
+            ) : (
+              pairedDevices.map((device) => (
+                <TouchableOpacity
+                  key={device.address}
+                  style={styles.printerDeviceRow}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setPrinterInput(device.address);
+                    setShowPrinterPicker(false);
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="bluetooth"
+                    size={20}
+                    color="#1D4ED8"
+                  />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.linkText}>{device.name}</Text>
+                    <Text style={styles.linkSubText}>{device.address}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+
+            <TouchableOpacity
+              style={styles.sourceCancelBtn}
+              onPress={() => setShowPrinterPicker(false)}
             >
               <Text style={styles.sourceCancelText}>Batal</Text>
             </TouchableOpacity>
@@ -1251,6 +1471,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
     color: "#FFFFFF",
+  },
+  printerDeviceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
 });
 

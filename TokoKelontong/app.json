@@ -3,6 +3,13 @@
     "name": "MARKETPOS",
     "slug": "marketpos",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "enabled": true,
+      "checkOnLaunch": "always",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/b3b55795-dbed-43c2-94a6-728f7ac0a817"
+    },
     "orientation": "portrait",
     "icon": "./assets/MarketPos.png",
     "userInterfaceStyle": "light",

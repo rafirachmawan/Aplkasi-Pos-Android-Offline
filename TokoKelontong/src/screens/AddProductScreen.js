@@ -20,6 +20,13 @@ import * as Print from "expo-print";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ProductRepository from "../database/productRepository";
 import { colors, fonts } from "../theme/colors";
+import { encodeCode128 } from "../utils/barcode128";
+import { uploadProductImage, isCloudImageUri } from "../utils/imageStorage";
+import {
+  isPrinterConfigured,
+  isBluetoothPrintingSupported,
+  printBarcodeLabelViaBluetooth,
+} from "../utils/bluetoothPrinter";
 
 // ─── Helper: format angka menjadi format Rupiah saat diketik ───────────────
 const formatToRp = (raw) => {
@@ -40,64 +47,32 @@ const UNITS_STORAGE_KEY = "product_units";
 const DEFAULT_CATEGORIES = ["makanan", "minuman"];
 const CATEGORIES_STORAGE_KEY = "product_categories";
 
-// ─── Komponen BarcodeDisplay menggunakan SVG ───────────────────────────────
-// Barcode Code128 sederhana (batang ganjil & genap) menggunakan SVG manual
+// ─── Komponen BarcodeDisplay (Code128 ASLI) ─────────────────────────────────────
+// Merender barcode Code128 standar industri (bisa dibaca scanner)
+// memakai algoritma pustaka JsBarcode — bukan bar dari kode karakter.
 const SimpleBarcodeDisplay = ({ value }) => {
-  if (!value) return null;
+  const data = encodeCode128(value);
+  if (!data) return null;
 
-  // Encode tiap karakter ke batang (representasi visual sederhana)
-  const bars = [];
-  let x = 10;
-  const barWidth = 2;
-  const height = 60;
+  // Sesuaikan lebar bar agar muat layar (batas lebar total ~300px)
+  const barWidth = Math.max(1, Math.min(2, Math.floor(300 / data.length)));
 
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    for (let b = 7; b >= 0; b--) {
-      const bit = (code >> b) & 1;
-      bars.push({ x, width: barWidth, filled: bit === 1 });
-      x += barWidth;
-    }
-    // Spasi antar karakter
-    x += 2;
-  }
-  // Guard bars
-  bars.unshift({ x: 2, width: 3, filled: true });
-  bars.push({ x: x, width: 3, filled: true });
-  const totalWidth = x + 15;
-
-  const svgBars = bars
-    .filter((b) => b.filled)
-    .map(
-      (b, i) =>
-        `<rect x="${b.x}" y="0" width="${b.width}" height="${height}" fill="black"/>`,
-    )
-    .join("");
-
-  const svgString = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${height + 20}">
-      <rect width="${totalWidth}" height="${height + 20}" fill="white"/>
-      ${svgBars}
-      <text x="${totalWidth / 2}" y="${height + 15}" text-anchor="middle" font-size="10" font-family="monospace">${value}</text>
-    </svg>
-  `;
-
-  // Untuk web: render inline SVG via dangerouslySetInnerHTML workaround
-  // Untuk native: tampilkan representasi visual sederhana
   return (
     <View style={barcodeStyles.container}>
-      <View style={barcodeStyles.barcodeArea}>
-        {bars.map((bar, i) => (
-          <View
-            key={i}
-            style={{
-              width: bar.width,
-              height: 60,
-              backgroundColor: bar.filled ? "#000" : "transparent",
-            }}
-          />
-        ))}
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={barcodeStyles.barcodeArea}>
+          {data.split("").map((bit, i) => (
+            <View
+              key={i}
+              style={{
+                width: barWidth,
+                height: 60,
+                backgroundColor: bit === "1" ? "#000" : "transparent",
+              }}
+            />
+          ))}
+        </View>
+      </ScrollView>
       <Text style={barcodeStyles.barcodeText}>{value}</Text>
     </View>
   );
@@ -151,6 +126,9 @@ const AddProductScreen = ({ navigation, route }) => {
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
   const [pendingSource, setPendingSource] = useState(null);
 
+  // Printer Bluetooth: tombol cetak langsung hanya tampil bila sudah diatur
+  const [btPrinterReady, setBtPrinterReady] = useState(false);
+
   // Category CRUD state
   const [category, setCategory] = useState("makanan");
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
@@ -178,6 +156,11 @@ const AddProductScreen = ({ navigation, route }) => {
         }
       }
     });
+    if (isBluetoothPrintingSupported()) {
+      isPrinterConfigured()
+        .then(setBtPrinterReady)
+        .catch(() => setBtPrinterReady(false));
+    }
   }, []);
 
   const saveUnits = async (newUnits) => {
@@ -480,36 +463,31 @@ const AddProductScreen = ({ navigation, route }) => {
       return;
     }
     try {
-      // Generate SVG offline
-      let x = 10;
-      const barWidth = 2;
-      const height = 60;
-      const bars = [];
-      for (let i = 0; i < barcode.length; i++) {
-        const code = barcode.charCodeAt(i);
-        for (let b = 7; b >= 0; b--) {
-          const bit = (code >> b) & 1;
-          bars.push({ x, width: barWidth, filled: bit === 1 });
-          x += barWidth;
-        }
-        x += 2;
+      // Barcode Code128 ASLI (bisa dibaca scanner), dibuat offline
+      const data = encodeCode128(barcode);
+      if (!data) {
+        Alert.alert(
+          "Barcode Tidak Valid",
+          "Karakter ini tidak bisa di-encode menjadi barcode Code128.",
+        );
+        return;
       }
-      bars.unshift({ x: 2, width: 3, filled: true });
-      bars.push({ x: x, width: 3, filled: true });
-      const totalWidth = x + 15;
 
-      const svgBars = bars
-        .filter((b) => b.filled)
-        .map(
-          (b) =>
-            `<rect x="${b.x}" y="0" width="${b.width}" height="${height}" fill="black"/>`,
+      const svgBars = data
+        .split("")
+        .map((bit, i) =>
+          bit === "1"
+            ? `<rect x="${i * 2}" y="0" width="2" height="60" fill="black"/>`
+            : "",
         )
         .join("");
+      const totalWidth = data.length * 2 + 20;
 
       const svgString = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${height + 20}" style="max-width:260px; height:auto;">
-          <rect width="${totalWidth}" height="${height + 20}" fill="white"/>
-          ${svgBars}
+        <svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="80" style="max-width:280px; height:auto;">
+          <rect width="${totalWidth}" height="80" fill="white"/>
+          <g transform="translate(10,0)">${svgBars}</g>
+          <text x="${totalWidth / 2}" y="76" text-anchor="middle" font-size="10" font-family="monospace">${barcode}</text>
         </svg>
       `;
 
@@ -519,7 +497,6 @@ const AddProductScreen = ({ navigation, route }) => {
             <div style="text-align:center;border:1px solid #ccc;padding:16px;border-radius:8px;width:280px;">
               <p style="font-size:14px;font-weight:bold;margin:0 0 8px;">${productName || "Produk"}</p>
               ${svgString}
-              <p style="font-family:monospace;letter-spacing:2px;font-size:12px;margin:4px 0 0;">${barcode}</p>
             </div>
           </body>
         </html>
@@ -527,6 +504,30 @@ const AddProductScreen = ({ navigation, route }) => {
       await Print.printAsync({ html });
     } catch (e) {
       Alert.alert("Error Cetak", e.message);
+    }
+  };
+
+  // ── Cetak Label Barcode langsung ke printer thermal Bluetooth ──
+  const handlePrintBarcodeBluetooth = async () => {
+    if (!barcode) {
+      Alert.alert(
+        "Barcode Kosong",
+        "Isi kolom barcode terlebih dahulu sebelum mencetak label.",
+      );
+      return;
+    }
+    try {
+      await printBarcodeLabelViaBluetooth({
+        barcode,
+        productName: productName || "Produk",
+        priceText: sellingPrice ? `Rp ${sellingPrice}` : null,
+      });
+      Alert.alert("Berhasil", "Label dikirim ke printer Bluetooth.");
+    } catch (e) {
+      Alert.alert(
+        "Gagal Cetak",
+        e.message || "Terjadi kesalahan saat mencetak ke printer.",
+      );
     }
   };
 
@@ -572,6 +573,34 @@ const AddProductScreen = ({ navigation, route }) => {
       }
     }
 
+    // Upload foto lokal ke Supabase Storage agar tampil di semua HP.
+    // URL cloud (http) yang sudah ada tidak di-upload ulang.
+    let finalImageUri = imageUri || null;
+    if (imageUri && !isCloudImageUri(imageUri)) {
+      try {
+        finalImageUri = await uploadProductImage(imageUri);
+      } catch (uploadErr) {
+        const proceed = await new Promise((resolve) =>
+          Alert.alert(
+            "Gagal Upload Foto",
+            "Foto produk tidak bisa diunggah ke cloud (" +
+              uploadErr.message +
+              "). Apakah bucket 'product-images' sudah dibuat di Supabase?",
+            [
+              {
+                text: "Batal Simpan",
+                style: "cancel",
+                onPress: () => resolve(false),
+              },
+              { text: "Simpan Tanpa Foto", onPress: () => resolve(true) },
+            ],
+          ),
+        );
+        if (!proceed) return;
+        finalImageUri = null;
+      }
+    }
+
     const data = {
       barcode: barcodeVal,
       product_name: productName.trim(),
@@ -579,7 +608,7 @@ const AddProductScreen = ({ navigation, route }) => {
       selling_price: sellPrice,
       stock_quantity: stock,
       min_stock_threshold: isNaN(minStockVal) ? 5 : minStockVal,
-      image_uri: imageUri || null,
+      image_uri: finalImageUri,
       unit,
       category,
     };
@@ -929,6 +958,25 @@ const AddProductScreen = ({ navigation, route }) => {
               <MaterialCommunityIcons name="printer" size={20} color="#fff" />
               <Text style={styles.printBtnText}>CETAK LABEL</Text>
             </TouchableOpacity>
+
+            {btPrinterReady && Platform.OS === "android" && (
+              <TouchableOpacity
+                style={[
+                  styles.printBtn,
+                  { backgroundColor: "#0F172A", marginTop: 10 },
+                ]}
+                onPress={handlePrintBarcodeBluetooth}
+              >
+                <MaterialCommunityIcons
+                  name="bluetooth"
+                  size={20}
+                  color="#fff"
+                />
+                <Text style={styles.printBtnText}>
+                  CETAK VIA PRINTER BLUETOOTH
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>

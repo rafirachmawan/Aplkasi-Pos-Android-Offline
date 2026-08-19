@@ -29,7 +29,15 @@ const MONTH_NAMES = [
   "Desember",
 ];
 
-const YEARS = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
+const YEARS = (() => {
+  // Dinamis: dari 2024 sampai tahun sekarang + 1 (tidak lagi hardcode 2030)
+  const currentYear = new Date().getFullYear();
+  const start = Math.min(2024, currentYear);
+  return Array.from(
+    { length: currentYear + 1 - start + 1 },
+    (_, i) => start + i,
+  );
+})();
 
 const DashboardScreen = ({ navigation }) => {
   // Date selection states
@@ -45,7 +53,6 @@ const DashboardScreen = ({ navigation }) => {
   const [dateSubTitleText, setDateSubTitleText] = useState("");
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [totalProducts, setTotalProducts] = useState(0);
-  const [recentTx, setRecentTx] = useState([]);
 
   // Helper formatting YYYY-MM-DD
   const formatYMD = (year, monthIndex, day) => {
@@ -63,14 +70,12 @@ const DashboardScreen = ({ navigation }) => {
       const lowStock = await ProductRepository.getLowStockProducts();
       setLowStockProducts(lowStock);
 
-      // 2. Filter transaksi sesuai mode yang dipilih
-      let filteredTx = [];
+      // 2. Tentukan pola periode sesuai mode yang dipilih
+      let pattern = "";
       let subtitle = "";
 
       if (filterMode === "daily") {
-        const dateStr = formatYMD(selectedYear, selectedMonth, selectedDay);
-        filteredTx = await TransactionRepository.getTransactionsByDate(dateStr);
-
+        pattern = formatYMD(selectedYear, selectedMonth, selectedDay);
         const dateObj = new Date(selectedYear, selectedMonth, selectedDay);
         subtitle = dateObj.toLocaleDateString("id-ID", {
           weekday: "long",
@@ -79,36 +84,20 @@ const DashboardScreen = ({ navigation }) => {
           year: "numeric",
         });
       } else if (filterMode === "monthly") {
-        const yearMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
-        filteredTx =
-          await TransactionRepository.getMonthlyTransactions(yearMonthStr);
+        pattern = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
         subtitle = `Bulan ${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
-      } else if (filterMode === "all") {
-        filteredTx = await TransactionRepository.getMonthlyTransactions(""); // Semua
+      } else {
         subtitle = "Semua Transaksi";
       }
 
       setDateSubTitleText(subtitle);
 
-      // 3. Hitung Omzet & Laba Bersih
-      const omzet = filteredTx.reduce(
-        (sum, t) => sum + (t.grand_total || 0),
-        0,
-      );
-      let laba = 0;
-
-      try {
-        const fullReport = await TransactionRepository.getFullReportForExport();
-        const invoiceSet = new Set(filteredTx.map((t) => t.invoice_number));
-        laba = fullReport
-          .filter((r) => invoiceSet.has(r.No_Nota))
-          .reduce((sum, r) => sum + (r.Total_Keuntungan || 0), 0);
-      } catch (e) {
-        console.error("Calculated laba error:", e);
-      }
-
-      setSummary({ omzet, laba, count: filteredTx.length });
-      setRecentTx(filteredTx.slice(0, 5));
+      // 3. Satu query agregat langsung ke rentang periode — omzet, laba,
+      //    dan jumlah transaksi dihitung hanya dari data periode tersebut
+      //    (sebelumnya seluruh riwayat transaksi diambil setiap load).
+      const result =
+        await TransactionRepository.getSummaryByDatePattern(pattern);
+      setSummary(result);
     } catch (e) {
       console.error("Dashboard load error:", e);
     }
