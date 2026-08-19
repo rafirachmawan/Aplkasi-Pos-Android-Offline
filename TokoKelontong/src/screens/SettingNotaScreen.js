@@ -42,7 +42,8 @@ const SettingNotaScreen = ({ navigation }) => {
       const saved = await AsyncStorage.getItem(STORE_PROFILE_KEY);
       if (saved !== null) {
         const data = JSON.parse(saved);
-        setStoreName(data.storeName || '');
+        // 'name' adalah alias format lama dari menu Pengaturan
+        setStoreName(data.storeName || data.name || '');
         setStoreAddress(data.storeAddress || '');
         setStoreContact(data.storeContact || '');
         setFooterMessage(data.footerMessage || 'Terima kasih telah berbelanja!');
@@ -54,7 +55,23 @@ const SettingNotaScreen = ({ navigation }) => {
 
   const handleSave = async () => {
     try {
-      const data = { storeName, storeAddress, storeContact, footerMessage };
+      // Gabungkan dengan profil lama agar field lain (logo, printerAddress)
+      // tidak hilang saat pengaturan nota disimpan
+      let existing = {};
+      try {
+        const savedExisting = await AsyncStorage.getItem(STORE_PROFILE_KEY);
+        if (savedExisting) existing = JSON.parse(savedExisting);
+      } catch (_) {
+        existing = {};
+      }
+      const data = {
+        ...existing,
+        storeName,
+        storeAddress,
+        storeContact,
+        footerMessage,
+        name: storeName, // alias format lama, dijaga sementara
+      };
       await AsyncStorage.setItem(STORE_PROFILE_KEY, JSON.stringify(data));
       if (storeName.trim()) {
         await AsyncStorage.setItem('storeName', storeName.trim());

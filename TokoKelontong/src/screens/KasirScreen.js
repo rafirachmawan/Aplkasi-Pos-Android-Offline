@@ -20,6 +20,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppContext } from "../context/AppContext";
 import ProductRepository from "../database/productRepository";
@@ -70,21 +71,16 @@ const KasirScreen = ({ navigation }) => {
   const [lastTx, setLastTx] = useState(null);
   const [lastTxDetails, setLastTxDetails] = useState([]);
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
+  const [storeProfile, setStoreProfile] = useState({});
 
-  // Refresh saat screen difokus & auto reset keranjang/filter saat keluar screen
+  // Refresh saat screen difokus.
+  // Catatan: keranjang TIDAK di-reset saat kehilangan fokus (misal buka
+  // scanner barcode) agar belanjaan kasir tidak hilang. Keranjang hanya
+  // dikosongkan setelah transaksi sukses atau lewat tombol "Kosongkan".
   useFocusEffect(
     useCallback(() => {
       loadProducts();
-
-      return () => {
-        dispatch({ type: "CLEAR_CART" });
-        setSearchQuery("");
-        setSelectedCategory("Semua");
-        setShowCartModal(false);
-        setCashInput("");
-        setDiscountInput("");
-      };
-    }, [dispatch]),
+    }, []),
   );
 
   const loadProducts = async () => {
@@ -202,6 +198,17 @@ const KasirScreen = ({ navigation }) => {
   const cashReceived = parseRpToNumber(cashInput);
   const kembalian = cashReceived - grandTotal;
 
+  // Tanggal/waktu transaksi untuk pratinjau nota
+  const receiptDateStr = lastTx
+    ? new Date(lastTx.created_at).toLocaleString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
+
   const handleBayar = async () => {
     if (cashReceived < grandTotal) {
       Alert.alert(
@@ -230,6 +237,7 @@ const KasirScreen = ({ navigation }) => {
       setCashInput("");
       setDiscountInput("");
       dispatch({ type: "CLEAR_CART" });
+      setStoreProfile(await getStoreProfile());
 
       try {
         const details = await TransactionRepository.getTransactionDetails(txId);
@@ -258,7 +266,14 @@ const KasirScreen = ({ navigation }) => {
   const getStoreProfile = async () => {
     try {
       const saved = await AsyncStorage.getItem("@TokoKelontong:StoreProfile");
-      return saved ? JSON.parse(saved) : {};
+      if (!saved) return {};
+      const data = JSON.parse(saved);
+      // Migrasi format lama dari menu Pengaturan ({name, printerAddress, logo})
+      // ke format nota baku ({storeName, storeAddress, ...})
+      if (data.name && !data.storeName) {
+        data.storeName = data.name;
+      }
+      return data;
     } catch {
       return {};
     }
@@ -1031,187 +1046,117 @@ const KasirScreen = ({ navigation }) => {
             <View
               style={{
                 backgroundColor: colors.primary,
-                padding: 20,
+                paddingVertical: 14,
                 alignItems: "center",
               }}
             >
               <MaterialCommunityIcons
                 name="check-circle"
-                size={48}
+                size={36}
                 color="#fff"
               />
               <Text
-                style={[styles.successTitle, { color: "#fff", marginTop: 8 }]}
+                style={[
+                  styles.successTitle,
+                  { color: "#fff", marginTop: 6, fontSize: 18 },
+                ]}
               >
                 Transaksi Berhasil!
-              </Text>
-              <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>
-                {lastTx?.invoice_number}
               </Text>
             </View>
 
             <ScrollView
-              style={{ maxHeight: 300 }}
-              contentContainerStyle={{ padding: 20 }}
+              style={{ maxHeight: 400 }}
+              contentContainerStyle={{ padding: 16, paddingBottom: 16 }}
             >
-              {lastTx &&
-                lastTxDetails.map((item, index) => (
-                  <View
-                    key={index}
-                    style={{
-                      marginBottom: 12,
-                      borderBottomWidth: 1,
-                      borderBottomColor: "#F3F4F6",
-                      paddingBottom: 8,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "600",
-                        color: colors.text,
-                      }}
-                    >
+              {/* ── Pratinjau Nota (format struk termal) ── */}
+              <View style={styles.receiptPaper}>
+                <Text style={styles.receiptStoreName}>
+                  {storeProfile.storeName || "Toko Kelontong"}
+                </Text>
+                {!!storeProfile.storeAddress && (
+                  <Text style={styles.receiptMetaCenter}>
+                    {storeProfile.storeAddress}
+                  </Text>
+                )}
+                {!!storeProfile.storeContact && (
+                  <Text style={styles.receiptMetaCenter}>
+                    Telp: {storeProfile.storeContact}
+                  </Text>
+                )}
+
+                <View style={styles.receiptDash} />
+
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMeta}>
+                    No : {lastTx?.invoice_number}
+                  </Text>
+                  <Text style={styles.receiptMeta}>{receiptDateStr}</Text>
+                </View>
+
+                <View style={styles.receiptDash} />
+
+                {lastTxDetails.map((item, index) => (
+                  <View key={index} style={styles.receiptItem}>
+                    <Text style={styles.receiptItemName}>
                       {item.product_name}
                     </Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        marginTop: 4,
-                      }}
-                    >
-                      <Text
-                        style={{ fontSize: 13, color: colors.textSecondary }}
-                      >
+                    <View style={styles.receiptMetaRow}>
+                      <Text style={styles.receiptMeta}>
                         {item.quantity} x {formatRupiah(item.price_at_sale)}
                       </Text>
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "bold",
-                          color: colors.text,
-                        }}
-                      >
+                      <Text style={styles.receiptItemTotal}>
                         {formatRupiah(item.quantity * item.price_at_sale)}
                       </Text>
                     </View>
                   </View>
                 ))}
 
-              {lastTx && (
-                <View style={{ marginTop: 8, gap: 6 }}>
-                  {lastTx.discount_amount > 0 && (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <Text
-                        style={{ fontSize: 13, color: colors.textSecondary }}
-                      >
-                        Subtotal
-                      </Text>
-                      <Text style={{ fontSize: 13, color: colors.text }}>
-                        {formatRupiah(lastTx.total_price)}
-                      </Text>
-                    </View>
-                  )}
-                  {lastTx.discount_amount > 0 && (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <Text
-                        style={{ fontSize: 13, color: colors.textSecondary }}
-                      >
-                        Diskon
-                      </Text>
-                      <Text style={{ fontSize: 13, color: "#EF4444" }}>
-                        -{formatRupiah(lastTx.discount_amount)}
-                      </Text>
-                    </View>
-                  )}
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginTop: 4,
-                      paddingTop: 8,
-                      borderTopWidth: 1,
-                      borderTopColor: "#E5E7EB",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 15,
-                        fontWeight: "bold",
-                        color: colors.primary,
-                      }}
-                    >
-                      TOTAL
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        fontWeight: "bold",
-                        color: colors.primary,
-                      }}
-                    >
-                      {formatRupiah(lastTx.grand_total)}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginTop: 8,
-                    }}
-                  >
-                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                      Tunai
-                    </Text>
-                    <Text style={{ fontSize: 13, color: colors.text }}>
-                      {formatRupiah(lastTx.cash_received)}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      backgroundColor: "#ECFDF5",
-                      padding: 10,
-                      borderRadius: 8,
-                      marginTop: 4,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "bold",
-                        color: "#059669",
-                      }}
-                    >
-                      Kembalian
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        fontWeight: "bold",
-                        color: "#059669",
-                      }}
-                    >
-                      {formatRupiah(lastTx.cash_return)}
-                    </Text>
-                  </View>
+                <View style={styles.receiptDash} />
+
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMeta}>Subtotal</Text>
+                  <Text style={styles.receiptMeta}>
+                    {formatRupiah(lastTx?.total_price || 0)}
+                  </Text>
                 </View>
-              )}
+                {lastTx?.discount_amount > 0 && (
+                  <View style={styles.receiptMetaRow}>
+                    <Text style={styles.receiptMeta}>Diskon</Text>
+                    <Text style={[styles.receiptMeta, { color: "#DC2626" }]}>
+                      -{formatRupiah(lastTx.discount_amount)}
+                    </Text>
+                  </View>
+                )}
+                <View style={[styles.receiptMetaRow, { marginTop: 6 }]}>
+                  <Text style={styles.receiptTotalLabel}>TOTAL</Text>
+                  <Text style={styles.receiptTotalValue}>
+                    {formatRupiah(lastTx?.grand_total || 0)}
+                  </Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMeta}>Tunai</Text>
+                  <Text style={styles.receiptMeta}>
+                    {formatRupiah(lastTx?.cash_received || 0)}
+                  </Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMeta}>Kembalian</Text>
+                  <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
+                    {formatRupiah(lastTx?.cash_return || 0)}
+                  </Text>
+                </View>
+
+                <View style={styles.receiptDash} />
+
+                <Text style={styles.receiptFooter}>
+                  {storeProfile.footerMessage ||
+                    "Terima kasih telah berbelanja!"}
+                </Text>
+              </View>
             </ScrollView>
 
-            <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+            <View style={styles.successActionsWrap}>
               {isLoadingReceipt ? (
                 <ActivityIndicator
                   size="large"
@@ -1753,7 +1698,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 4,
   },
-  successActions: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  successActions: { flexDirection: "row", gap: 10 },
+  successActionsWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: "#F8FAFC",
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
   successBtn: {
     flex: 1,
     flexDirection: "row",
@@ -1767,15 +1720,93 @@ const styles = StyleSheet.create({
   successBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
   successClose: {
     alignItems: "center",
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    marginTop: 4,
+    paddingVertical: 10,
+    marginTop: 6,
   },
   successCloseText: {
     color: colors.textSecondary,
     fontSize: 14,
     fontWeight: "600",
+  },
+
+  // ── Pratinjau Nota (kertas struk termal) ──
+  receiptPaper: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 16,
+  },
+  receiptStoreName: {
+    fontSize: 15,
+    fontWeight: "800",
+    textAlign: "center",
+    color: colors.text,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptMeta: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptMetaCenter: {
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: "center",
+    color: colors.textSecondary,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  receiptDash: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#9CA3AF",
+    borderStyle: "dashed",
+    marginVertical: 10,
+  },
+  receiptItem: {
+    marginBottom: 8,
+  },
+  receiptItemName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 2,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptItemTotal: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.text,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptTotalLabel: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.text,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptTotalValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.text,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptFooter: {
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: "center",
+    color: colors.textSecondary,
+    marginTop: 2,
+    paddingHorizontal: 6,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
 });
 

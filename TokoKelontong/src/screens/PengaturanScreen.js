@@ -124,13 +124,13 @@ const PengaturanScreen = ({ navigation }) => {
         let result;
         try {
           result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ImagePicker.MediaType.Images,
             allowsEditing: true,
             quality: 0.8,
           });
         } catch (cropErr) {
           result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ImagePicker.MediaType.Images,
             allowsEditing: false,
             quality: 0.8,
           });
@@ -164,13 +164,13 @@ const PengaturanScreen = ({ navigation }) => {
         let result;
         try {
           result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ImagePicker.MediaType.Images,
             allowsEditing: true,
             quality: 0.8,
           });
         } catch (cropErr) {
           result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ImagePicker.MediaType.Images,
             allowsEditing: false,
             quality: 0.8,
           });
@@ -213,9 +213,23 @@ const PengaturanScreen = ({ navigation }) => {
         await AsyncStorage.removeItem("storeLogo");
       }
 
-      // Selaraskan ke StoreProfile object
+      // Selaraskan ke StoreProfile object (format baku nota: storeName, dst.)
+      // Baca dulu profil lama agar field lain (alamat, kontak, footer,
+      // printerAddress) tidak hilang saat disimpan ulang.
+      let existingProfile = {};
+      try {
+        const savedProfile = await AsyncStorage.getItem(
+          "@TokoKelontong:StoreProfile",
+        );
+        if (savedProfile) existingProfile = JSON.parse(savedProfile);
+      } catch (_) {
+        existingProfile = {};
+      }
+
       const storeProfileObj = {
-        name: storeNameInput.trim(),
+        ...existingProfile,
+        storeName: storeNameInput.trim(),
+        name: storeNameInput.trim(), // alias format lama, dijaga sementara
         printerAddress: printerInput.trim() || null,
         logo: logoUri || null,
       };

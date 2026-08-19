@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -28,14 +28,54 @@ import { colors, fonts } from "../theme/colors";
 
 const TABS = ["Harian", "Bulanan", "Riwayat"];
 
-const LaporanScreen = () => {
-  const [activeTab, setActiveTab] = useState("Harian");
+// Konversi filter dari Dashboard ('daily' | 'monthly' | 'all') ke tab lokal
+const FILTER_TO_TAB = {
+  daily: "Harian",
+  monthly: "Bulanan",
+  all: "Riwayat",
+};
+
+const parseYmd = (ymdStr) => {
+  const parts = String(ymdStr).split("-").map(Number);
+  if (parts.length >= 3 && !parts.some(isNaN)) {
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+  if (parts.length === 2 && !parts.some(isNaN)) {
+    return new Date(parts[0], parts[1] - 1, 1);
+  }
+  return null;
+};
+
+const LaporanScreen = ({ route }) => {
+  // Terima parameter filter dari Dashboard (initialFilter & dateFilter)
+  const initialFilter = route?.params?.initialFilter;
+  const dateFilter = route?.params?.dateFilter;
+  const [activeTab, setActiveTab] = useState(
+    FILTER_TO_TAB[initialFilter] || "Harian",
+  );
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({ omzet: 0, laba: 0, count: 0 });
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(
+    () => parseYmd(dateFilter) || new Date(),
+  );
   const [selectedTx, setSelectedTx] = useState(null);
   const [txDetails, setTxDetails] = useState([]);
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
+  const [storeProfile, setStoreProfile] = useState({});
+
+  // Terapkan ulang parameter filter bila Dashboard mengirim params baru
+  // saat layar Laporan sudah terbuka di stack navigasi
+  useEffect(() => {
+    const paramFilter = route?.params?.initialFilter;
+    const paramDate = route?.params?.dateFilter;
+    if (paramFilter && FILTER_TO_TAB[paramFilter]) {
+      setActiveTab(FILTER_TO_TAB[paramFilter]);
+    }
+    if (paramDate) {
+      const parsed = parseYmd(paramDate);
+      if (parsed) setSelectedDate(parsed);
+    }
+  }, [route?.params?.initialFilter, route?.params?.dateFilter]);
 
   const today = new Date();
 
@@ -119,22 +159,23 @@ const LaporanScreen = () => {
     try {
       const data = await TransactionRepository.getFullReportForExport();
       if (data.length === 0) {
-        alert("Tidak ada data untuk diekspor.");
+        Alert.alert("Info", "Tidak ada data untuk diekspor.");
         return;
       }
 
-      const filename = `Laporan_Toko_${getDateStr().replace(/-/g, "")}.csv`;
+      // Ekspor selalu mengambil seluruh riwayat transaksi
+      const filename = `Laporan_Semua_Transaksi_${getDateStr().replace(/-/g, "")}.csv`;
       const result = await exportToCSV(data, filename);
 
       if (result.success) {
         if (Platform.OS !== "web") {
-          alert("Ekspor CSV berhasil!");
+          Alert.alert("Berhasil", "Ekspor CSV berhasil!");
         }
       } else {
-        alert(result.message);
+        Alert.alert("Gagal", result.message);
       }
     } catch (e) {
-      alert("Gagal ekspor: " + e.message);
+      Alert.alert("Gagal", "Gagal ekspor: " + e.message);
     }
   };
 
@@ -142,9 +183,10 @@ const LaporanScreen = () => {
     try {
       const details = await TransactionRepository.getTransactionDetails(tx.id);
       setTxDetails(details);
+      setStoreProfile(await getStoreProfile());
       setSelectedTx(tx);
     } catch (e) {
-      alert("Gagal mengambil detail transaksi: " + e.message);
+      Alert.alert("Error", "Gagal mengambil detail transaksi: " + e.message);
     }
   };
 
@@ -152,7 +194,12 @@ const LaporanScreen = () => {
     try {
       const saved = await AsyncStorage.getItem("@TokoKelontong:StoreProfile");
       if (saved) {
-        return JSON.parse(saved);
+        const data = JSON.parse(saved);
+        // Migrasi format lama dari menu Pengaturan ({name, ...})
+        if (data.name && !data.storeName) {
+          data.storeName = data.name;
+        }
+        return data;
       }
       const storeName =
         (await AsyncStorage.getItem("storeName")) || "Toko Kelontong";
@@ -400,90 +447,105 @@ const LaporanScreen = () => {
             </View>
             <ScrollView style={styles.modalBody}>
               {selectedTx && (
-                <>
-                  <View style={styles.detailHeader}>
-                    <Text style={styles.detailInvoice}>
-                      {selectedTx.invoice_number}
+                /* ── Pratinjau Nota (format struk termal, sama dgn Kasir) ── */
+                <View style={styles.receiptPaper}>
+                  <Text style={styles.receiptStoreName}>
+                    {storeProfile.storeName || "Toko Kelontong"}
+                  </Text>
+                  {!!storeProfile.storeAddress && (
+                    <Text style={styles.receiptMetaCenter}>
+                      {storeProfile.storeAddress}
                     </Text>
-                    <Text style={styles.detailDate}>
-                      {new Date(selectedTx.created_at).toLocaleString("id-ID", {
-                        weekday: "long",
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                  )}
+                  {!!storeProfile.storeContact && (
+                    <Text style={styles.receiptMetaCenter}>
+                      Telp: {storeProfile.storeContact}
+                    </Text>
+                  )}
+
+                  <View style={styles.receiptDash} />
+
+                  <View style={styles.receiptMetaRow}>
+                    <Text style={styles.receiptMeta}>
+                      No : {selectedTx.invoice_number}
+                    </Text>
+                    <Text style={styles.receiptMeta}>
+                      {new Date(selectedTx.created_at).toLocaleString(
+                        "id-ID",
+                        {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        },
+                      )}
                     </Text>
                   </View>
-                  <View style={styles.divider} />
 
-                  <Text style={styles.sectionTitle}>Daftar Barang</Text>
+                  <View style={styles.receiptDash} />
+
                   {txDetails.map((detail, index) => (
-                    <View key={index} style={styles.detailItemRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.detailItemName}>
-                          {detail.product_name}
-                        </Text>
-                        <Text style={styles.detailItemSub}>
+                    <View key={index} style={styles.receiptItem}>
+                      <Text style={styles.receiptItemName}>
+                        {detail.product_name}
+                      </Text>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMeta}>
                           {detail.quantity} x{" "}
                           {formatRupiah(detail.price_at_sale)}
                         </Text>
+                        <Text style={styles.receiptItemTotal}>
+                          {formatRupiah(detail.quantity * detail.price_at_sale)}
+                        </Text>
                       </View>
-                      <Text style={styles.detailItemTotal}>
-                        {formatRupiah(detail.quantity * detail.price_at_sale)}
-                      </Text>
                     </View>
                   ))}
-                  <View style={styles.divider} />
 
-                  <View style={styles.calcRow}>
-                    <Text style={styles.calcLabel}>Subtotal</Text>
-                    <Text style={styles.calcValue}>
+                  <View style={styles.receiptDash} />
+
+                  <View style={styles.receiptMetaRow}>
+                    <Text style={styles.receiptMeta}>Subtotal</Text>
+                    <Text style={styles.receiptMeta}>
                       {formatRupiah(selectedTx.total_price)}
                     </Text>
                   </View>
-                  <View style={styles.calcRow}>
-                    <Text style={styles.calcLabel}>Diskon</Text>
-                    <Text style={styles.calcValue}>
-                      {formatRupiah(selectedTx.discount_amount)}
-                    </Text>
-                  </View>
-                  <View style={styles.calcRow}>
-                    <Text
-                      style={[
-                        styles.calcLabel,
-                        { fontWeight: "bold", color: colors.primary },
-                      ]}
-                    >
-                      Total Akhir
-                    </Text>
-                    <Text
-                      style={[
-                        styles.calcValue,
-                        {
-                          fontWeight: "bold",
-                          color: colors.primary,
-                          fontSize: 16,
-                        },
-                      ]}
-                    >
+                  {selectedTx.discount_amount > 0 && (
+                    <View style={styles.receiptMetaRow}>
+                      <Text style={styles.receiptMeta}>Diskon</Text>
+                      <Text
+                        style={[styles.receiptMeta, { color: "#DC2626" }]}
+                      >
+                        -{formatRupiah(selectedTx.discount_amount)}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={[styles.receiptMetaRow, { marginTop: 6 }]}>
+                    <Text style={styles.receiptTotalLabel}>TOTAL</Text>
+                    <Text style={styles.receiptTotalValue}>
                       {formatRupiah(selectedTx.grand_total)}
                     </Text>
                   </View>
-                  <View style={[styles.calcRow, { marginTop: 12 }]}>
-                    <Text style={styles.calcLabel}>Uang Masuk</Text>
-                    <Text style={styles.calcValue}>
+                  <View style={styles.receiptMetaRow}>
+                    <Text style={styles.receiptMeta}>Tunai</Text>
+                    <Text style={styles.receiptMeta}>
                       {formatRupiah(selectedTx.cash_received)}
                     </Text>
                   </View>
-                  <View style={styles.calcRow}>
-                    <Text style={styles.calcLabel}>Kembalian</Text>
-                    <Text style={styles.calcValue}>
+                  <View style={styles.receiptMetaRow}>
+                    <Text style={styles.receiptMeta}>Kembalian</Text>
+                    <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
                       {formatRupiah(selectedTx.cash_return)}
                     </Text>
                   </View>
-                </>
+
+                  <View style={styles.receiptDash} />
+
+                  <Text style={styles.receiptFooter}>
+                    {storeProfile.footerMessage ||
+                      "Terima kasih telah berbelanja!"}
+                  </Text>
+                </View>
               )}
             </ScrollView>
             {/* Action Buttons */}
@@ -722,6 +784,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    backgroundColor: "#F8FAFC",
   },
   actionBtn: {
     flex: 1,
@@ -743,6 +806,86 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   emptyText: { fontSize: 15, color: colors.textSecondary, marginTop: 12 },
+
+  // ── Pratinjau Nota (kertas struk termal, sama dgn Kasir) ──
+  receiptPaper: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 16,
+  },
+  receiptStoreName: {
+    fontSize: 15,
+    fontWeight: "800",
+    textAlign: "center",
+    color: colors.text,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptMeta: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptMetaCenter: {
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: "center",
+    color: colors.textSecondary,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  receiptDash: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#9CA3AF",
+    borderStyle: "dashed",
+    marginVertical: 10,
+  },
+  receiptItem: {
+    marginBottom: 8,
+  },
+  receiptItemName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 2,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptItemTotal: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.text,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptTotalLabel: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.text,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptTotalValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.text,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptFooter: {
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: "center",
+    color: colors.textSecondary,
+    marginTop: 2,
+    paddingHorizontal: 6,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
 });
 
 export default LaporanScreen;
