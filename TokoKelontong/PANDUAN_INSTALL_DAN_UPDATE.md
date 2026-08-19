@@ -143,6 +143,23 @@ manual lagi selamanya.
 > akun Expo Anda. Selama build tetap dari akun yang sama, APK baru apa pun
 > nanti akan "menimpa mulus" aplikasi lama tanpa menghapus data.
 
+### 3.1 Bila kuota build cloud habis
+
+Akun gratis Expo punya batas build Android per bulan (cek
+**expo.dev → Account → Billing → Current usage**). Bila muncul error
+*"This account has used its Android builds from the Free plan this month"*,
+solusinya sederhana: **tunggu tanggal reset** (awal bulan berikutnya,
+tertulis di pesan error) lalu jalankan ulang `eas build -p android --profile apk`.
+
+Catatan penting:
+- Kuota yang habis hanya kuota **build**. Menerbitkan update OTA
+  (`eas update`) **tidak** memotong kuota build dan tetap bisa dilakukan
+  kapan saja — tetapi update hanya diterima oleh APK yang sudah berisi
+  mesin update (APK base hasil langkah 3 di atas).
+- `eas build --local` tidak mendukung Windows, dan build Gradle manual
+  di Windows rentan masalah path panjang/jaringan, jadi **tidak
+  disarankan**. Cukup andalkan build cloud Expo setelah kuota reset.
+
 ---
 
 ## 4. Menerbitkan Update (OTA) dari Komputer Anda
