@@ -71,7 +71,7 @@ const HomeScreen = ({ navigation }) => {
           ? "Selamat Sore"
           : "Selamat Malam";
   const greetingEmoji =
-    hour < 11 ? "☀️" : hour < 15 ? "🌤️" : hour < 18 ? "box" : "🌙";
+    hour < 11 ? "☀️" : hour < 15 ? "🌤️" : hour < 18 ? "🌇" : "🌙";
 
   const totalPemasukan = todaySummary.omzet;
   const totalLaba = todaySummary.laba;

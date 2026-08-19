@@ -554,8 +554,26 @@ const AddProductScreen = ({ navigation, route }) => {
       return;
     }
 
+    // Cek barcode duplikat sebelum simpan (jalur tambah & edit)
+    const barcodeVal = barcode.trim() || null;
+    if (barcodeVal) {
+      try {
+        const existingBarcode =
+          await ProductRepository.getProductByBarcode(barcodeVal);
+        if (existingBarcode && existingBarcode.id !== existingProduct?.id) {
+          Alert.alert(
+            "Barcode Sudah Terdaftar",
+            `Barcode ini sudah dipakai oleh produk "${existingBarcode.product_name}". Gunakan barcode lain.`,
+          );
+          return;
+        }
+      } catch (_) {
+        // Jika cek gagal, lanjut — unique index di server jadi penjaga akhir
+      }
+    }
+
     const data = {
-      barcode: barcode.trim() || null,
+      barcode: barcodeVal,
       product_name: productName.trim(),
       capital_price: capPrice,
       selling_price: sellPrice,
@@ -653,6 +671,25 @@ const AddProductScreen = ({ navigation, route }) => {
           <TouchableOpacity style={styles.iconBtn} onPress={openBarcodeScanner}>
             <MaterialCommunityIcons
               name="barcode-scan"
+              size={24}
+              color="#fff"
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.iconBtn, !barcode.trim() && { opacity: 0.4 }]}
+            onPress={() => {
+              if (!barcode.trim()) {
+                Alert.alert(
+                  "Barcode Kosong",
+                  "Isi kolom barcode terlebih dahulu untuk melihat label.",
+                );
+                return;
+              }
+              setShowBarcodeModal(true);
+            }}
+          >
+            <MaterialCommunityIcons
+              name="tag-outline"
               size={24}
               color="#fff"
             />

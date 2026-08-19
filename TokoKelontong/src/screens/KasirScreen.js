@@ -166,12 +166,24 @@ const KasirScreen = ({ navigation }) => {
   const updateQty = (product_id, qty) => {
     if (qty <= 0) {
       dispatch({ type: "REMOVE_FROM_CART", payload: { product_id } });
-    } else {
-      dispatch({
-        type: "UPDATE_CART_QTY",
-        payload: { product_id, quantity: qty },
-      });
+      return;
     }
+    // Validasi stok saat qty dinaikkan (tombol + di grid & modal keranjang)
+    const product = allProducts.find((p) => p.id === product_id);
+    const cartItem = cart.find((i) => i.product_id === product_id);
+    const maxStock =
+      product != null ? product.stock_quantity : cartItem?.stock_quantity;
+    if (maxStock != null && qty > maxStock) {
+      Alert.alert(
+        "Stok Tidak Cukup",
+        `Stok tersedia: ${maxStock}`,
+      );
+      return;
+    }
+    dispatch({
+      type: "UPDATE_CART_QTY",
+      payload: { product_id, quantity: qty },
+    });
   };
 
   const clearCart = () => {

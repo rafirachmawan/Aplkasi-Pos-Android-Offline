@@ -343,7 +343,8 @@ const LaporanScreen = ({ route }) => {
             style={styles.navBtn}
             disabled={
               activeTab === "Harian"
-                ? getDateStr() >= today.toISOString().split("T")[0]
+                ? getDateStr() >=
+                  `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
                 : getMonthStr() >=
                   `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
             }

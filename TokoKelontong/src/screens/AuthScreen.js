@@ -31,7 +31,7 @@ export default function AuthScreen() {
       return "Username atau password salah.";
     if (low.includes("username_taken"))
       return "Username sudah dipakai, pilih yang lain.";
-    if (low.includes("already registered"))
+    if (low.includes("already_registered") || low.includes("already registered"))
       return "Username sudah terdaftar. Silakan masuk.";
     if (low.includes("at least 6")) return "Password minimal 6 karakter.";
     if (msg === "email_confirmation_still_on")

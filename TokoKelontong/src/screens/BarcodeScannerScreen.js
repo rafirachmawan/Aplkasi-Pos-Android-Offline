@@ -36,9 +36,8 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     if (onBarcodeScanned) {
       onBarcodeScanned(data);
     }
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    }
+    // Tetap di layar scanner agar tombol "Scan Lagi" bisa dipakai;
+    // user menutup lewat tombol X.
   };
 
   if (Platform.OS === 'web') {
@@ -101,7 +100,13 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
         <Text style={styles.hint}>Arahkan kamera ke barcode produk</Text>
 
         {scanned && (
-          <TouchableOpacity style={styles.rescanBtn} onPress={() => setScanned(false)}>
+          <TouchableOpacity
+            style={styles.rescanBtn}
+            onPress={() => {
+              setScanned(false);
+              isScannedRef.current = false;
+            }}
+          >
             <MaterialCommunityIcons name="barcode-scan" size={18} color="#fff" />
             <Text style={styles.rescanText}>Scan Lagi</Text>
           </TouchableOpacity>

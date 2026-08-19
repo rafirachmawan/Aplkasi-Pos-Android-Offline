@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,9 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, fonts } from '../theme/colors';
+import { AppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { updateStoreName } from '../services/authService';
 
 const STORE_PROFILE_KEY = '@TokoKelontong:StoreProfile';
 
@@ -27,6 +30,8 @@ const SettingRow = ({ icon, iconColor, iconBg, label, children }) => (
 );
 
 const SettingNotaScreen = ({ navigation }) => {
+  const { dispatch } = useContext(AppContext);
+  const { refreshProfile } = useAuth();
   const [storeName, setStoreName] = useState('');
   const [storeAddress, setStoreAddress] = useState('');
   const [storeContact, setStoreContact] = useState('');
@@ -75,6 +80,19 @@ const SettingNotaScreen = ({ navigation }) => {
       await AsyncStorage.setItem(STORE_PROFILE_KEY, JSON.stringify(data));
       if (storeName.trim()) {
         await AsyncStorage.setItem('storeName', storeName.trim());
+        // Samakan dengan perilaku menu Pengaturan: perbarui context lokal
+        // dan selaraskan nama toko ke cloud agar konsisten di semua layar/HP.
+        dispatch({ type: 'SET_STORE_NAME', payload: storeName.trim() });
+        try {
+          await updateStoreName(storeName.trim());
+          await refreshProfile();
+        } catch (cloudErr) {
+          Alert.alert(
+            'Peringatan',
+            'Pengaturan nota tersimpan di HP ini, tetapi nama toko gagal diperbarui ke cloud: ' +
+              cloudErr.message,
+          );
+        }
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
