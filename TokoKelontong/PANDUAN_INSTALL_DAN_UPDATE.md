@@ -156,9 +156,15 @@ Catatan penting:
   (`eas update`) **tidak** memotong kuota build dan tetap bisa dilakukan
   kapan saja — tetapi update hanya diterima oleh APK yang sudah berisi
   mesin update (APK base hasil langkah 3 di atas).
-- `eas build --local` tidak mendukung Windows, dan build Gradle manual
-  di Windows rentan masalah path panjang/jaringan, jadi **tidak
-  disarankan**. Cukup andalkan build cloud Expo setelah kuota reset.
+- Alternatif tanpa menunggu: build lokal di Windows terbukti bekerja
+  lewat script `_build_apk_local.bat` (double-click di File Explorer).
+  Script menyalin proyek ke folder path-pendek `D:\tkb`, menyuntikkan
+  mirror Aliyun untuk dependensi, dan menaruh semua cache di drive D.
+  Build pertama ±10-25 menit; build berikutnya cepat (incremental).
+  APK hasil tersalin ke `TokoKelontong\app-release.apk`.
+  Catatan: APK build lokal ditandatangani keystore debug Android —
+  berbeda dengan tanda tangan build EAS — jadi di perangkat, aplikasi
+  lama harus di-uninstall dulu sebelum pasang APK lokal ini.
 
 ---
 

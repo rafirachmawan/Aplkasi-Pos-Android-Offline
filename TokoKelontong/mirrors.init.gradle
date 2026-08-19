@@ -1,0 +1,28 @@
+// Init script: menyuntikkan mirror Aliyun ke SEMUA resolusi dependensi
+// (build root, included build react-native/expo, dan semua subproject).
+// Dipakai karena repo.maven.apache.org / plugins.gradle.org membalas 403
+// dari jaringan tertentu. Dipakai lewat: gradlew -I mirrors.init.gradle ...
+def mirrors = [
+  'https://maven.aliyun.com/repository/google',
+  'https://maven.aliyun.com/repository/public',
+  'https://maven.aliyun.com/repository/gradle-plugin'
+]
+
+beforeSettings { settings ->
+  settings.pluginManagement {
+    repositories {
+      mirrors.each { u -> maven { url u } }
+    }
+  }
+}
+
+allprojects {
+  buildscript {
+    repositories {
+      mirrors.each { u -> maven { url u } }
+    }
+  }
+  repositories {
+    mirrors.each { u -> maven { url u } }
+  }
+}

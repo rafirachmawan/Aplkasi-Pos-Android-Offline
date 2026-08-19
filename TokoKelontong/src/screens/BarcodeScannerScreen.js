@@ -18,7 +18,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
  * Menerima route.params.onBarcodeScanned(barcode) callback.
  */
 const BarcodeScannerScreen = ({ navigation, route }) => {
-  const { onBarcodeScanned } = route.params || {};
+  const { onBarcodeScanned, autoClose } = route.params || {};
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const isScannedRef = React.useRef(false);
@@ -36,7 +36,12 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     if (onBarcodeScanned) {
       onBarcodeScanned(data);
     }
-    // Tetap di layar scanner agar tombol "Scan Lagi" bisa dipakai;
+    if (autoClose) {
+      // Mode sekali scan (tambah barang): langsung kembali ke form.
+      navigation.goBack();
+      return;
+    }
+    // Mode kasir: tetap di layar scanner agar tombol "Scan Lagi" bisa dipakai;
     // user menutup lewat tombol X.
   };
 

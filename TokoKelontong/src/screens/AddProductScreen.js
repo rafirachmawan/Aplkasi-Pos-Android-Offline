@@ -19,6 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Print from "expo-print";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ProductRepository from "../database/productRepository";
+import { useAuth } from "../context/AuthContext";
 import { colors, fonts } from "../theme/colors";
 import { encodeCode128 } from "../utils/barcode128";
 import { uploadProductImage, isCloudImageUri } from "../utils/imageStorage";
@@ -46,6 +47,11 @@ const UNITS_STORAGE_KEY = "product_units";
 
 const DEFAULT_CATEGORIES = ["makanan", "minuman"];
 const CATEGORIES_STORAGE_KEY = "product_categories";
+
+// Key penyimpanan per toko agar daftar satuan/kategori tidak campur antar toko
+// di satu HP yang sama.
+const unitsKeyFor = (storeId) => `${UNITS_STORAGE_KEY}:${storeId}`;
+const categoriesKeyFor = (storeId) => `${CATEGORIES_STORAGE_KEY}:${storeId}`;
 
 // ─── Komponen BarcodeDisplay (Code128 ASLI) ─────────────────────────────────────
 // Merender barcode Code128 standar industri (bisa dibaca scanner)
@@ -104,6 +110,10 @@ const AddProductScreen = ({ navigation, route }) => {
   const existingProduct = route.params?.product;
   const scannedBarcode = route.params?.scannedBarcode;
 
+  // store_id toko yang sedang login — dasar key penyimpanan satuan/kategori.
+  const { profile } = useAuth();
+  const storeId = profile?.store_id || null;
+
   const [barcode, setBarcode] = useState("");
   const [productName, setProductName] = useState("");
   const [capitalPrice, setCapitalPrice] = useState("");
@@ -138,24 +148,46 @@ const AddProductScreen = ({ navigation, route }) => {
   const [editingCategory, setEditingCategory] = useState(null);
   const [editCategoryInput, setEditCategoryInput] = useState("");
 
-  // Load units from storage
+  // Load units & categories per toko dari storage
   useEffect(() => {
-    AsyncStorage.getItem(UNITS_STORAGE_KEY).then((stored) => {
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setUnits(parsed);
+    if (!storeId) return;
+    setUnits(DEFAULT_UNITS);
+    setCategories(DEFAULT_CATEGORIES);
+    const uKey = unitsKeyFor(storeId);
+    const cKey = categoriesKeyFor(storeId);
+    (async () => {
+      // Migrasi satu kali: key lama (global perangkat) dipindah ke toko ini.
+      let storedUnits = await AsyncStorage.getItem(uKey);
+      if (!storedUnits) {
+        const legacy = await AsyncStorage.getItem(UNITS_STORAGE_KEY);
+        if (legacy) {
+          await AsyncStorage.setItem(uKey, legacy);
+          await AsyncStorage.removeItem(UNITS_STORAGE_KEY);
+          storedUnits = legacy;
         }
       }
-    });
-    AsyncStorage.getItem(CATEGORIES_STORAGE_KEY).then((stored) => {
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCategories(parsed);
+      let storedCats = await AsyncStorage.getItem(cKey);
+      if (!storedCats) {
+        const legacy = await AsyncStorage.getItem(CATEGORIES_STORAGE_KEY);
+        if (legacy) {
+          await AsyncStorage.setItem(cKey, legacy);
+          await AsyncStorage.removeItem(CATEGORIES_STORAGE_KEY);
+          storedCats = legacy;
         }
       }
-    });
+      if (storedUnits) {
+        const parsed = JSON.parse(storedUnits);
+        if (Array.isArray(parsed) && parsed.length > 0) setUnits(parsed);
+      }
+      if (storedCats) {
+        const parsed = JSON.parse(storedCats);
+        if (Array.isArray(parsed) && parsed.length > 0) setCategories(parsed);
+      }
+    })();
+  }, [storeId]);
+
+  // Deteksi printer Bluetooth sekali saat layar dibuka
+  useEffect(() => {
     if (isBluetoothPrintingSupported()) {
       isPrinterConfigured()
         .then(setBtPrinterReady)
@@ -165,7 +197,9 @@ const AddProductScreen = ({ navigation, route }) => {
 
   const saveUnits = async (newUnits) => {
     setUnits(newUnits);
-    await AsyncStorage.setItem(UNITS_STORAGE_KEY, JSON.stringify(newUnits));
+    if (storeId) {
+      await AsyncStorage.setItem(unitsKeyFor(storeId), JSON.stringify(newUnits));
+    }
   };
 
   const handleAddUnit = async () => {
@@ -216,7 +250,9 @@ const AddProductScreen = ({ navigation, route }) => {
 
   const saveCategories = async (newCats) => {
     setCategories(newCats);
-    await AsyncStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(newCats));
+    if (storeId) {
+      await AsyncStorage.setItem(categoriesKeyFor(storeId), JSON.stringify(newCats));
+    }
   };
 
   const handleAddCategory = async () => {
@@ -420,6 +456,7 @@ const AddProductScreen = ({ navigation, route }) => {
       return;
     }
     navigation.navigate("BarcodeScanner", {
+      autoClose: true,
       onBarcodeScanned: async (code) => {
         setBarcode(code);
         try {
@@ -840,6 +877,9 @@ const AddProductScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           ))}
         </View>
+        <Text style={styles.infoText}>
+          💡 Tekan tahan satuan untuk ubah/hapus.
+        </Text>
 
         <Button
           mode="outlined"
@@ -881,6 +921,9 @@ const AddProductScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           ))}
         </View>
+        <Text style={styles.infoText}>
+          💡 Tekan tahan kategori untuk ubah/hapus.
+        </Text>
 
         <Button
           mode="outlined"
