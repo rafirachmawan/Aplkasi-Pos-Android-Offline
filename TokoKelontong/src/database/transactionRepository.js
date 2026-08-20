@@ -99,7 +99,7 @@ class TransactionRepository {
     const { data, error } = await supabase
       .from("transactions")
       .select(
-        "invoice_number, created_at, transaction_details(product_name, quantity, price_at_sale, capital_at_sale)",
+        "invoice_number, created_at, total_price, discount_amount, transaction_details(product_name, quantity, price_at_sale, capital_at_sale)",
       )
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -108,7 +108,17 @@ class TransactionRepository {
     for (const t of data || []) {
       const d = new Date(t.created_at); // tanggal lokal perangkat
       const tanggal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      // Diskon tersimpan per transaksi, sedangkan CSV per barang —
+      // bagikan diskon proporsional ke nilai penjualan tiap barang
+      // agar keuntungan di CSV sama dengan laba di aplikasi.
+      const totalPrice = t.total_price || 0;
+      const discountAmount = t.discount_amount || 0;
       for (const td of t.transaction_details || []) {
+        const lineRevenue = td.quantity * td.price_at_sale;
+        const allocatedDiscount =
+          totalPrice > 0
+            ? Math.round((lineRevenue / totalPrice) * discountAmount)
+            : 0;
         rows.push({
           Tanggal: tanggal,
           No_Nota: t.invoice_number,
@@ -116,9 +126,9 @@ class TransactionRepository {
           Qty: td.quantity,
           Harga_Modal: td.capital_at_sale,
           Harga_Jual: td.price_at_sale,
-          Total_Penjualan: td.quantity * td.price_at_sale,
+          Total_Penjualan: lineRevenue,
           Total_Keuntungan:
-            td.quantity * (td.price_at_sale - td.capital_at_sale),
+            lineRevenue - allocatedDiscount - td.quantity * (td.capital_at_sale || 0),
         });
       }
     }
