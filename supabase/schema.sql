@@ -222,8 +222,9 @@ begin
     where id = (v_item->>'product_id')::uuid and store_id = v_store;
   end loop;
 
-  -- c) nomor nota unik per toko per hari
-  v_date_key := to_char(now(), 'YYYYMMDD');
+  -- c) nomor nota unik per toko per hari (zona waktu Indonesia/WIB,
+  --    sesuai pengelompokan tanggal lokal di aplikasi)
+  v_date_key := to_char(now() at time zone 'Asia/Jakarta', 'YYYYMMDD');
   insert into public.invoice_counters (store_id, date_key, last_seq)
   values (v_store, v_date_key, 0)
   on conflict (store_id, date_key) do nothing;

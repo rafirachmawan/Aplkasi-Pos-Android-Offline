@@ -75,6 +75,7 @@ const KasirScreen = ({ navigation }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastTx, setLastTx] = useState(null);
   const [lastTxDetails, setLastTxDetails] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
   const [storeProfile, setStoreProfile] = useState({});
   const [btPrinterReady, setBtPrinterReady] = useState(false);
@@ -226,7 +227,9 @@ const KasirScreen = ({ navigation }) => {
     (sum, i) => sum + i.selling_price * i.quantity,
     0,
   );
-  const diskon = parseRpToNumber(discountInput);
+  // Diskon dibatasi maksimal sebesar subtotal agar tidak ada nilai
+  // diskon berlebihan yang ikut tersimpan dan tercetak di nota.
+  const diskon = Math.min(parseRpToNumber(discountInput), totalHarga);
   const grandTotal = Math.max(0, totalHarga - diskon);
   const cashReceived = parseRpToNumber(cashInput);
   const kembalian = cashReceived - grandTotal;
@@ -243,6 +246,8 @@ const KasirScreen = ({ navigation }) => {
     : "";
 
   const handleBayar = async () => {
+    // Kunci ganda: cegah ketukan cepat menghasilkan dua transaksi.
+    if (submitting) return;
     if (cashReceived < grandTotal) {
       Alert.alert(
         "Uang Kurang",
@@ -250,6 +255,7 @@ const KasirScreen = ({ navigation }) => {
       );
       return;
     }
+    setSubmitting(true);
     try {
       const txId = await TransactionRepository.createTransaction(
         cart,
@@ -305,6 +311,8 @@ const KasirScreen = ({ navigation }) => {
       loadProducts();
     } catch (e) {
       Alert.alert("Error", e.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1073,12 +1081,12 @@ const KasirScreen = ({ navigation }) => {
                     style={[
                       styles.bayarBtn,
                       {
-                        opacity: cashReceived >= grandTotal ? 1 : 0.5,
+                        opacity: cashReceived >= grandTotal && !submitting ? 1 : 0.5,
                         marginTop: 12,
                       },
                     ]}
                     onPress={handleBayar}
-                    disabled={cashReceived < grandTotal}
+                    disabled={cashReceived < grandTotal || submitting}
                   >
                     <MaterialCommunityIcons
                       name="check-circle"

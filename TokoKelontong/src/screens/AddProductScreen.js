@@ -636,7 +636,7 @@ const AddProductScreen = ({ navigation, route }) => {
       capital_price: capPrice,
       selling_price: sellPrice,
       stock_quantity: stock,
-      min_stock_threshold: isNaN(minStockVal) ? 5 : minStockVal,
+      min_stock_threshold: isNaN(minStockVal) ? 5 : Math.max(0, minStockVal),
       image_uri: finalImageUri,
       unit,
       category,
@@ -644,6 +644,17 @@ const AddProductScreen = ({ navigation, route }) => {
 
     try {
       if (existingProduct) {
+        // Terapkan SELISIH stok yang diketik user terhadap stok terbaru
+        // di server, agar penjualan dari perangkat lain selama form
+        // terbuka tidak tertimpa angka absolut yang sudah lama.
+        const latest = await ProductRepository.getProductById(
+          existingProduct.id,
+        );
+        const stockDelta = stock - (existingProduct.stock_quantity || 0);
+        data.stock_quantity = Math.max(
+          0,
+          (latest ? latest.stock_quantity : stock) + stockDelta,
+        );
         await ProductRepository.updateProduct(existingProduct.id, data);
         Alert.alert("✅ Sukses", "Produk berhasil diperbarui.", [
           { text: "OK", onPress: () => navigation.goBack() },

@@ -12,9 +12,10 @@ const BUCKET = "product-images";
  * (lihat supabase/migration_v3_storage.sql).
  *
  * @param {string} localUri - URI lokal dari image picker (file://...)
+ * @param {string} folder - folder tujuan di dalam bucket (default "products")
  * @returns {Promise<string>} URL publik gambar
  */
-export const uploadProductImage = async (localUri) => {
+export const uploadProductImage = async (localUri, folder = "products") => {
   // Pastikan file lokal benar-benar ada sebelum diunggah.
   const info = await FileSystemLegacy.getInfoAsync(localUri);
   if (!info.exists) {
@@ -30,8 +31,8 @@ export const uploadProductImage = async (localUri) => {
     : "jpg";
   const contentType = `image/${ext === "jpg" ? "jpeg" : ext}`;
 
-  // Path unik per upload — folder "products" per nama file unik
-  const fileName = `products/${Date.now()}-${Math.random()
+  // Path unik per upload — folder sesuai tujuan per nama file unik
+  const fileName = `${folder}/${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 9)}.${ext}`;
 

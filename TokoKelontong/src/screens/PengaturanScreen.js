@@ -29,6 +29,7 @@ import {
   getPairedPrinters,
   isBluetoothPrintingSupported,
 } from "../utils/bluetoothPrinter";
+import { uploadProductImage, isCloudImageUri } from "../utils/imageStorage";
 import { colors, fonts } from "../theme/colors";
 
 const appVersion = Constants.expoConfig?.version || "1.0.0";
@@ -278,8 +279,23 @@ const PengaturanScreen = ({ navigation }) => {
     try {
       await AsyncStorage.setItem("storeName", storeNameInput.trim());
       await AsyncStorage.setItem("printerAddress", printerInput.trim());
-      if (logoUri) {
-        await AsyncStorage.setItem("storeLogo", logoUri);
+      // Logo lokal diunggah dulu ke cloud agar tampil di semua HP toko ini
+      // dan tidak hilang saat instal ulang / pembersihan cache.
+      let finalLogoUri = logoUri;
+      if (logoUri && !isCloudImageUri(logoUri)) {
+        try {
+          finalLogoUri = await uploadProductImage(logoUri, "logos");
+        } catch (uploadErr) {
+          Alert.alert(
+            "Peringatan",
+            "Logo gagal diunggah ke cloud (" +
+              uploadErr.message +
+              "). Logo hanya tersimpan di HP ini.",
+          );
+        }
+      }
+      if (finalLogoUri) {
+        await AsyncStorage.setItem("storeLogo", finalLogoUri);
       } else {
         await AsyncStorage.removeItem("storeLogo");
       }
@@ -302,7 +318,7 @@ const PengaturanScreen = ({ navigation }) => {
         storeName: storeNameInput.trim(),
         name: storeNameInput.trim(), // alias format lama, dijaga sementara
         printerAddress: printerInput.trim() || null,
-        logo: logoUri || null,
+        logo: finalLogoUri || null,
       };
       await AsyncStorage.setItem(
         "@TokoKelontong:StoreProfile",
@@ -314,7 +330,7 @@ const PengaturanScreen = ({ navigation }) => {
         type: "SET_PRINTER_ADDRESS",
         payload: printerInput.trim() || null,
       });
-      dispatch({ type: "SET_STORE_LOGO", payload: logoUri || null });
+      dispatch({ type: "SET_STORE_LOGO", payload: finalLogoUri || null });
 
       // Simpan nama toko ke cloud agar terbaca di semua HP toko yang sama
       try {

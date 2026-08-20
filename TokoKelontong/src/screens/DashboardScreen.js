@@ -75,8 +75,12 @@ const DashboardScreen = ({ navigation }) => {
       let subtitle = "";
 
       if (filterMode === "daily") {
-        pattern = formatYMD(selectedYear, selectedMonth, selectedDay);
-        const dateObj = new Date(selectedYear, selectedMonth, selectedDay);
+        // Batasi tanggal ke hari terakhir bulan terpilih agar tgl 31
+        // tidak diam-diam "lompat" ke bulan berikutnya.
+        const maxDay = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+        const safeDay = Math.min(selectedDay, maxDay);
+        pattern = formatYMD(selectedYear, selectedMonth, safeDay);
+        const dateObj = new Date(selectedYear, selectedMonth, safeDay);
         subtitle = dateObj.toLocaleDateString("id-ID", {
           weekday: "long",
           day: "numeric",
@@ -123,7 +127,8 @@ const DashboardScreen = ({ navigation }) => {
     let dateParam = "";
 
     if (filterMode === "daily") {
-      dateParam = formatYMD(selectedYear, selectedMonth, selectedDay);
+      const maxDayNav = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+      dateParam = formatYMD(selectedYear, selectedMonth, Math.min(selectedDay, maxDayNav));
     } else if (filterMode === "monthly") {
       dateParam = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
     }

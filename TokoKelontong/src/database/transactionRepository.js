@@ -157,10 +157,13 @@ class TransactionRepository {
     let laba = 0;
     for (const t of data || []) {
       omzet += t.grand_total || 0;
+      // Laba = penerimaan nyata (grand_total sesudah diskon) - modal,
+      // agar diskon tidak ikut terhitung sebagai keuntungan.
+      let modal = 0;
       for (const td of t.transaction_details || []) {
-        laba +=
-          td.quantity * ((td.price_at_sale || 0) - (td.capital_at_sale || 0));
+        modal += td.quantity * (td.capital_at_sale || 0);
       }
+      laba += (t.grand_total || 0) - modal;
     }
     return { omzet, laba, count: (data || []).length };
   }
