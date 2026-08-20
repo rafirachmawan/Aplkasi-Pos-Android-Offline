@@ -254,7 +254,8 @@ export const printBarcodeLabelViaBluetooth = async ({
     await printer.printText(`${priceText}\n`, TEXT_OPTS);
   }
   // Barcode hardware CODE128 (GS k m=73), lebar 2, tinggi 80 dot,
-  // angka dicetak di bawah barcode.
-  printer.printBarCode(String(barcode), printer.BARCODETYPE.CODE128, 2, 80, 0, 2);
+  // angka dicetak di bawah barcode. Wajib di-await agar data barcode
+  // sampai ke printer sebelum kertas dimajukan.
+  await printer.printBarCode(String(barcode), printer.BARCODETYPE.CODE128, 2, 80, 0, 2);
   await printer.printAndFeed(60);
 };

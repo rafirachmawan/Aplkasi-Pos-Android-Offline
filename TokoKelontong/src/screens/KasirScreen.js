@@ -1,4 +1,4 @@
-import React, { useState, useContext, useCallback } from "react";
+import React, { useState, useContext, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -121,6 +121,13 @@ const KasirScreen = ({ navigation }) => {
     return matchCategory && matchSearch;
   });
 
+  // Ref keranjang agar callback scan barcode selalu melihat isi terbaru
+  // (closure yang dikirim ke layar scanner tidak boleh menyimpan foto lama).
+  const cartRef = useRef(cart);
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
+
   const openBarcodeScanner = () => {
     if (Platform.OS === "web") {
       Alert.alert(
@@ -153,7 +160,7 @@ const KasirScreen = ({ navigation }) => {
       Alert.alert("Stok Habis", `${product.product_name} stoknya habis.`);
       return;
     }
-    const cartItem = cart.find((i) => i.product_id === product.id);
+    const cartItem = cartRef.current.find((i) => i.product_id === product.id);
     const currentQtyInCart = cartItem ? cartItem.quantity : 0;
     if (currentQtyInCart >= product.stock_quantity) {
       Alert.alert(
@@ -253,29 +260,41 @@ const KasirScreen = ({ navigation }) => {
         kembalian,
       );
 
-      const nowDate = new Date();
-      const todayStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
-      const todayTxs =
-        await TransactionRepository.getTransactionsByDate(todayStr);
-      const fullTx = todayTxs.find((t) => t.id === txId);
-
+      // Transaksi sudah tercatat di server: amankan UI dulu supaya
+      // kegagalan query lanjutan tidak meninggalkan keranjang (double-simpan).
       setShowCartModal(false);
       setCashInput("");
       setDiscountInput("");
       dispatch({ type: "CLEAR_CART" });
-      setStoreProfile(await getStoreProfile());
 
       try {
-        const details = await TransactionRepository.getTransactionDetails(txId);
-        setLastTxDetails(details);
-      } catch (_) {
-        setLastTxDetails([]);
-      }
+        const nowDate = new Date();
+        const todayStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
+        const todayTxs =
+          await TransactionRepository.getTransactionsByDate(todayStr);
+        const fullTx = todayTxs.find((t) => t.id === txId);
 
-      if (fullTx) {
-        setLastTx(fullTx);
-        setShowSuccessModal(true);
-      } else {
+        setStoreProfile(await getStoreProfile());
+
+        try {
+          const details = await TransactionRepository.getTransactionDetails(txId);
+          setLastTxDetails(details);
+        } catch (_) {
+          setLastTxDetails([]);
+        }
+
+        if (fullTx) {
+          setLastTx(fullTx);
+          setShowSuccessModal(true);
+        } else {
+          Alert.alert(
+            "✅ Transaksi Berhasil!",
+            `Kembalian: ${formatRupiah(kembalian)}`,
+          );
+        }
+      } catch (_) {
+        // Bukti transaksi gagal dimuat (mis. jaringan putus sesaat),
+        // tetapi penjualan sudah sah tercatat.
         Alert.alert(
           "✅ Transaksi Berhasil!",
           `Kembalian: ${formatRupiah(kembalian)}`,

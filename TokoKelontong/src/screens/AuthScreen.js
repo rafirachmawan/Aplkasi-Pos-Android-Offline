@@ -60,6 +60,10 @@ export default function AuthScreen() {
       setError("Password minimal 6 karakter.");
       return;
     }
+    if (mode === "register" && storeName.trim().length === 0) {
+      setError("Nama toko wajib diisi.");
+      return;
+    }
     setLoading(true);
     try {
       if (mode === "login") {

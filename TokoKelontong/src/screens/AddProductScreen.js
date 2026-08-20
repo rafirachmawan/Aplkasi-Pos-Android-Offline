@@ -176,12 +176,20 @@ const AddProductScreen = ({ navigation, route }) => {
         }
       }
       if (storedUnits) {
-        const parsed = JSON.parse(storedUnits);
-        if (Array.isArray(parsed) && parsed.length > 0) setUnits(parsed);
+        try {
+          const parsed = JSON.parse(storedUnits);
+          if (Array.isArray(parsed) && parsed.length > 0) setUnits(parsed);
+        } catch (_) {
+          // Data tersimpan korup — biarkan daftar default dipakai.
+        }
       }
       if (storedCats) {
-        const parsed = JSON.parse(storedCats);
-        if (Array.isArray(parsed) && parsed.length > 0) setCategories(parsed);
+        try {
+          const parsed = JSON.parse(storedCats);
+          if (Array.isArray(parsed) && parsed.length > 0) setCategories(parsed);
+        } catch (_) {
+          // Data tersimpan korup — biarkan daftar default dipakai.
+        }
       }
     })();
   }, [storeId]);

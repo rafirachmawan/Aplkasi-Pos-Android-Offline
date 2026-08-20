@@ -397,7 +397,16 @@ const PengaturanScreen = ({ navigation }) => {
       "Anda akan keluar dari akun di HP ini. Data toko tetap aman di cloud.",
       [
         { text: "Batal", style: "cancel" },
-        { text: "Keluar", style: "destructive", onPress: () => signOut() },
+        {
+          text: "Keluar",
+          style: "destructive",
+          onPress: () => {
+            // Kosongkan keranjang agar akun berikutnya tidak mewarisi
+            // isi keranjang akun sebelumnya.
+            dispatch({ type: "CLEAR_CART" });
+            signOut();
+          },
+        },
       ],
     );
   };

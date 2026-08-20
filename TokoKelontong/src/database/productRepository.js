@@ -1,13 +1,18 @@
 import { supabase } from "../services/supabaseClient";
 
-// store_id toko milik user yang sedang login (di-cache setelah diambil).
+// store_id toko milik user yang sedang login (di-cache per user, jadi
+// ganti akun tanpa restart aplikasi tetap memakai toko yang benar).
 let cachedStoreId = null;
+let cachedForUser = null;
 async function getStoreId() {
-  if (cachedStoreId) return cachedStoreId;
+  const { data: sess } = await supabase.auth.getSession();
+  const uid = sess?.session?.user?.id || null;
+  if (cachedStoreId && cachedForUser === uid) return cachedStoreId;
   const { data, error } = await supabase.rpc("current_store_id");
   if (error) throw error;
   if (!data) throw new Error("Akun belum terdaftar ke toko mana pun.");
   cachedStoreId = data;
+  cachedForUser = uid;
   return cachedStoreId;
 }
 

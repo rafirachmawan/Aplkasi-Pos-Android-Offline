@@ -135,6 +135,9 @@ const LaporanScreen = ({ route }) => {
     if (activeTab === "Harian") {
       d.setDate(d.getDate() + direction);
     } else {
+      // Setel ke tanggal 1 dulu agar tanggal 29-31 tidak "lompat"
+      // ke bulan berikutnya saat bulan tujuan lebih pendek.
+      d.setDate(1);
       d.setMonth(d.getMonth() + direction);
     }
     setSelectedDate(d);
