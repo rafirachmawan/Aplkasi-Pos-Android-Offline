@@ -49,7 +49,9 @@ export const exportToCSV = async (data, filename) => {
 
   // Android / iOS native
   try {
-    const FileSystem = require('expo-file-system');
+    // SDK 54: API lama (cacheDirectory, writeAsStringAsync, EncodingType)
+    // hanya tersedia di subpath legacy.
+    const FileSystem = require('expo-file-system/legacy');
     const Sharing = require('expo-sharing');
 
     const fileUri = `${FileSystem.cacheDirectory}${filename}`;

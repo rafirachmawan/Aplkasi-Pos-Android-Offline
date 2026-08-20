@@ -208,20 +208,12 @@ const PengaturanScreen = ({ navigation }) => {
           return;
         }
 
-        let result;
-        try {
-          result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaType.Images,
-            allowsEditing: true,
-            quality: 0.8,
-          });
-        } catch (cropErr) {
-          result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaType.Images,
-            allowsEditing: false,
-            quality: 0.8,
-          });
-        }
+        // Tanpa layar crop: foto langsung dipakai agar user tidak bingung.
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: "images",
+          allowsEditing: false,
+          quality: 0.8,
+        });
 
         if (
           result &&
@@ -248,20 +240,12 @@ const PengaturanScreen = ({ navigation }) => {
           return;
         }
 
-        let result;
-        try {
-          result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaType.Images,
-            allowsEditing: true,
-            quality: 0.8,
-          });
-        } catch (cropErr) {
-          result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaType.Images,
-            allowsEditing: false,
-            quality: 0.8,
-          });
-        }
+        // Tanpa layar crop: foto langsung dipakai agar user tidak bingung.
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: "images",
+          allowsEditing: false,
+          quality: 0.8,
+        });
 
         if (
           result &&
