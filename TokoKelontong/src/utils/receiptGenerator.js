@@ -24,6 +24,30 @@ export const generateWAMessage = (transaction, details, storeProfile) => {
   const discountLine = transaction.discount_amount > 0
     ? `\n🏷️ Diskon       : -${formatRupiah(transaction.discount_amount)}` : '';
 
+  const paymentMethod = String(transaction.payment_method || 'cash').toUpperCase();
+  let paymentLines = [];
+  if (paymentMethod === 'CASH' || paymentMethod === 'TUNAI') {
+    paymentLines = [
+      `💵 Tunai      : ${formatRupiah(transaction.cash_received)}`,
+      `🔄 Kembalian  : *${formatRupiah(transaction.cash_return)}*`,
+    ];
+  } else {
+    paymentLines = [
+      `💳 Metode     : *${paymentMethod}*`,
+      `💵 Bayar      : ${formatRupiah(transaction.grand_total)} (Lunas)`,
+    ];
+  }
+
+  // Info meja & tipe pesanan jika mode Kafe/F&B
+  const fnbLines = [];
+  if (transaction.table_number) {
+    fnbLines.push(`🪑 Meja        : *${transaction.table_number}*`);
+  }
+  if (transaction.order_type && transaction.order_type !== 'retail') {
+    const typeLabel = transaction.order_type === 'dine_in' ? 'Makan di Tempat (Dine In)' : 'Bawa Pulang (Take Away)';
+    fnbLines.push(`🍽️ Pesanan     : ${typeLabel}`);
+  }
+
   const lines = [
     `🧾 *NOTA BELANJA RESMI*`,
     `*${storeName.toUpperCase()}*`,
@@ -32,6 +56,7 @@ export const generateWAMessage = (transaction, details, storeProfile) => {
     SEP,
     `📋 No. Nota  : *${transaction.invoice_number}*`,
     `📅 Tanggal   : ${date}`,
+    ...fnbLines,
     SEP,
     `*📦 DETAIL PEMBELIAN:*`,
     LINE,
@@ -41,28 +66,103 @@ export const generateWAMessage = (transaction, details, storeProfile) => {
     ``,
     `✅ *TOTAL BAYAR : ${formatRupiah(transaction.grand_total)}*`,
     ``,
-    `💵 Tunai      : ${formatRupiah(transaction.cash_received)}`,
-    `🔄 Kembalian  : *${formatRupiah(transaction.cash_return)}*`,
+    ...paymentLines,
     SEP,
     `_${footerMessage}_`,
     ``,
-    `_Dikirim otomatis dari Aplikasi Kasir_`,
+    `_Dikirim otomatis dari Aplikasi Kasir MarketPos_`,
   ].filter(l => l !== null);
 
   return lines.join('\n');
 };
 
-// ── HTML receipt PDF generator ───────────────────────────────────────────────
-export const generateReceiptHTML = (transaction, details, storeProfile) => {
+// ── WhatsApp Kitchen Ticket (Struk Dapur) ────────────────────────────────────
+export const generateKitchenWAMessage = (transaction, details, storeProfile) => {
+  const storeName = storeProfile?.storeName || 'MarketPos Resto';
+  const SEP  = '━━━━━━━━━━━━━━━━━━━━━━';
+  const LINE = '─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─';
+
   const date = new Date(transaction.created_at).toLocaleString('id-ID', {
-    day: 'numeric', month: 'long', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    day: 'numeric', month: 'numeric', year: 'numeric',
   });
 
-  const storeName    = storeProfile?.storeName    || 'Toko Kelontong';
+  const orderType = transaction.order_type === 'dine_in'
+    ? '🍽️ DINE IN (Makan di Tempat)'
+    : (transaction.order_type === 'take_away' ? '🥡 TAKE AWAY (Bungkus)' : 'PESANAN');
+
+  const itemLines = (details || []).map((it, idx) => {
+    return `${idx + 1}. *[ ${it.quantity}x ]* ${it.product_name}`;
+  }).join('\n');
+
+  const lines = [
+    `🍳 *PESANAN DAPUR / KITCHEN TICKET*`,
+    `*${storeName.toUpperCase()}*`,
+    SEP,
+    `📋 No. Order : *${transaction.invoice_number}*`,
+    `🕒 Jam       : ${date}`,
+    transaction.table_number ? `🪑 Meja      : *${transaction.table_number}*` : null,
+    `📌 Tipe      : *${orderType}*`,
+    SEP,
+    `*MENU YANG DIMASAK:*`,
+    LINE,
+    itemLines,
+    LINE,
+    transaction.payment_notes ? `📝 Catatan : _${transaction.payment_notes}_` : null,
+    SEP,
+    `_Harap segera diproses staf dapur_`,
+  ].filter(Boolean);
+
+  return lines.join('\n');
+};
+
+// ── WhatsApp daily closing report generator ─────────────────────────────────
+export const generateDailyClosingWAMessage = (summary, storeProfile, dateStr) => {
+  const storeName = storeProfile?.storeName || storeProfile?.name || 'Toko Kelontong';
+  const SEP  = '━━━━━━━━━━━━━━━━━━━━━━';
+  const LINE = '─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─';
+
+  const dateDisplay = dateStr || new Date().toLocaleDateString('id-ID', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+
+  const topItemsText = (summary?.top_products || []).length > 0
+    ? summary.top_products.map((p, idx) => `  ${idx + 1}. ${p.name} (${p.qty} terjual)`).join('\n')
+    : '  Belum ada penjualan';
+
+  const lines = [
+    `📊 *LAPORAN PENJUALAN HARIAN*`,
+    `*${storeName.toUpperCase()}*`,
+    `📅 ${dateDisplay}`,
+    SEP,
+    `💰 *RINGKASAN OMZET & KEUANGAN:*`,
+    `• Total Omzet      : *${formatRupiah(summary?.omzet || 0)}*`,
+    `• Uang Tunai (Laci): ${formatRupiah(summary?.omzet_tunai || 0)}`,
+    `• Non-Tunai (QRIS/TF): ${formatRupiah(summary?.omzet_non_tunai || 0)}`,
+    `• Total Transaksi  : ${summary?.count || 0} Nota`,
+    `• Estimasi Laba    : *${formatRupiah(summary?.laba || 0)}*`,
+    SEP,
+    `⭐ *PRODUK TERLARIS:*`,
+    LINE,
+    topItemsText,
+    SEP,
+    `_Laporan resmi dari Aplikasi Kasir MarketPos_`,
+  ];
+
+  return lines.join('\n');
+};
+
+// ── HTML receipt generator for Printing / PDF ────────────────────────────────
+export const generateReceiptHTML = (transaction, details, storeProfile) => {
+  const storeName    = storeProfile?.storeName    || 'MarketPos';
   const storeAddress = storeProfile?.storeAddress || '';
   const storeContact = storeProfile?.storeContact || '';
-  const footerMessage = storeProfile?.footerMessage || 'Terima Kasih Atas Kunjungan Anda!';
+  const footerMessage = storeProfile?.footerMessage || 'Terima kasih telah berbelanja!';
+
+  const date = new Date(transaction.created_at).toLocaleString('id-ID', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
 
   const detailsHTML = details.map(item => `
     <div class="item">
@@ -75,29 +175,26 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
   `).join('');
 
   const discountHTML = transaction.discount_amount > 0 ? `
-    <div class="calc-row">
-      <span class="calc-label">Subtotal</span>
-      <span class="calc-val">${formatRupiah(transaction.total_price)}</span>
-    </div>
     <div class="calc-row discount">
-      <span class="calc-label">Diskon</span>
-      <span class="calc-val">− ${formatRupiah(transaction.discount_amount)}</span>
-    </div>` : '';
+      <span class="calc-label">Diskon Toko</span>
+      <span class="calc-val">-${formatRupiah(transaction.discount_amount)}</span>
+    </div>
+  ` : '';
+
+  const fnbBadgeHTML = (transaction.table_number || (transaction.order_type && transaction.order_type !== 'retail')) ? `
+    <div class="fnb-card">
+      ${transaction.table_number ? `<div><strong>Meja:</strong> ${transaction.table_number}</div>` : ''}
+      ${transaction.order_type ? `<div><strong>Tipe:</strong> ${transaction.order_type === 'dine_in' ? 'Dine In' : 'Take Away'}</div>` : ''}
+    </div>
+  ` : '';
 
   return `<!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    
-    /* Force background colors to print in PDF */
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-
     body {
       font-family: 'Inter', -apple-system, sans-serif;
       background: #EDEEF2;
@@ -133,7 +230,7 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
       border-radius: 12px;
       border: 1px solid #E5E7EB;
       padding: 14px 16px;
-      margin: 16px 0;
+      margin: 16px 0 8px;
       display: flex;
       justify-content: space-between;
       gap: 8px;
@@ -141,6 +238,18 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
     .meta-label { font-size: 12px; font-weight: 700; color: #4B5563; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
     .meta-value { font-size: 14px; font-weight: 800; color: #111827; }
     .meta-block:last-child { text-align: right; }
+
+    .fnb-card {
+      background: #EFF6FF;
+      border: 1px dashed #93C5FD;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: #1D4ED8;
+    }
 
     .section-heading {
       font-size: 14px; font-weight: 800; color: #1F2937;
@@ -207,6 +316,8 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
         </div>
       </div>
 
+      ${fnbBadgeHTML}
+
       <div class="section-heading">Detail Pembelian</div>
       <div class="items-list">${detailsHTML}</div>
 
@@ -218,23 +329,104 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
         <span class="grand-value">${formatRupiah(transaction.grand_total)}</span>
       </div>
 
-      <div class="payment-box">
-        <div class="pay-row">
-          <span class="pay-label">Tunai</span>
-          <span class="pay-val">${formatRupiah(transaction.cash_received)}</span>
-        </div>
-        <div class="pay-divider"></div>
-        <div class="pay-row kembali">
-          <span class="pay-label">Kembalian</span>
-          <span class="pay-val">${formatRupiah(transaction.cash_return)}</span>
-        </div>
-      </div>
+      ${(() => {
+        const method = String(transaction.payment_method || 'cash').toUpperCase();
+        if (method === 'CASH' || method === 'TUNAI') {
+          return `
+          <div class="payment-box">
+            <div class="pay-row">
+              <span class="pay-label">Tunai</span>
+              <span class="pay-val">${formatRupiah(transaction.cash_received)}</span>
+            </div>
+            <div class="pay-divider"></div>
+            <div class="pay-row kembali">
+              <span class="pay-label">Kembalian</span>
+              <span class="pay-val">${formatRupiah(transaction.cash_return)}</span>
+            </div>
+          </div>`;
+        }
+        return `
+        <div class="payment-box">
+          <div class="pay-row">
+            <span class="pay-label">Metode Bayar</span>
+            <span class="pay-val" style="font-weight: 700; color: #0284C7;">${method}</span>
+          </div>
+          <div class="pay-divider"></div>
+          <div class="pay-row kembali">
+            <span class="pay-label">Status</span>
+            <span class="pay-val" style="color: #059669;">LUNAS (${formatRupiah(transaction.grand_total)})</span>
+          </div>
+        </div>`;
+      })()}
     </div>
 
     <div class="receipt-footer">
       <div class="footer-msg">${footerMessage}</div>
       <div class="footer-dots">• • •</div>
     </div>
+  </div>
+</body>
+</html>`;
+};
+
+// ── HTML Kitchen Ticket generator (Khusus Staf Dapur: Tanpa Harga) ──────────
+export const generateKitchenReceiptHTML = (transaction, details, storeProfile) => {
+  const storeName = storeProfile?.storeName || 'MarketPos Resto';
+  const date = new Date(transaction.created_at).toLocaleString('id-ID', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    day: 'numeric', month: 'short', year: 'numeric',
+  });
+
+  const orderType = transaction.order_type === 'dine_in'
+    ? 'DINE IN'
+    : (transaction.order_type === 'take_away' ? 'TAKE AWAY' : 'PESANAN');
+
+  const itemsListHTML = (details || []).map(item => `
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed #ccc;">
+      <span style="font-size: 18px; font-weight: 700; color: #111;">${item.product_name}</span>
+      <span style="font-size: 20px; font-weight: 900; background: #000; color: #fff; padding: 2px 10px; border-radius: 6px;">${item.quantity}x</span>
+    </div>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: monospace, sans-serif; background: #fff; padding: 20px; max-width: 380px; margin: 0 auto; }
+    .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+    .title { font-size: 22px; font-weight: 900; letter-spacing: 1px; }
+    .table-box { background: #f3f4f6; border: 2px solid #000; padding: 12px; text-align: center; margin: 12px 0; border-radius: 8px; }
+    .table-num { font-size: 28px; font-weight: 900; }
+    .order-type { font-size: 16px; font-weight: 700; color: #444; margin-top: 4px; }
+    .notes-box { background: #fffbeb; border: 1px solid #f59e0b; padding: 8px; margin-top: 14px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">*** STRUK DAPUR ***</div>
+    <div>${storeName}</div>
+    <div style="font-size: 12px; margin-top: 4px;">No: ${transaction.invoice_number} | ${date}</div>
+  </div>
+
+  <div class="table-box">
+    <div class="table-num">MEJA: ${transaction.table_number || '-'}</div>
+    <div class="order-type">[ ${orderType} ]</div>
+  </div>
+
+  <div style="margin: 16px 0;">
+    ${itemsListHTML}
+  </div>
+
+  ${transaction.payment_notes ? `
+    <div class="notes-box">
+      <strong>Catatan Pesanan:</strong> ${transaction.payment_notes}
+    </div>
+  ` : ''}
+
+  <div style="text-align: center; margin-top: 20px; font-size: 12px; border-top: 1px dashed #000; padding-top: 8px;">
+    Segera Diproses Staf Dapur
   </div>
 </body>
 </html>`;

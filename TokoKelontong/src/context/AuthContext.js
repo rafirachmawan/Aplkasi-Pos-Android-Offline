@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import { supabase } from "../services/supabaseClient";
-import { getProfile } from "../services/authService";
+import { getProfile, clearStoreLocalSession } from "../services/authService";
 
 const AuthContext = createContext(null);
 
@@ -46,6 +46,7 @@ export function AuthProvider({ children }) {
         loadProfile();
       } else {
         setProfile(null);
+        clearStoreLocalSession();
       }
     });
 

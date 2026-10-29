@@ -121,8 +121,12 @@ const AddProductScreen = ({ navigation, route }) => {
   const [stockQuantity, setStockQuantity] = useState("");
   const [minStock, setMinStock] = useState("5");
   const [imageUri, setImageUri] = useState(null);
-  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [unit, setUnit] = useState("pack");
+  const [wholesaleRules, setWholesaleRules] = useState([]);
+  const [showAddWholesaleModal, setShowAddWholesaleModal] = useState(false);
+  const [wsMinQtyInput, setWsMinQtyInput] = useState("");
+  const [wsPriceInput, setWsPriceInput] = useState("");
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
 
   // Unit CRUD state
   const [units, setUnits] = useState(DEFAULT_UNITS);
@@ -322,6 +326,7 @@ const AddProductScreen = ({ navigation, route }) => {
       setImageUri(existingProduct.image_uri || null);
       setUnit(existingProduct.unit || "pcs");
       setCategory(existingProduct.category || "makanan");
+      setWholesaleRules(existingProduct.wholesale_rules || []);
     }
   }, [existingProduct]);
 
@@ -640,6 +645,7 @@ const AddProductScreen = ({ navigation, route }) => {
       image_uri: finalImageUri,
       unit,
       category,
+      wholesale_rules: wholesaleRules,
     };
 
     try {
@@ -828,6 +834,72 @@ const AddProductScreen = ({ navigation, route }) => {
             </Text>
           </View>
         )}
+
+        {/* ── Harga Grosir / Bertingkat (Tiered Pricing) ── */}
+        <View style={styles.wholesaleCard}>
+          <View style={styles.wholesaleHeader}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <MaterialCommunityIcons
+                name="layers-outline"
+                size={18}
+                color="#0F172A"
+              />
+              <Text style={styles.wholesaleTitle}>Harga Grosir / Bertingkat</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.btnAddWholesale}
+              onPress={() => {
+                setWsMinQtyInput("");
+                setWsPriceInput("");
+                setShowAddWholesaleModal(true);
+              }}
+            >
+              <MaterialCommunityIcons name="plus" size={16} color="#0F172A" />
+              <Text style={styles.btnAddWholesaleText}>Tambah</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.wholesaleSubtitle}>
+            Potongan harga satuan otomatis jika pembeli membeli dalam jumlah banyak (misal beli ≥ 12 {unit}).
+          </Text>
+
+          {wholesaleRules.length === 0 ? (
+            <Text style={styles.wholesaleEmptyText}>
+              Belum ada aturan harga grosir. Klik Tambah untuk membuat aturan.
+            </Text>
+          ) : (
+            <View style={styles.wholesaleList}>
+              {wholesaleRules
+                .slice()
+                .sort((a, b) => a.min_qty - b.min_qty)
+                .map((rule, idx) => (
+                  <View key={idx} style={styles.wholesaleItemRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.wholesaleMinQty}>
+                        Beli ≥ {rule.min_qty} {unit}
+                      </Text>
+                      <Text style={styles.wholesalePriceText}>
+                        Rp {rule.price.toLocaleString("id-ID")} / {unit}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setWholesaleRules(
+                          wholesaleRules.filter((_, i) => i !== idx),
+                        );
+                      }}
+                      style={styles.btnDeleteWholesale}
+                    >
+                      <MaterialCommunityIcons
+                        name="trash-can-outline"
+                        size={18}
+                        color="#EF4444"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+            </View>
+          )}
+        </View>
 
         {/* ── Stok ── */}
         <View style={styles.row}>
@@ -1294,6 +1366,87 @@ const AddProductScreen = ({ navigation, route }) => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ── Modal Tambah Aturan Harga Grosir ── */}
+      <Modal visible={showAddWholesaleModal} transparent animationType="fade">
+        <View style={styles.modalOverlayCenter}>
+          <View style={styles.wsModalCard}>
+            <View style={styles.wsModalHeader}>
+              <Text style={styles.wsModalTitle}>Tambah Harga Grosir</Text>
+              <TouchableOpacity
+                onPress={() => setShowAddWholesaleModal(false)}
+              >
+                <MaterialCommunityIcons name="close" size={22} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.wsModalSubtitle}>
+              Tentukan jumlah minimum dan harga per satuan:
+            </Text>
+
+            <Text style={styles.wsInputLabel}>
+              Jumlah Pembelian Minimum ({unit}) *
+            </Text>
+            <RNTextInput
+              style={styles.wsInput}
+              value={wsMinQtyInput}
+              onChangeText={setWsMinQtyInput}
+              keyboardType="number-pad"
+              placeholder="Contoh: 12"
+              placeholderTextColor="#94A3B8"
+            />
+
+            <Text style={styles.wsInputLabel}>
+              Harga Satuan Grosir (Rp) *
+            </Text>
+            <RNTextInput
+              style={styles.wsInput}
+              value={wsPriceInput}
+              onChangeText={(v) => setWsPriceInput(formatToRp(v))}
+              keyboardType="number-pad"
+              placeholder="Contoh: 2.800"
+              placeholderTextColor="#94A3B8"
+            />
+
+            <View style={styles.wsModalActions}>
+              <TouchableOpacity
+                style={styles.wsCancelBtn}
+                onPress={() => setShowAddWholesaleModal(false)}
+              >
+                <Text style={styles.wsCancelText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.wsSaveBtn}
+                onPress={() => {
+                  const minQ = parseInt(wsMinQtyInput, 10);
+                  const pr = parseRp(wsPriceInput);
+                  if (!minQ || minQ <= 1) {
+                    Alert.alert(
+                      "Jumlah Salah",
+                      "Jumlah minimum grosir harus lebih dari 1.",
+                    );
+                    return;
+                  }
+                  if (!pr || pr <= 0) {
+                    Alert.alert("Harga Salah", "Masukkan harga grosir yang valid.");
+                    return;
+                  }
+                  if (wholesaleRules.some((r) => r.min_qty === minQ)) {
+                    Alert.alert(
+                      "Duplikat",
+                      `Aturan untuk minimal ${minQ} ${unit} sudah ada.`,
+                    );
+                    return;
+                  }
+                  setWholesaleRules([...wholesaleRules, { min_qty: minQ, price: pr }]);
+                  setShowAddWholesaleModal(false);
+                }}
+              >
+                <Text style={styles.wsSaveText}>Simpan Aturan</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 };
@@ -1397,6 +1550,162 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginBottom: 14,
     borderWidth: 1,
+  },
+
+  // Wholesale Styles
+  wholesaleCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 14,
+    marginBottom: 14,
+  },
+  wholesaleHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  wholesaleTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#0F172A",
+  },
+  btnAddWholesale: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  btnAddWholesaleText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+    color: "#0F172A",
+  },
+  wholesaleSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#64748B",
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  wholesaleEmptyText: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#94A3B8",
+    fontStyle: "italic",
+    paddingVertical: 4,
+  },
+  wholesaleList: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  wholesaleItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EDF2F7",
+  },
+  wholesaleMinQty: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: "#0F172A",
+  },
+  wholesalePriceText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.success,
+    marginTop: 1,
+  },
+  btnDeleteWholesale: {
+    padding: 6,
+  },
+
+  // Wholesale Modal
+  wsModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 20,
+    width: "88%",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  wsModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  wsModalTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: "#0F172A",
+  },
+  wsModalSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#64748B",
+    marginBottom: 12,
+  },
+  wsInputLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#475569",
+    marginBottom: 6,
+    marginTop: 6,
+  },
+  wsInput: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontFamily: fonts.semiBold,
+    fontSize: 13,
+    color: "#0F172A",
+  },
+  wsModalActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 18,
+  },
+  wsCancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    alignItems: "center",
+  },
+  wsCancelText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: "#64748B",
+  },
+  wsSaveBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#0F172A",
+    alignItems: "center",
+  },
+  wsSaveText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#FFFFFF",
   },
   marginText: { fontSize: 13, fontWeight: "600" },
 

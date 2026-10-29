@@ -3,11 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const AppContext = createContext();
 
+const BUSINESS_MODE_KEY = '@TokoKelontong:BusinessMode';
+
 const initialState = {
   cart: [],
   storeName: 'MarketPos',
   storeLogo: null,
   printerAddress: null,
+  businessMode: 'retail', // 'retail' (Toko/Kelontong) atau 'fnb' (Resto/Kafe)
 };
 
 const reducer = (state, action) => {
@@ -48,6 +51,8 @@ const reducer = (state, action) => {
       return { ...state, storeLogo: action.payload };
     case 'SET_PRINTER_ADDRESS':
       return { ...state, printerAddress: action.payload };
+    case 'SET_BUSINESS_MODE':
+      return { ...state, businessMode: action.payload };
     case 'LOAD_SETTINGS':
       return { ...state, ...action.payload };
     default:
@@ -65,12 +70,14 @@ export const AppProvider = ({ children }) => {
         const storeName = await AsyncStorage.getItem('storeName');
         const storeLogo = await AsyncStorage.getItem('storeLogo');
         const printerAddress = await AsyncStorage.getItem('printerAddress');
+        const businessMode = await AsyncStorage.getItem(BUSINESS_MODE_KEY);
         dispatch({
           type: 'LOAD_SETTINGS',
           payload: {
             storeName: storeName || 'MarketPos',
             storeLogo: storeLogo || null,
             printerAddress: printerAddress || null,
+            businessMode: businessMode === 'fnb' ? 'fnb' : 'retail',
           }
         });
       } catch (error) {

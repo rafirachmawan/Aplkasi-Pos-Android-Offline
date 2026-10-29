@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "./supabaseClient";
 
 // Semua username disimpan sebagai email internal di Supabase Auth,
@@ -7,8 +8,29 @@ const EMAIL_DOMAIN = "@marketpos.app";
 export const toAuthEmail = (username) =>
   `${String(username).trim().toLowerCase()}${EMAIL_DOMAIN}`;
 
+/**
+ * Membersihkan data cache lokal toko saat logout atau sebelum mendaftar toko baru
+ * agar sesi dan konfigurasi (seperti PIN, menu terkunci, profil) tidak bocor ke akun baru.
+ */
+export async function clearStoreLocalSession() {
+  try {
+    await AsyncStorage.multiRemove([
+      "@TokoKelontong:SecurityPin",
+      "@TokoKelontong:LockedMenus",
+      "@TokoKelontong:StoreProfile",
+      "@TokoKelontong:HeldOrders",
+      "@TokoKelontong:BusinessMode",
+      "storeName",
+      "storeLogo",
+    ]);
+  } catch (err) {
+    console.warn("Gagal membersihkan cache lokal sesi toko:", err);
+  }
+}
+
 // Daftar akun baru: buat auth user, lalu toko + profile (role kasir).
 export async function signUp({ username, password, storeName }) {
+  await clearStoreLocalSession();
   const email = toAuthEmail(username);
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
@@ -52,17 +74,27 @@ export async function signIn({ username, password }) {
 }
 
 export async function signOut() {
+  await clearStoreLocalSession();
   return supabase.auth.signOut();
 }
 
 // Profile akun + toko milik user yang sedang login.
 export async function getProfile() {
-  const { data, error } = await supabase
+  let res = await supabase
     .from("profiles")
-    .select("id, username, role, store_id, stores(id, store_name)")
+    .select("id, username, role, store_id, stores(id, store_name, security_pin)")
     .single();
-  if (error) throw error;
-  return data;
+
+  if (res.error) {
+    // Fallback jika kolom security_pin belum ada di schema cache
+    res = await supabase
+      .from("profiles")
+      .select("id, username, role, store_id, stores(id, store_name)")
+      .single();
+  }
+
+  if (res.error) throw res.error;
+  return res.data;
 }
 
 // Ganti nama toko di cloud (terbaca oleh semua HP toko yang sama).

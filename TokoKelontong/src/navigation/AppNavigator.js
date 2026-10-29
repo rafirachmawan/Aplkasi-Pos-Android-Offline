@@ -13,6 +13,7 @@ import BarcodeScannerScreen from "../screens/BarcodeScannerScreen";
 import SettingNotaScreen from "../screens/SettingNotaScreen";
 import PanduanScreen from "../screens/PanduanScreen";
 import AuthScreen from "../screens/AuthScreen";
+import BukuKasbonScreen from "../screens/BukuKasbonScreen";
 
 import { useAuth } from "../context/AuthContext";
 import { colors, fonts } from "../theme/colors";
@@ -99,6 +100,11 @@ export default function AppNavigator() {
             name="Panduan"
             component={PanduanScreen}
             options={{ title: "Buku Panduan" }}
+          />
+          <Stack.Screen
+            name="BukuKasbon"
+            component={BukuKasbonScreen}
+            options={{ title: "Buku Kasbon & Hutang" }}
           />
           <Stack.Screen
             name="BarcodeScanner"

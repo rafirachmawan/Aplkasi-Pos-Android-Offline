@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
   Linking,
+  Switch,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -26,11 +27,28 @@ import {
   updateStoreName,
 } from "../services/authService";
 import {
+  getLicenseInfo,
+  activateSerialKey,
+  getDeviceId,
+} from "../services/licenseService";
+import { getOfflineQueueCount } from "../utils/offlineQueue";
+import TransactionRepository from "../database/transactionRepository";
+import {
   getPairedPrinters,
   isBluetoothPrintingSupported,
 } from "../utils/bluetoothPrinter";
 import { uploadProductImage, isCloudImageUri } from "../utils/imageStorage";
 import { colors, fonts } from "../theme/colors";
+import PinModal from "../components/PinModal";
+import {
+  isPinProtected,
+  setSecurityPin,
+  removeSecurityPin,
+  getLockedMenus,
+  setLockedMenus,
+  LOCKABLE_MENU_OPTIONS,
+  DEFAULT_LOCKED_MENUS,
+} from "../utils/securityPin";
 
 const appVersion = Constants.expoConfig?.version || "1.0.0";
 
@@ -79,6 +97,41 @@ const PengaturanScreen = ({ navigation }) => {
 
   // Update aplikasi OTA (tanpa install ulang)
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  // Security PIN states
+  const [hasPin, setHasPin] = useState(false);
+  const [pinFlow, setPinFlow] = useState(null); // 'verify_change' | 'verify_remove' | 'set_new' | 'confirm_new'
+  const [newPinCandidate, setNewPinCandidate] = useState("");
+  const [lockedMenus, setLockedMenusState] = useState(DEFAULT_LOCKED_MENUS);
+
+  // Business Mode State (Retail vs F&B)
+  const [businessMode, setBusinessModeState] = useState(state.businessMode || "retail");
+
+  // License & Device States
+  const [licenseInfo, setLicenseInfo] = useState(null);
+  const [showLicenseModal, setShowLicenseModal] = useState(false);
+  const [serialKeyInput, setSerialKeyInput] = useState("");
+  const [activatingLicense, setActivatingLicense] = useState(false);
+
+  // Offline Sync State
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [syncingOffline, setSyncingOffline] = useState(false);
+
+  useEffect(() => {
+    isPinProtected().then(setHasPin);
+    getLockedMenus().then(setLockedMenusState);
+    getLicenseInfo().then(setLicenseInfo).catch(() => {});
+    getOfflineQueueCount().then(setOfflineCount).catch(() => {});
+  }, []);
+
+  const handleToggleMenuLock = async (menuKey) => {
+    const nextConfig = {
+      ...lockedMenus,
+      [menuKey]: !lockedMenus[menuKey],
+    };
+    setLockedMenusState(nextConfig);
+    await setLockedMenus(nextConfig);
+  };
 
   useEffect(() => {
     setStoreNameInput(state.storeName || "");
@@ -331,6 +384,8 @@ const PengaturanScreen = ({ navigation }) => {
         payload: printerInput.trim() || null,
       });
       dispatch({ type: "SET_STORE_LOGO", payload: finalLogoUri || null });
+      dispatch({ type: "SET_BUSINESS_MODE", payload: businessMode });
+      await AsyncStorage.setItem("@TokoKelontong:BusinessMode", businessMode);
 
       // Simpan nama toko ke cloud agar terbaca di semua HP toko yang sama
       try {
@@ -368,6 +423,68 @@ const PengaturanScreen = ({ navigation }) => {
         },
       ],
     );
+  };
+
+  const handleSelectBusinessMode = async (mode) => {
+    setBusinessModeState(mode);
+    dispatch({ type: "SET_BUSINESS_MODE", payload: mode });
+    await AsyncStorage.setItem("@TokoKelontong:BusinessMode", mode);
+  };
+
+  const handleActivateSerialKey = async () => {
+    if (!serialKeyInput.trim()) {
+      Alert.alert("Input Kosong", "Masukkan Serial Key yang Anda dapatkan dari admin/penjual.");
+      return;
+    }
+    setActivatingLicense(true);
+    try {
+      const res = await activateSerialKey(serialKeyInput.trim());
+      setShowLicenseModal(false);
+      setSerialKeyInput("");
+      const updated = await getLicenseInfo();
+      setLicenseInfo(updated);
+      Alert.alert("✅ Sukses", res.message || "Aplikasi Anda berhasil diaktivasi secara permanen!");
+    } catch (err) {
+      Alert.alert("Aktivasi Gagal", err.message || "Serial Key tidak cocok.");
+    } finally {
+      setActivatingLicense(false);
+    }
+  };
+
+  const handleContactAdminWA = () => {
+    const devId = licenseInfo?.deviceId || "MPOS-DEV";
+    const msg = `Halo Admin MarketPos, saya ingin membeli/mengaktifkan Serial Key lisensi resmi untuk perangkat saya:\n\n*ID Perangkat:* ${devId}\n*Nama Toko:* ${storeNameInput || "MarketPos"}\n\nMohon informasi pembelian dan aktivasi. Terima kasih!`;
+    const url = `whatsapp://send?text=${encodeURIComponent(msg)}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert("WhatsApp", `Silakan kirim ID Perangkat Anda ke Admin:\n\n${devId}`);
+    });
+  };
+
+  const handleSyncOfflineInSettings = async () => {
+    if (syncingOffline) return;
+    setSyncingOffline(true);
+    try {
+      const res = await TransactionRepository.syncOfflineQueue();
+      if (res.synced > 0) {
+        Alert.alert(
+          "✅ Sinkronisasi Berhasil",
+          `${res.synced} dari ${res.total} transaksi offline berhasil diunggah ke cloud!`,
+        );
+      } else if (res.total === 0) {
+        Alert.alert("Info", "Semua transaksi sudah tersinkron ke cloud.");
+      } else {
+        Alert.alert(
+          "⚠️ Perhatian",
+          `Gagal mengunggah transaksi (${res.failed} gagal). Pastikan koneksi internet stabil lalu coba lagi.`,
+        );
+      }
+      const count = await getOfflineQueueCount();
+      setOfflineCount(count);
+    } catch (e) {
+      Alert.alert("Gagal Sinkronisasi", e.message || "Terjadi kesalahan koneksi.");
+    } finally {
+      setSyncingOffline(false);
+    }
   };
 
   const openPasswordModal = () => {
@@ -425,6 +542,29 @@ const PengaturanScreen = ({ navigation }) => {
         },
       ],
     );
+  };
+
+  const handleOpenPinSettings = () => {
+    if (hasPin) {
+      Alert.alert(
+        "Kelola PIN Keamanan",
+        "Pilih tindakan untuk PIN pemilik toko Anda:",
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Ubah PIN",
+            onPress: () => setPinFlow("verify_change"),
+          },
+          {
+            text: "Nonaktifkan",
+            style: "destructive",
+            onPress: () => setPinFlow("verify_remove"),
+          },
+        ],
+      );
+    } else {
+      setPinFlow("set_new");
+    }
   };
 
   const bottomPadding =
@@ -512,6 +652,214 @@ const PengaturanScreen = ({ navigation }) => {
         </SettingRow>
       </View>
 
+      {/* ── Mode Operasional Bisnis (Retail vs F&B) ── */}
+      <Text style={styles.sectionTitle}>MODE OPERASIONAL BISNIS</Text>
+      <View style={styles.card}>
+        <View style={styles.modeSelectorRow}>
+          <TouchableOpacity
+            style={[
+              styles.modeCardOption,
+              businessMode === "retail" && styles.modeCardOptionActive,
+            ]}
+            onPress={() => handleSelectBusinessMode("retail")}
+            activeOpacity={0.8}
+          >
+            <View
+              style={[
+                styles.modeIconWrap,
+                businessMode === "retail" && { backgroundColor: "#DCFCE7" },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="storefront"
+                size={22}
+                color={businessMode === "retail" ? "#16A34A" : "#64748B"}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modeOptionTitle,
+                businessMode === "retail" && {
+                  color: "#16A34A",
+                  fontFamily: fonts.bold,
+                },
+              ]}
+            >
+              Retail / Toko
+            </Text>
+            <Text style={styles.modeOptionDesc}>
+              Toko kelontong, minimarket, warung sembako
+            </Text>
+            {businessMode === "retail" && (
+              <View style={styles.modeActiveBadge}>
+                <Text style={styles.modeActiveBadgeText}>✓ AKTIF</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modeCardOption,
+              businessMode === "fnb" && styles.modeCardOptionActive,
+            ]}
+            onPress={() => handleSelectBusinessMode("fnb")}
+            activeOpacity={0.8}
+          >
+            <View
+              style={[
+                styles.modeIconWrap,
+                businessMode === "fnb" && { backgroundColor: "#FEF3C7" },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="silverware-fork-knife"
+                size={22}
+                color={businessMode === "fnb" ? "#D97706" : "#64748B"}
+              />
+            </View>
+            <Text
+              style={[
+                styles.modeOptionTitle,
+                businessMode === "fnb" && {
+                  color: "#D97706",
+                  fontFamily: fonts.bold,
+                },
+              ]}
+            >
+              Resto / Kafe
+            </Text>
+            <Text style={styles.modeOptionDesc}>
+              No. Meja, Dine-In / Take Away, Struk Dapur
+            </Text>
+            {businessMode === "fnb" && (
+              <View
+                style={[
+                  styles.modeActiveBadge,
+                  { backgroundColor: "#FEF3C7" },
+                ]}
+              >
+                <Text
+                  style={[styles.modeActiveBadgeText, { color: "#92400E" }]}
+                >
+                  ✓ AKTIF
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ── Antrean Transaksi Offline ── */}
+      <Text style={styles.sectionTitle}>ANTREAN TRANSAKSI OFFLINE</Text>
+      <View style={styles.card}>
+        <View style={styles.offlineSettingsRow}>
+          <View
+            style={[
+              styles.settingIconWrap,
+              {
+                backgroundColor:
+                  offlineCount > 0 ? "#FEF3C7" : "#F1F5F9",
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={
+                offlineCount > 0
+                  ? "cloud-sync-outline"
+                  : "cloud-check-outline"
+              }
+              size={22}
+              color={offlineCount > 0 ? "#D97706" : "#16A34A"}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.linkText}>
+              {offlineCount > 0
+                ? `${offlineCount} Transaksi Belum Terunggah`
+                : "Semua Transaksi Tersinkron"}
+            </Text>
+            <Text style={styles.linkSubText}>
+              {offlineCount > 0
+                ? "Transaksi tersimpan aman di HP saat sinyal drop"
+                : "Database lokal sinkron dengan cloud"}
+            </Text>
+          </View>
+          {offlineCount > 0 && (
+            <TouchableOpacity
+              style={styles.syncBtnSettings}
+              onPress={handleSyncOfflineInSettings}
+              disabled={syncingOffline}
+            >
+              <Text style={styles.syncBtnSettingsText}>
+                {syncingOffline ? "..." : "Upload"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* ── Lisensi Perangkat & Aplikasi ── */}
+      <Text style={styles.sectionTitle}>LISENSI PERANGKAT</Text>
+      <View style={styles.card}>
+        <View style={styles.licenseCardHeader}>
+          <View
+            style={[
+              styles.licenseStatusPill,
+              {
+                backgroundColor:
+                  licenseInfo?.status === "lifetime"
+                    ? "#DCFCE7"
+                    : "#FEF3C7",
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.licenseStatusPillText,
+                {
+                  color:
+                    licenseInfo?.status === "lifetime"
+                      ? "#15803D"
+                      : "#92400E",
+                },
+              ]}
+            >
+              {licenseInfo?.status === "lifetime"
+                ? "✓ LISENSI AKTIF (PERMANEN)"
+                : `TRIAL (Sisa ${licenseInfo?.daysRemaining ?? 14} Hari)`}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.deviceIdBox}>
+          <Text style={styles.deviceIdLabel}>ID Perangkat Anda:</Text>
+          <Text style={styles.deviceIdValue}>
+            {licenseInfo?.deviceId || "MPOS-DEV-8888"}
+          </Text>
+          <Text style={styles.deviceIdHint}>
+            Berikan ID ini kepada admin/penjual untuk mendapatkan Serial Key aktivasi
+          </Text>
+        </View>
+
+        <View style={styles.licenseActionsRow}>
+          <TouchableOpacity
+            style={styles.licenseBtnOutline}
+            onPress={handleContactAdminWA}
+          >
+            <MaterialCommunityIcons name="whatsapp" size={18} color="#15803D" />
+            <Text style={styles.licenseBtnOutlineText}>Hubungi Admin</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.licenseBtnPrimary}
+            onPress={() => setShowLicenseModal(true)}
+          >
+            <MaterialCommunityIcons name="key-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.licenseBtnPrimaryText}>Aktivasi Key</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* ── Akun & Keamanan ── */}
       <Text style={styles.sectionTitle}>AKUN & KEAMANAN</Text>
       <View style={styles.card}>
@@ -550,6 +898,136 @@ const PengaturanScreen = ({ navigation }) => {
             color="#94A3B8"
           />
         </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        {/* PIN Keamanan Pemilik Toko */}
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={handleOpenPinSettings}
+          activeOpacity={0.7}
+        >
+          <View
+            style={[
+              styles.settingIconWrap,
+              { backgroundColor: hasPin ? "#DCFCE7" : "#F1F5F9" },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={hasPin ? "shield-lock" : "shield-lock-outline"}
+              size={20}
+              color={hasPin ? "#16A34A" : colors.primary}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={styles.linkText}>PIN Keamanan Pemilik</Text>
+              <View
+                style={{
+                  backgroundColor: hasPin ? "#DCFCE7" : "#E2E8F0",
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                  borderRadius: 6,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: fonts.bold,
+                    fontSize: 10,
+                    color: hasPin ? "#15803D" : "#475569",
+                  }}
+                >
+                  {hasPin ? "AKTIF" : "NONAKTIF"}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.linkSubText}>
+              {hasPin
+                ? `${Object.values(lockedMenus).filter(Boolean).length} menu dilindungi PIN (Ketuk untuk ubah / nonaktifkan)`
+                : "Lindungi menu sensitif toko dari akses staf/kasir"}
+            </Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={20}
+            color="#94A3B8"
+          />
+        </TouchableOpacity>
+
+        {/* Daftar Sakelar Menu yang Dikunci PIN */}
+        {hasPin && (
+          <View style={styles.pinConfigBox}>
+            <View style={styles.pinConfigHeader}>
+              <MaterialCommunityIcons
+                name="shield-check-outline"
+                size={16}
+                color="#0F172A"
+              />
+              <Text style={styles.pinConfigTitle}>PILIH MENU YANG DIKUNCI PIN</Text>
+            </View>
+            <Text style={styles.pinConfigSubtitle}>
+              Pilih menu yang wajib memasukkan PIN pemilik sebelum dapat dibuka:
+            </Text>
+
+            <View style={styles.pinMenuList}>
+              {LOCKABLE_MENU_OPTIONS.map((item, idx) => {
+                const isLocked = !!lockedMenus[item.key];
+                return (
+                  <View
+                    key={item.key}
+                    style={[
+                      styles.pinMenuItem,
+                      idx > 0 && styles.pinMenuBorder,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.pinMenuIconWrap,
+                        { backgroundColor: isLocked ? "#FEF2F2" : "#F1F5F9" },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={isLocked ? "lock" : item.icon}
+                        size={18}
+                        color={isLocked ? "#EF4444" : "#64748B"}
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.pinMenuName,
+                            isLocked && { color: "#0F172A", fontFamily: fonts.bold },
+                          ]}
+                        >
+                          {item.name}
+                        </Text>
+                        {isLocked && (
+                          <View style={styles.lockedBadge}>
+                            <Text style={styles.lockedBadgeText}>Terkunci</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.pinMenuDesc}>{item.desc}</Text>
+                    </View>
+                    <Switch
+                      value={isLocked}
+                      onValueChange={() => handleToggleMenuLock(item.key)}
+                      trackColor={{ false: "#E2E8F0", true: "#DCFCE7" }}
+                      thumbColor={isLocked ? "#16A34A" : "#94A3B8"}
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         <View style={styles.divider} />
 
@@ -1004,6 +1482,125 @@ const PengaturanScreen = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Modal Aktivasi Serial Key ── */}
+      <Modal
+        visible={showLicenseModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowLicenseModal(false)}
+      >
+        <View style={styles.modalOverlayCenter}>
+          <View style={styles.restoreModalCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={[styles.settingIconWrap, { backgroundColor: "#DCFCE7" }]}>
+                <MaterialCommunityIcons name="key" size={22} color="#16A34A" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.restoreTitle}>Aktivasi Lisensi</Text>
+                <Text style={styles.restoreSub}>
+                  Masukkan Serial Key resmi dari admin/penjual
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowLicenseModal(false)}>
+                <MaterialCommunityIcons name="close-circle" size={22} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.deviceIdBox, { marginTop: 12 }]}>
+              <Text style={styles.deviceIdLabel}>ID Perangkat Terdaftar:</Text>
+              <Text style={[styles.deviceIdValue, { fontSize: 15 }]}>
+                {licenseInfo?.deviceId || "MPOS-DEV-8888"}
+              </Text>
+            </View>
+
+            <Text style={[styles.pwLabel, { marginTop: 14 }]}>Serial Key Lisensi</Text>
+            <TextInput
+              style={[
+                styles.pwInput,
+                { fontFamily: fonts.bold, letterSpacing: 1.2, fontSize: 13 },
+              ]}
+              value={serialKeyInput}
+              onChangeText={setSerialKeyInput}
+              placeholder="Contoh: MPOS-XXXX-YYYY-ZZZZ-WWWW"
+              placeholderTextColor="#94A3B8"
+              autoCapitalize="characters"
+            />
+
+            <View style={styles.restoreActions}>
+              <TouchableOpacity
+                style={styles.cancelRestoreBtn}
+                onPress={() => setShowLicenseModal(false)}
+              >
+                <Text style={styles.cancelRestoreText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmRestoreBtn,
+                  { backgroundColor: "#16A34A" },
+                  activatingLicense && { opacity: 0.6 },
+                ]}
+                onPress={handleActivateSerialKey}
+                disabled={activatingLicense}
+              >
+                <Text style={styles.confirmRestoreText}>
+                  {activatingLicense ? "Memeriksa..." : "Aktivasi Sekarang"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Pin Modal Handlers ── */}
+      <PinModal
+        visible={pinFlow !== null}
+        title={
+          pinFlow === "verify_change" || pinFlow === "verify_remove"
+            ? "Masukkan PIN Lama"
+            : pinFlow === "set_new"
+              ? "Atur 4 Digit PIN Baru"
+              : "Konfirmasi PIN Baru"
+        }
+        subtitle={
+          pinFlow === "verify_change" || pinFlow === "verify_remove"
+            ? "Verifikasi identitas pemilik toko"
+            : pinFlow === "set_new"
+              ? "Ketik 4 angka PIN yang mudah Anda ingat"
+              : "Ketik ulang 4 angka PIN untuk konfirmasi"
+        }
+        targetPin={
+          pinFlow === "set_new"
+            ? "ANY"
+            : pinFlow === "confirm_new"
+              ? newPinCandidate
+              : null
+        }
+        onCancel={() => {
+          setPinFlow(null);
+          setNewPinCandidate("");
+        }}
+        onSuccess={async (enteredPin) => {
+          if (pinFlow === "verify_change") {
+            setPinFlow("set_new");
+          } else if (pinFlow === "verify_remove") {
+            await removeSecurityPin();
+            setHasPin(false);
+            setPinFlow(null);
+            Alert.alert("✅ Berhasil", "PIN keamanan toko telah dinonaktifkan.");
+          } else if (pinFlow === "set_new") {
+            setNewPinCandidate(enteredPin);
+            setPinFlow("confirm_new");
+          } else if (pinFlow === "confirm_new") {
+            await setSecurityPin(newPinCandidate);
+            setHasPin(true);
+            setPinFlow(null);
+            setNewPinCandidate("");
+            Alert.alert("✅ Sukses", "PIN keamanan toko berhasil diaktifkan.");
+          }
+        }}
+      />
     </ScrollView>
   );
 };
@@ -1271,6 +1868,81 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  // PIN Config Styles
+  pinConfigBox: {
+    backgroundColor: "#F8FAFC",
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  pinConfigHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  pinConfigTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#0F172A",
+    letterSpacing: 0.5,
+  },
+  pinConfigSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#64748B",
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  pinMenuList: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  pinMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  pinMenuBorder: {
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  pinMenuIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  pinMenuName: {
+    fontFamily: fonts.semiBold,
+    fontSize: 13,
+    color: "#334155",
+  },
+  pinMenuDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 10,
+    color: "#94A3B8",
+    marginTop: 1,
+  },
+  lockedBadge: {
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  lockedBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    color: "#DC2626",
+  },
+
   // Modal Source Options
   modalOverlayCenter: {
     flex: 1,
@@ -1488,6 +2160,161 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
+  },
+
+  // ── Mode Bisnis & Operasional Styles ──
+  modeSelectorRow: {
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+  },
+  modeCardOption: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    borderRadius: 14,
+    padding: 12,
+    alignItems: "center",
+  },
+  modeCardOptionActive: {
+    borderColor: "#16A34A",
+    backgroundColor: "#F0FDF4",
+  },
+  modeIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  modeOptionTitle: {
+    fontFamily: fonts.semiBold,
+    fontSize: 13,
+    color: "#0F172A",
+    marginBottom: 2,
+  },
+  modeOptionDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 10,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 14,
+    minHeight: 28,
+  },
+  modeActiveBadge: {
+    marginTop: 8,
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  modeActiveBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: "#15803D",
+  },
+
+  // ── Antrean Offline Styles ──
+  offlineSettingsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    gap: 12,
+  },
+  syncBtnSettings: {
+    backgroundColor: "#D97706",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  syncBtnSettingsText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#FFFFFF",
+  },
+
+  // ── Lisensi Perangkat Styles ──
+  licenseCardHeader: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+  },
+  licenseStatusPill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  licenseStatusPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  deviceIdBox: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: 12,
+  },
+  deviceIdLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#64748B",
+    marginBottom: 2,
+  },
+  deviceIdValue: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: "#0F172A",
+    letterSpacing: 1,
+  },
+  deviceIdHint: {
+    fontFamily: fonts.regular,
+    fontSize: 10,
+    color: "#94A3B8",
+    marginTop: 4,
+  },
+  licenseActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+    padding: 14,
+  },
+  licenseBtnOutline: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+    backgroundColor: "#F0FDF4",
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  licenseBtnOutlineText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#15803D",
+  },
+  licenseBtnPrimary: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#0F172A",
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  licenseBtnPrimaryText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#FFFFFF",
   },
 });
 

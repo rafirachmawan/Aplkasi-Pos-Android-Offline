@@ -23,6 +23,7 @@ import { exportToCSV } from "../utils/exportCSV";
 import {
   generateReceiptHTML,
   generateWAMessage,
+  generateDailyClosingWAMessage,
 } from "../utils/receiptGenerator";
 import { colors, fonts } from "../theme/colors";
 
@@ -54,7 +55,14 @@ const LaporanScreen = ({ route }) => {
     FILTER_TO_TAB[initialFilter] || "Harian",
   );
   const [transactions, setTransactions] = useState([]);
-  const [summary, setSummary] = useState({ omzet: 0, laba: 0, count: 0 });
+  const [summary, setSummary] = useState({
+    omzet: 0,
+    omzet_tunai: 0,
+    omzet_non_tunai: 0,
+    laba: 0,
+    count: 0,
+    top_products: [],
+  });
   const [selectedDate, setSelectedDate] = useState(
     () => parseYmd(dateFilter) || new Date(),
   );
@@ -116,8 +124,11 @@ const LaporanScreen = ({ route }) => {
       setTransactions(data);
       setSummary({
         omzet: summaryRes.omzet,
+        omzet_tunai: summaryRes.omzet_tunai || 0,
+        omzet_non_tunai: summaryRes.omzet_non_tunai || 0,
         laba: summaryRes.laba,
         count: data.length,
+        top_products: summaryRes.top_products || [],
       });
     } catch (e) {
       console.error("Load laporan error:", e);
@@ -266,6 +277,27 @@ const LaporanScreen = ({ route }) => {
     }
   };
 
+  const handleShareWAClosing = async () => {
+    try {
+      const profile = await getStoreProfile();
+      const dateText =
+        activeTab === "Riwayat" ? "Semua Transaksi" : formatDisplayDate();
+      const msg = generateDailyClosingWAMessage(summary, profile, dateText);
+      const url = `whatsapp://send?text=${encodeURIComponent(msg)}`;
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert(
+          "WhatsApp Tidak Ditemukan",
+          "Pastikan aplikasi WhatsApp sudah terpasang di HP ini.",
+        );
+      }
+    } catch (e) {
+      Alert.alert("Gagal Kirim", "Tidak dapat membuka WhatsApp: " + e.message);
+    }
+  };
+
   const renderTransaction = ({ item }) => {
     const date = new Date(item.created_at);
     const timeStr = date.toLocaleTimeString("id-ID", {
@@ -276,13 +308,33 @@ const LaporanScreen = ({ route }) => {
       day: "numeric",
       month: "short",
     });
+    const isNonCash = item.payment_method && item.payment_method !== "cash";
     return (
       <TouchableOpacity
         style={styles.txCard}
         onPress={() => openTransactionDetails(item)}
       >
         <View style={styles.txLeft}>
-          <Text style={styles.txInvoice}>{item.invoice_number}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={styles.txInvoice}>{item.invoice_number}</Text>
+            <View
+              style={[
+                styles.methodBadge,
+                isNonCash ? styles.methodBadgeNonCash : styles.methodBadgeCash,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.methodBadgeText,
+                  isNonCash
+                    ? styles.methodBadgeTextNonCash
+                    : styles.methodBadgeTextCash,
+                ]}
+              >
+                {(item.payment_method || "tunai").toUpperCase()}
+              </Text>
+            </View>
+          </View>
           <Text style={styles.txDate}>
             {dateStr} · {timeStr}
           </Text>
@@ -398,17 +450,52 @@ const LaporanScreen = ({ route }) => {
         </View>
       </View>
 
+      {/* Rincian Tunai di Laci vs Non-Tunai */}
+      <View style={styles.paymentSplitRow}>
+        <View style={styles.paymentSplitCol}>
+          <Text style={styles.paymentSplitLabel}>💵 Tunai di Laci:</Text>
+          <Text style={styles.paymentSplitVal}>
+            {formatRupiah(summary.omzet_tunai || 0)}
+          </Text>
+        </View>
+        <View style={styles.paymentSplitDivider} />
+        <View style={styles.paymentSplitCol}>
+          <Text style={styles.paymentSplitLabel}>📱 Non-Tunai (QRIS/TF):</Text>
+          <Text style={styles.paymentSplitVal}>
+            {formatRupiah(summary.omzet_non_tunai || 0)}
+          </Text>
+        </View>
+      </View>
+
       {/* Daftar Transaksi */}
       <View style={styles.listHeader}>
         <Text style={styles.listTitle}>Riwayat Transaksi</Text>
-        <TouchableOpacity style={styles.exportBtn} onPress={handleExportCSV}>
-          <MaterialCommunityIcons
-            name="file-export"
-            size={16}
-            color={colors.secondary}
-          />
-          <Text style={styles.exportText}>Ekspor CSV</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity
+            style={[
+              styles.exportBtn,
+              { backgroundColor: "#DCFCE7", borderColor: "#BBF7D0" },
+            ]}
+            onPress={handleShareWAClosing}
+          >
+            <MaterialCommunityIcons
+              name="whatsapp"
+              size={16}
+              color="#16A34A"
+            />
+            <Text style={[styles.exportText, { color: "#16A34A" }]}>
+              Kirim WA
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.exportBtn} onPress={handleExportCSV}>
+            <MaterialCommunityIcons
+              name="file-export"
+              size={16}
+              color={colors.secondary}
+            />
+            <Text style={styles.exportText}>CSV</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {transactions.length === 0 ? (
@@ -889,6 +976,63 @@ const styles = StyleSheet.create({
     marginTop: 2,
     paddingHorizontal: 6,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+
+  // ── Payment Split & Badges ──
+  paymentSplitRow: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  paymentSplitCol: {
+    flex: 1,
+  },
+  paymentSplitDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
+    marginHorizontal: 12,
+  },
+  paymentSplitLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  paymentSplitVal: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.text,
+    marginTop: 2,
+  },
+  methodBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  methodBadgeCash: {
+    backgroundColor: "#F1F5F9",
+  },
+  methodBadgeNonCash: {
+    backgroundColor: "#E0F2FE",
+  },
+  methodBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+  },
+  methodBadgeTextCash: {
+    color: "#475569",
+  },
+  methodBadgeTextNonCash: {
+    color: "#0369A1",
   },
 });
 

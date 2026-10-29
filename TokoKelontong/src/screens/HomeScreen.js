@@ -18,6 +18,13 @@ import { useAuth } from "../context/AuthContext";
 import TransactionRepository from "../database/transactionRepository";
 import { formatRupiah } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
+import PinModal from "../components/PinModal";
+import {
+  isPinProtected,
+  isScreenLocked,
+  getLockedMenus,
+} from "../utils/securityPin";
+import { getOfflineQueueCount } from "../utils/offlineQueue";
 
 const { width } = Dimensions.get("window");
 
@@ -26,11 +33,17 @@ const HomeScreen = ({ navigation }) => {
   const { profile } = useAuth();
   const cloudStoreName = profile?.stores?.store_name;
   const [hideBalance, setHideBalance] = useState(false);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+  const [pinProtected, setPinProtected] = useState(false);
+  const [lockedMenus, setLockedMenus] = useState({});
   const [todaySummary, setTodaySummary] = useState({
     omzet: 0,
     laba: 0,
     count: 0,
   });
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [syncingOffline, setSyncingOffline] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -41,6 +54,12 @@ const HomeScreen = ({ navigation }) => {
           const summary =
             await TransactionRepository.getSummaryByDatePattern(todayStr);
           setTodaySummary(summary);
+          const hasPin = await isPinProtected();
+          setPinProtected(hasPin);
+          const currentLocked = await getLockedMenus();
+          setLockedMenus(currentLocked);
+          const count = await getOfflineQueueCount();
+          setOfflineCount(count);
         } catch (e) {
           console.error("Error loading home stats:", e);
         }
@@ -48,6 +67,47 @@ const HomeScreen = ({ navigation }) => {
       load();
     }, []),
   );
+
+  const handleSyncOffline = async () => {
+    if (syncingOffline) return;
+    setSyncingOffline(true);
+    try {
+      const res = await TransactionRepository.syncOfflineQueue();
+      if (res.synced > 0) {
+        Alert.alert(
+          "✅ Sinkronisasi Berhasil",
+          `${res.synced} dari ${res.total} transaksi offline berhasil diunggah ke cloud!`,
+        );
+      } else if (res.total === 0) {
+        Alert.alert("Info", "Semua transaksi sudah tersinkron ke cloud.");
+      } else {
+        Alert.alert(
+          "⚠️ Perhatian",
+          `Gagal mengunggah transaksi (${res.failed} gagal). Pastikan koneksi internet stabil.`,
+        );
+      }
+      const count = await getOfflineQueueCount();
+      setOfflineCount(count);
+      const nowDate = new Date();
+      const todayStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
+      const summary = await TransactionRepository.getSummaryByDatePattern(todayStr);
+      setTodaySummary(summary);
+    } catch (e) {
+      Alert.alert("Gagal Sinkronisasi", e.message || "Terjadi masalah jaringan.");
+    } finally {
+      setSyncingOffline(false);
+    }
+  };
+
+  const navigateWithPin = async (screenName, params) => {
+    const isLocked = await isScreenLocked(screenName);
+    if (isLocked) {
+      setPendingNavigation({ screenName, params });
+      setPinModalVisible(true);
+    } else {
+      navigation.navigate(screenName, params);
+    }
+  };
 
   const now = new Date();
   const dayName = now.toLocaleDateString("id-ID", { weekday: "long" });
@@ -86,9 +146,16 @@ const HomeScreen = ({ navigation }) => {
         {/* Top row: greeting + logo */}
         <View style={styles.headerTopRow}>
           <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {cloudStoreName || state.storeName || "MarketPos"}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {cloudStoreName || state.storeName || "MarketPos"}
+              </Text>
+              {state.businessMode === "fnb" && (
+                <View style={styles.fnbBadgeHome}>
+                  <Text style={styles.fnbBadgeHomeText}>KAFE / F&B</Text>
+                </View>
+              )}
+            </View>
 
             <View style={styles.dateRow}>
               <MaterialCommunityIcons
@@ -183,11 +250,37 @@ const HomeScreen = ({ navigation }) => {
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
       >
+        {/* Banner Transaksi Offline Menunggu Sinkron */}
+        {offlineCount > 0 && (
+          <View style={styles.offlineBannerHome}>
+            <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10 }}>
+              <MaterialCommunityIcons name="cloud-sync-outline" size={22} color="#B45309" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.offlineBannerHomeTitle}>
+                  {offlineCount} Transaksi Offline Belum Terkirim
+                </Text>
+                <Text style={styles.offlineBannerHomeSub}>
+                  Ketuk untuk sinkronisasi ke cloud
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.offlineSyncBtnHome}
+              onPress={handleSyncOffline}
+              disabled={syncingOffline}
+            >
+              <Text style={styles.offlineSyncBtnHomeText}>
+                {syncingOffline ? "..." : "Sinkronkan"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Primary Hero Action: Buka Kasir */}
         <TouchableOpacity
           activeOpacity={0.88}
           style={styles.primaryHeroCard}
-          onPress={() => navigation.navigate("Kasir")}
+          onPress={() => navigateWithPin("Kasir")}
         >
           <View style={styles.primaryCardLeft}>
             <View style={styles.primaryIconWrapper}>
@@ -204,7 +297,9 @@ const HomeScreen = ({ navigation }) => {
           </View>
           <View style={styles.heroArrowBtn}>
             <MaterialCommunityIcons
-              name="arrow-right"
+              name={
+                pinProtected && lockedMenus?.["Kasir"] ? "lock" : "arrow-right"
+              }
               size={20}
               color="#FFFFFF"
             />
@@ -219,7 +314,7 @@ const HomeScreen = ({ navigation }) => {
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.bentoCard}
-            onPress={() => navigation.navigate("Dashboard")}
+            onPress={() => navigateWithPin("Dashboard")}
           >
             <View style={styles.bentoHeader}>
               <View style={styles.iconSquircle}>
@@ -230,9 +325,17 @@ const HomeScreen = ({ navigation }) => {
                 />
               </View>
               <MaterialCommunityIcons
-                name="arrow-top-right"
+                name={
+                  pinProtected && lockedMenus?.["Dashboard"]
+                    ? "lock"
+                    : "arrow-top-right"
+                }
                 size={18}
-                color="#94A3B8"
+                color={
+                  pinProtected && lockedMenus?.["Dashboard"]
+                    ? "#EF4444"
+                    : "#94A3B8"
+                }
               />
             </View>
             <Text style={styles.bentoTitle}>Dashboard</Text>
@@ -243,7 +346,7 @@ const HomeScreen = ({ navigation }) => {
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.bentoCard}
-            onPress={() => navigation.navigate("Gudang")}
+            onPress={() => navigateWithPin("Gudang")}
           >
             <View style={styles.bentoHeader}>
               <View style={styles.iconSquircle}>
@@ -254,9 +357,15 @@ const HomeScreen = ({ navigation }) => {
                 />
               </View>
               <MaterialCommunityIcons
-                name="arrow-top-right"
+                name={
+                  pinProtected && lockedMenus?.["Gudang"]
+                    ? "lock"
+                    : "arrow-top-right"
+                }
                 size={18}
-                color="#94A3B8"
+                color={
+                  pinProtected && lockedMenus?.["Gudang"] ? "#EF4444" : "#94A3B8"
+                }
               />
             </View>
             <Text style={styles.bentoTitle}>Gudang</Text>
@@ -267,7 +376,7 @@ const HomeScreen = ({ navigation }) => {
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.bentoCard}
-            onPress={() => navigation.navigate("Laporan")}
+            onPress={() => navigateWithPin("Laporan")}
           >
             <View style={styles.bentoHeader}>
               <View style={styles.iconSquircle}>
@@ -278,9 +387,17 @@ const HomeScreen = ({ navigation }) => {
                 />
               </View>
               <MaterialCommunityIcons
-                name="arrow-top-right"
+                name={
+                  pinProtected && lockedMenus?.["Laporan"]
+                    ? "lock"
+                    : "arrow-top-right"
+                }
                 size={18}
-                color="#94A3B8"
+                color={
+                  pinProtected && lockedMenus?.["Laporan"]
+                    ? "#EF4444"
+                    : "#94A3B8"
+                }
               />
             </View>
             <Text style={styles.bentoTitle}>Laporan</Text>
@@ -291,7 +408,7 @@ const HomeScreen = ({ navigation }) => {
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.bentoCard}
-            onPress={() => navigation.navigate("SettingNota")}
+            onPress={() => navigateWithPin("SettingNota")}
           >
             <View style={styles.bentoHeader}>
               <View style={styles.iconSquircle}>
@@ -302,9 +419,17 @@ const HomeScreen = ({ navigation }) => {
                 />
               </View>
               <MaterialCommunityIcons
-                name="arrow-top-right"
+                name={
+                  pinProtected && lockedMenus?.["SettingNota"]
+                    ? "lock"
+                    : "arrow-top-right"
+                }
                 size={18}
-                color="#94A3B8"
+                color={
+                  pinProtected && lockedMenus?.["SettingNota"]
+                    ? "#EF4444"
+                    : "#94A3B8"
+                }
               />
             </View>
             <Text style={styles.bentoTitle}>Format Nota</Text>
@@ -312,11 +437,43 @@ const HomeScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
+        {/* Buku Kasbon & Hutang Pelanggan */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.listCard}
+          onPress={() => navigateWithPin("BukuKasbon")}
+        >
+          <View style={[styles.listIconSquircle, { backgroundColor: "#FEF3C7" }]}>
+            <MaterialCommunityIcons
+              name="book-account-outline"
+              size={22}
+              color="#D97706"
+            />
+          </View>
+          <View style={styles.listTextContainer}>
+            <Text style={styles.listTitle}>Buku Kasbon & Hutang</Text>
+            <Text style={styles.listDesc}>Catatan piutang pelanggan & pengingat WA</Text>
+          </View>
+          <MaterialCommunityIcons
+            name={
+              pinProtected && lockedMenus?.["BukuKasbon"]
+                ? "lock"
+                : "chevron-right"
+            }
+            size={22}
+            color={
+              pinProtected && lockedMenus?.["BukuKasbon"]
+                ? "#EF4444"
+                : "#94A3B8"
+            }
+          />
+        </TouchableOpacity>
+
         {/* Administrative Actions */}
         <TouchableOpacity
           activeOpacity={0.85}
           style={styles.listCard}
-          onPress={() => navigation.navigate("Pengaturan")}
+          onPress={() => navigateWithPin("Pengaturan")}
         >
           <View style={styles.listIconSquircle}>
             <MaterialCommunityIcons
@@ -330,9 +487,17 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.listDesc}>Konfigurasi profil dan sistem</Text>
           </View>
           <MaterialCommunityIcons
-            name="chevron-right"
+            name={
+              pinProtected && lockedMenus?.["Pengaturan"]
+                ? "lock"
+                : "chevron-right"
+            }
             size={22}
-            color="#94A3B8"
+            color={
+              pinProtected && lockedMenus?.["Pengaturan"]
+                ? "#EF4444"
+                : "#94A3B8"
+            }
           />
         </TouchableOpacity>
 
@@ -372,6 +537,27 @@ const HomeScreen = ({ navigation }) => {
           </Text>
         </View>
       </ScrollView>
+
+      {/* ── Pin Modal Keamanan Owner ── */}
+      <PinModal
+        visible={pinModalVisible}
+        title="Masukkan PIN Pemilik"
+        subtitle="Menu ini dilindungi PIN keamanan toko"
+        onCancel={() => {
+          setPinModalVisible(false);
+          setPendingNavigation(null);
+        }}
+        onSuccess={() => {
+          setPinModalVisible(false);
+          if (pendingNavigation) {
+            navigation.navigate(
+              pendingNavigation.screenName,
+              pendingNavigation.params,
+            );
+            setPendingNavigation(null);
+          }
+        }}
+      />
     </View>
   );
 };
@@ -686,6 +872,54 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: colors.textSecondary,
+  },
+  fnbBadgeHome: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  fnbBadgeHomeText: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    color: "#B45309",
+    letterSpacing: 0.5,
+  },
+  offlineBannerHome: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFBEB",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 12,
+  },
+  offlineBannerHomeTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#92400E",
+  },
+  offlineBannerHomeSub: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#B45309",
+    marginTop: 1,
+  },
+  offlineSyncBtnHome: {
+    backgroundColor: "#D97706",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  offlineSyncBtnHomeText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#FFFFFF",
   },
 });
 

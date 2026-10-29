@@ -1,0 +1,65 @@
+# ============================================================
+# MarketPos monorepo - secrets & generated files
+# Repo ini PUBLIK. Jangan pernah commit kredensial.
+# ============================================================
+
+# --- Environment / secrets (SANGAT KRUSIAL: SUPABASE SERVICE ROLE & SALT) ---
+.env
+.env.*
+.env*.local
+*.env
+*.env.local
+**/.env
+**/.env.*
+**/.env*.local
+!.env.example
+!**/.env.example
+
+# --- Signing keys & certificates (Android Keystore / iOS certs) ---
+*.keystore
+*.jks
+*.p12
+*.p8
+*.pfx
+*.pem
+*.key
+*.cer
+*.cert
+*.mobileprovision
+
+# --- Developer Keygen & Internal Scripts (mengandung secret salt lisensi) ---
+scripts/
+**/scripts/
+
+# --- Build output / cache / binary ---
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+coverage/
+.expo/
+**/.expo/
+.bundle-check/
+**/.bundle-check/
+web-build/
+**/web-build/
+*.hbc
+*.apk
+*.aab
+*.ipa
+*.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# --- Native local config & IDE ---
+android/local.properties
+.idea/
+.vscode/
+*.swp
+*.swo

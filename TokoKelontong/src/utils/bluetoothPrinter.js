@@ -1,5 +1,5 @@
 // Layanan cetak langsung ke printer thermal Bluetooth (ESC/POS).
-// Dipakai untuk cetak nota transaksi (Kasir) dan label barcode produk.
+// Dipakai untuk cetak nota transaksi (Kasir), struk dapur (Kitchen), dan label barcode produk.
 // Printer harus sudah dipairing di pengaturan Bluetooth HP, lalu alamat
 // MAC-nya dipilih di layar Pengaturan aplikasi.
 //
@@ -20,11 +20,6 @@ let libChecked = false;
 const getLib = () => {
   if (!libChecked) {
     libChecked = true;
-    // Library HANYA boleh di-require bila modul native-nya benar-benar
-    // terdaftar (build APK / development build). Di Expo Go modul native
-    // tidak ada, dan mengevaluasi modul JS library-nya saja sudah melempar
-    // error ("Cannot set property 'DIRECTION' of null"), jadi kita hindari
-    // require sama sekali.
     if (
       NativeModules.BluetoothManager &&
       NativeModules.BluetoothEscposPrinter
@@ -44,7 +39,6 @@ const getLib = () => {
 };
 
 // Apakah cetak Bluetooth bisa dipakai di lingkungan saat ini?
-// (Android + modul native tersedia; false di Expo Go, web, iOS)
 export const isBluetoothPrintingSupported = () =>
   Platform.OS === "android" && !!getLib();
 
@@ -71,8 +65,7 @@ const formatLocalDateTime = (iso) => {
   )}:${p(d.getMinutes())}`;
 };
 
-// Android 12+ butuh izin runtime BLUETOOTH_CONNECT/SCAN, versi lebih lama
-// butuh ACCESS_FINE_LOCATION untuk membaca daftar perangkat.
+// Android 12+ butuh izin runtime BLUETOOTH_CONNECT/SCAN
 const ensureBluetoothPermissions = async () => {
   if (Platform.OS !== "android") return false;
   const sdk =
@@ -118,44 +111,62 @@ export const getPairedPrinters = async () => {
   const ok = await ensureBluetoothPermissions();
   if (!ok) {
     throw new Error(
-      "Izin Bluetooth ditolak. Aktifkan izin Bluetooth untuk aplikasi ini di pengaturan HP.",
+      "Izin Bluetooth belum diberikan. Izinkan akses Bluetooth di Pengaturan aplikasi.",
     );
   }
-  const enabled = await lib.BluetoothManager.isBluetoothEnabled();
-  if (!enabled) {
-    throw new Error("Bluetooth HP belum aktif. Nyalakan Bluetooth terlebih dahulu.");
-  }
-  // enableBluetooth() resolve dengan daftar perangkat yang sudah dipairing
-  // bila Bluetooth sudah menyala (tiap elemen berupa string JSON).
-  const raw = await lib.BluetoothManager.enableBluetooth();
-  const devices = [];
-  (raw || []).forEach((item) => {
+  const mgr = lib.BluetoothManager;
+  const raw = await mgr.getPairedDevices();
+  let list = [];
+  if (typeof raw === "string") {
     try {
-      const d = typeof item === "string" ? JSON.parse(item) : item;
-      if (d && d.address) {
-        devices.push({ name: d.name || "Perangkat", address: d.address });
-      }
+      list = JSON.parse(raw);
     } catch {
-      // abaikan entri yang tidak valid
+      list = [];
     }
-  });
-  return devices;
+  } else if (Array.isArray(raw)) {
+    list = raw;
+  }
+  return list
+    .map((d) => {
+      if (typeof d === "string") {
+        try {
+          return JSON.parse(d);
+        } catch {
+          return null;
+        }
+      }
+      return d;
+    })
+    .filter(Boolean)
+    .map((d) => ({
+      name: d.name || "Perangkat Tanpa Nama",
+      address: d.address,
+    }))
+    .filter((d) => !!d.address);
 };
 
-const connectToPrinter = async () => {
+// Hubungkan ke printer Bluetooth yang tersimpan.
+export const connectToPrinter = async () => {
   const lib = getLib();
   if (!lib) throw new Error(NOT_SUPPORTED_MSG);
-  const address = ((await AsyncStorage.getItem(PRINTER_ADDRESS_KEY)) || "").trim();
-  if (!address) {
+  const addr = await AsyncStorage.getItem(PRINTER_ADDRESS_KEY);
+  if (!addr || !addr.trim()) {
     throw new Error(
-      "Printer belum diatur. Buka Pengaturan → Printer Bluetooth untuk memilih printer.",
+      "Alamat printer Bluetooth belum diatur. Buka Pengaturan > Printer Bluetooth.",
     );
   }
+  const ok = await ensureBluetoothPermissions();
+  if (!ok) {
+    throw new Error("Izin Bluetooth belum diberikan.");
+  }
+  const mgr = lib.BluetoothManager;
   try {
-    await lib.BluetoothManager.connect(address);
-  } catch {
+    await mgr.connect(addr.trim());
+  } catch (err) {
     throw new Error(
-      "Tidak bisa terhubung ke printer. Pastikan printer menyala dan sudah dipairing dengan HP.",
+      `Gagal terhubung ke printer (${addr}). Pastikan printer menyala dan berada dalam jangkauan: ${
+        err?.message || err
+      }`,
     );
   }
   return lib;
@@ -174,7 +185,7 @@ export const printReceiptViaBluetooth = async (tx, details, storeProfile = {}) =
   await printer.printerAlign(printer.ALIGN.CENTER);
   await printer.setBlob(1);
   await printer.printText(
-    `${storeProfile.storeName || storeProfile.name || "Toko Kelontong"}\n`,
+    `${storeProfile.storeName || storeProfile.name || "MarketPos"}\n`,
     TEXT_OPTS,
   );
   await printer.setBlob(0);
@@ -195,6 +206,18 @@ export const printReceiptViaBluetooth = async (tx, details, storeProfile = {}) =
     ) + "\n",
     TEXT_OPTS,
   );
+
+  // Info nomor meja & tipe pesanan jika F&B
+  if (tx?.table_number || (tx?.order_type && tx?.order_type !== "retail")) {
+    const typeStr = tx?.order_type === "dine_in" ? "Dine In" : "Take Away";
+    await printer.printText(
+      row(
+        tx?.table_number ? `Meja: ${tx.table_number}` : "",
+        tx?.order_type ? `[${typeStr}]` : "",
+      ) + "\n",
+      TEXT_OPTS,
+    );
+  }
   await printer.printText(dash() + "\n", TEXT_OPTS);
 
   // ── Daftar item ──
@@ -220,9 +243,14 @@ export const printReceiptViaBluetooth = async (tx, details, storeProfile = {}) =
   }
   await printer.setBlob(1);
   await printer.printText(row("TOTAL", rp(tx?.grand_total)) + "\n", TEXT_OPTS);
-  await printer.setBlob(0);
-  await printer.printText(row("Tunai", rp(tx?.cash_received)) + "\n", TEXT_OPTS);
-  await printer.printText(row("Kembalian", rp(tx?.cash_return)) + "\n", TEXT_OPTS);
+  const payMethod = String(tx?.payment_method || "cash").toUpperCase();
+  if (payMethod === "CASH" || payMethod === "TUNAI") {
+    await printer.printText(row("Tunai", rp(tx?.cash_received)) + "\n", TEXT_OPTS);
+    await printer.printText(row("Kembalian", rp(tx?.cash_return)) + "\n", TEXT_OPTS);
+  } else {
+    await printer.printText(row("Metode", payMethod) + "\n", TEXT_OPTS);
+    await printer.printText(row("Bayar", rp(tx?.grand_total) + " (Lunas)") + "\n", TEXT_OPTS);
+  }
   await printer.printText(dash() + "\n", TEXT_OPTS);
 
   // ── Footer & dorong kertas ──
@@ -233,6 +261,65 @@ export const printReceiptViaBluetooth = async (tx, details, storeProfile = {}) =
   );
   await printer.printerAlign(printer.ALIGN.LEFT);
   await printer.printAndFeed(120);
+};
+
+// Cetak struk dapur (Kitchen Ticket) khusus staf dapur / barista (TANPA HARGA).
+export const printKitchenTicketViaBluetooth = async (tx, details, storeProfile = {}) => {
+  const lib = await connectToPrinter();
+  const printer = lib.BluetoothEscposPrinter;
+  await printer.printerInit();
+  await printer.setWidth(384);
+
+  // Header dapur
+  await printer.printerAlign(printer.ALIGN.CENTER);
+  await printer.setBlob(1);
+  await printer.printText("*** STRUK DAPUR ***\n", TEXT_OPTS);
+  await printer.setBlob(0);
+  await printer.printText(
+    `${storeProfile.storeName || storeProfile.name || "MarketPos"}\n`,
+    TEXT_OPTS,
+  );
+  await printer.printText(dash() + "\n", TEXT_OPTS);
+
+  // Nomor meja besar & tipe pesanan
+  await printer.setBlob(1);
+  if (tx?.table_number) {
+    await printer.printText(`MEJA: ${tx.table_number}\n`, TEXT_OPTS);
+  }
+  const orderType = tx?.order_type === "dine_in"
+    ? "[ DINE IN / MAKAN DI TEMPAT ]"
+    : (tx?.order_type === "take_away" ? "[ TAKE AWAY / BUNGKUS ]" : "[ PESANAN DAPUR ]");
+  await printer.printText(`${orderType}\n`, TEXT_OPTS);
+  await printer.setBlob(0);
+
+  await printer.printerAlign(printer.ALIGN.LEFT);
+  await printer.printText(
+    row(
+      `No: ${tx?.invoice_number || "-"}`,
+      tx?.created_at ? formatLocalDateTime(tx.created_at) : "",
+    ) + "\n",
+    TEXT_OPTS,
+  );
+  await printer.printText(dash() + "\n", TEXT_OPTS);
+
+  // Daftar item (hanya quantity & nama)
+  for (const item of details || []) {
+    await printer.setBlob(1);
+    await printer.printText(`[ ${item.quantity}x ] ${item.product_name}\n`, TEXT_OPTS);
+    await printer.setBlob(0);
+  }
+
+  // Catatan khusus
+  if (tx?.payment_notes) {
+    await printer.printText(dash() + "\n", TEXT_OPTS);
+    await printer.printText(`Catatan: ${tx.payment_notes}\n`, TEXT_OPTS);
+  }
+
+  await printer.printText(dash() + "\n", TEXT_OPTS);
+  await printer.printerAlign(printer.ALIGN.CENTER);
+  await printer.printText("Harap Segera Dimasak\n", TEXT_OPTS);
+  await printer.printerAlign(printer.ALIGN.LEFT);
+  await printer.printAndFeed(100);
 };
 
 // Cetak label barcode produk langsung ke printer thermal.
@@ -253,9 +340,6 @@ export const printBarcodeLabelViaBluetooth = async ({
   if (priceText) {
     await printer.printText(`${priceText}\n`, TEXT_OPTS);
   }
-  // Barcode hardware CODE128 (GS k m=73), lebar 2, tinggi 80 dot,
-  // angka dicetak di bawah barcode. Wajib di-await agar data barcode
-  // sampai ke printer sebelum kertas dimajukan.
   await printer.printBarCode(String(barcode), printer.BARCODETYPE.CODE128, 2, 80, 0, 2);
   await printer.printAndFeed(60);
 };
