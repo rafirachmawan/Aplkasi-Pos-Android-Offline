@@ -12,7 +12,9 @@ import {
   Linking,
   Platform,
   ScrollView,
+  KeyboardAvoidingView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -33,14 +35,10 @@ const parseRp = (formatted) => {
 };
 
 const BukuKasbonScreen = ({ navigation }) => {
-  const [debts, setDebts] = useState([]);
-  const [summary, setSummary] = useState({
-    totalUnpaidDebt: 0,
-    unpaidCustomerCount: 0,
-    totalRecords: 0,
-  });
+  const insets = useSafeAreaInsets();
+  const [allDebts, setAllDebts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("unpaid"); // 'all' | 'unpaid' | 'paid'
+  const [activeTab, setActiveTab] = useState("unpaid"); // 'unpaid' | 'paid' | 'all'
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modal Pembayaran Kasbon
@@ -72,16 +70,14 @@ const BukuKasbonScreen = ({ navigation }) => {
       AsyncStorage.getItem("storeName").then((val) => {
         if (val) setStoreName(val);
       });
-    }, [activeTab]),
+    }, []),
   );
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await debtRepository.getDebts(activeTab);
-      setDebts(data);
-      const summ = await debtRepository.getDebtSummary();
-      setSummary(summ);
+      const data = await debtRepository.getDebts("all");
+      setAllDebts(data || []);
     } catch (e) {
       console.error("Gagal memuat kasbon:", e);
     } finally {
@@ -89,7 +85,30 @@ const BukuKasbonScreen = ({ navigation }) => {
     }
   };
 
-  const filteredDebts = debts.filter((d) => {
+  // Filter List & Perhitungan Ringkasan
+  const unpaidDebts = allDebts.filter(
+    (d) => d.status !== "paid" && (Number(d.remaining_debt) || 0) > 0,
+  );
+  const paidDebts = allDebts.filter(
+    (d) => d.status === "paid" || (Number(d.remaining_debt) || 0) <= 0,
+  );
+
+  const totalUnpaidDebt = unpaidDebts.reduce(
+    (sum, d) => sum + (Number(d.remaining_debt) || 0),
+    0,
+  );
+  const unpaidCustomerCount = new Set(
+    unpaidDebts.map((d) => (d.customer_name || "").trim().toLowerCase()),
+  ).size;
+
+  const currentTabDebts =
+    activeTab === "unpaid"
+      ? unpaidDebts
+      : activeTab === "paid"
+      ? paidDebts
+      : allDebts;
+
+  const filteredDebts = currentTabDebts.filter((d) => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     const matchName = (d.customer_name || "").toLowerCase().includes(q);
@@ -98,31 +117,24 @@ const BukuKasbonScreen = ({ navigation }) => {
     return matchName || matchPhone || matchInvoice;
   });
 
+  // ── Helper Cepat Jatuh Tempo ──
+  const setQuickDueDate = (days) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    setNewDueDate(`${yyyy}-${mm}-${dd}`);
+  };
+
   // ── Kirim Pengingat Tagihan via WhatsApp ──
   const handleSendReminderWA = (item) => {
     const phone = (item.customer_phone || "").replace(/\D/g, "");
     if (!phone) {
-      Alert.prompt
-        ? Alert.prompt(
-            "Nomor WhatsApp Pelanggan",
-            "Masukkan nomor WhatsApp pelanggan (contoh: 08123456789):",
-            [
-              { text: "Batal", style: "cancel" },
-              {
-                text: "Kirim",
-                onPress: (input) => {
-                  if (input) sendWAMessageToPhone(item, input);
-                },
-              },
-            ],
-            "plain-text",
-            "",
-            "phone-pad",
-          )
-        : Alert.alert(
-            "Nomor Tidak Tersedia",
-            "Catatan kasbon ini belum memiliki nomor telepon pelanggan.",
-          );
+      Alert.alert(
+        "Nomor Tidak Tersedia",
+        "Catatan kasbon ini belum memiliki nomor telepon WhatsApp pelanggan.",
+      );
       return;
     }
     sendWAMessageToPhone(item, phone);
@@ -251,70 +263,141 @@ const BukuKasbonScreen = ({ navigation }) => {
   };
 
   const renderDebtItem = ({ item }) => {
-    const isPaid = item.status === "paid" || item.remaining_debt <= 0;
+    const isPaid = item.status === "paid" || (Number(item.remaining_debt) || 0) <= 0;
     const initial = (item.customer_name || "P").charAt(0).toUpperCase();
 
     return (
-      <TouchableOpacity
-        activeOpacity={0.88}
-        style={styles.debtCard}
-        onPress={() => openDetail(item)}
-      >
-        <View style={styles.debtCardHeader}>
-          <View style={styles.avatarWrap}>
-            <Text style={styles.avatarText}>{initial}</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={styles.customerName} numberOfLines={1}>
-                {item.customer_name}
-              </Text>
-              <View
-                style={[
-                  styles.statusBadge,
-                  isPaid ? styles.badgePaid : styles.badgeUnpaid,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusBadgeText,
-                    isPaid ? styles.textPaid : styles.textUnpaid,
-                  ]}
-                >
-                  {isPaid ? "LUNAS" : "BELUM LUNAS"}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.customerPhone}>
-              {item.customer_phone ? `📱 ${item.customer_phone}` : "Tanpa No. Telepon"}
-            </Text>
-          </View>
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={styles.remainingLabel}>Sisa Hutang</Text>
+      <View style={styles.debtCard}>
+        {/* Header Baris: Avatar, Nama, Telepon & Status Pill */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => openDetail(item)}
+          style={styles.cardHeaderPressable}
+        >
+          <View
+            style={[
+              styles.avatarWrap,
+              isPaid ? styles.avatarPaid : styles.avatarUnpaid,
+            ]}
+          >
             <Text
               style={[
-                styles.remainingValue,
-                isPaid ? { color: colors.success } : { color: "#EF4444" },
+                styles.avatarText,
+                isPaid ? styles.avatarTextPaid : styles.avatarTextUnpaid,
               ]}
             >
-              {formatRupiah(item.remaining_debt)}
+              {initial}
             </Text>
           </View>
-        </View>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Text style={styles.customerName} numberOfLines={1}>
+              {item.customer_name}
+            </Text>
+            <View style={styles.phoneRow}>
+              <MaterialCommunityIcons
+                name={item.customer_phone ? "phone-outline" : "phone-off-outline"}
+                size={13}
+                color={item.customer_phone ? "#64748B" : "#94A3B8"}
+              />
+              <Text
+                style={[
+                  styles.customerPhone,
+                  !item.customer_phone && { fontStyle: "italic", color: "#94A3B8" },
+                ]}
+              >
+                {item.customer_phone || "Tanpa No. Telepon"}
+              </Text>
+            </View>
+          </View>
+          <View
+            style={[
+              styles.statusBadge,
+              isPaid ? styles.badgePaid : styles.badgeUnpaid,
+            ]}
+          >
+            <View
+              style={[
+                styles.statusDot,
+                isPaid ? styles.statusDotPaid : styles.statusDotUnpaid,
+              ]}
+            />
+            <Text
+              style={[
+                styles.statusBadgeText,
+                isPaid ? styles.textPaid : styles.textUnpaid,
+              ]}
+            >
+              {isPaid ? "LUNAS" : "BELUM LUNAS"}
+            </Text>
+          </View>
+        </TouchableOpacity>
 
-        {/* Info Tambahan */}
-        <View style={styles.infoRow}>
-          <Text style={styles.infoMeta}>
-            {item.invoice_number ? `Nota: ${item.invoice_number} • ` : ""}
-            Total: {formatRupiah(item.total_debt)}
-          </Text>
-          {item.due_date ? (
-            <Text style={styles.dueDateText}>Jatuh Tempo: {item.due_date}</Text>
-          ) : null}
-        </View>
+        {/* Kotak Rincian Hutang (Side-by-side) */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => openDetail(item)}
+          style={styles.debtDetailsBox}
+        >
+          <View style={styles.debtColLeft}>
+            <Text style={styles.debtColLabel}>TOTAL KASBON</Text>
+            <Text style={styles.debtColValTotal}>
+              {formatRupiah(item.total_debt)}
+            </Text>
+            {item.invoice_number ? (
+              <Text style={styles.invoiceMeta} numberOfLines={1}>
+                Nota: {item.invoice_number}
+              </Text>
+            ) : null}
+          </View>
 
-        {/* Action Buttons */}
-        {!isPaid && (
+          <View style={styles.debtDividerV} />
+
+          <View style={styles.debtColRight}>
+            <Text
+              style={[
+                styles.debtColLabel,
+                { color: isPaid ? "#059669" : "#DC2626" },
+              ]}
+            >
+              {isPaid ? "STATUS" : "SISA TAGIHAN"}
+            </Text>
+            <Text
+              style={[
+                styles.debtColValRemaining,
+                isPaid ? { color: "#059669" } : { color: "#DC2626" },
+              ]}
+            >
+              {isPaid ? "Lunas" : formatRupiah(item.remaining_debt)}
+            </Text>
+            {item.due_date ? (
+              <View style={styles.dueDateBadge}>
+                <MaterialCommunityIcons
+                  name="calendar-clock-outline"
+                  size={12}
+                  color="#D97706"
+                />
+                <Text style={styles.dueDateText}>{item.due_date}</Text>
+              </View>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+
+        {/* Catatan Produk / Kasbon jika ada */}
+        {item.notes ? (
+          <View style={styles.notesPreviewRow}>
+            <MaterialCommunityIcons
+              name="note-text-outline"
+              size={13}
+              color="#64748B"
+            />
+            <Text style={styles.notesPreviewText} numberOfLines={1}>
+              {item.notes}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Tombol Aksi Bawah */}
+        {!isPaid ? (
           <View style={styles.cardActionsRow}>
             <TouchableOpacity
               style={styles.btnActionWA}
@@ -328,7 +411,7 @@ const BukuKasbonScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.btnActionPay}
               onPress={() => openPayModal(item)}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               <MaterialCommunityIcons
                 name="cash-multiple"
@@ -338,42 +421,86 @@ const BukuKasbonScreen = ({ navigation }) => {
               <Text style={styles.btnActionPayText}>Bayar / Cicil</Text>
             </TouchableOpacity>
           </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.btnActionHistoryPaid}
+            onPress={() => openDetail(item)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <MaterialCommunityIcons
+                name="check-circle"
+                size={16}
+                color="#059669"
+              />
+              <Text style={styles.btnActionHistoryPaidText}>
+                Lunas Sepenuhnya
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+              <Text style={styles.btnActionHistoryPaidSub}>Riwayat Cicilan</Text>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={16}
+                color="#059669"
+              />
+            </View>
+          </TouchableOpacity>
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
   return (
     <View style={styles.container}>
-      {/* ── Summary Hero Card ── */}
+      {/* ── Summary Hero Card (Clean Modern Dark Slate) ── */}
       <View style={styles.heroSummaryCard}>
         <View style={styles.summaryTop}>
-          <View>
-            <Text style={styles.summaryLabel}>TOTAL PIUTANG BELUM LUNAS</Text>
+          <View style={{ flex: 1 }}>
+            <View style={styles.summaryBadgePill}>
+              <View style={styles.summaryDotLive} />
+              <Text style={styles.summaryBadgePillText}>PIUTANG BELUM LUNAS</Text>
+            </View>
             <Text style={styles.summaryValue}>
-              {formatRupiah(summary.totalUnpaidDebt)}
+              {formatRupiah(totalUnpaidDebt)}
             </Text>
           </View>
-          <View style={styles.summaryBadge}>
+          <View style={styles.summaryIconBox}>
             <MaterialCommunityIcons
               name="book-account-outline"
               size={24}
-              color="#FFFFFF"
+              color="#F8FAFC"
             />
           </View>
         </View>
+
         <View style={styles.summaryDivider} />
+
         <View style={styles.summaryBottomRow}>
           <View style={styles.summaryMiniStat}>
-            <Text style={styles.miniStatLabel}>Pelanggan Berhutang</Text>
-            <Text style={styles.miniStatVal}>
-              {summary.unpaidCustomerCount} Orang
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <MaterialCommunityIcons
+                name="account-clock-outline"
+                size={14}
+                color="#94A3B8"
+              />
+              <Text style={styles.miniStatLabel}>Pelanggan Berhutang</Text>
+            </View>
+            <Text style={styles.miniStatVal}>{unpaidCustomerCount} Orang</Text>
           </View>
+
           <View style={styles.summaryMiniDivider} />
+
           <View style={styles.summaryMiniStat}>
-            <Text style={styles.miniStatLabel}>Total Catatan</Text>
-            <Text style={styles.miniStatVal}>{summary.totalRecords} Nota</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <MaterialCommunityIcons
+                name="receipt-text-outline"
+                size={14}
+                color="#94A3B8"
+              />
+              <Text style={styles.miniStatLabel}>Total Catatan</Text>
+            </View>
+            <Text style={styles.miniStatVal}>{unpaidDebts.length} Nota</Text>
           </View>
         </View>
       </View>
@@ -384,13 +511,16 @@ const BukuKasbonScreen = ({ navigation }) => {
           <MaterialCommunityIcons name="magnify" size={20} color="#94A3B8" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Cari nama atau telepon pelanggan..."
+            placeholder="Cari nama, telepon, atau nomor nota..."
             placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")}>
+            <TouchableOpacity
+              onPress={() => setSearchQuery("")}
+              style={{ padding: 4 }}
+            >
               <MaterialCommunityIcons
                 name="close-circle"
                 size={18}
@@ -400,31 +530,59 @@ const BukuKasbonScreen = ({ navigation }) => {
           )}
         </View>
 
-        {/* Tab Filter */}
+        {/* Tab Filter Segmen dengan Badge Jumlah */}
         <View style={styles.tabsRow}>
           {[
-            { key: "unpaid", label: "Belum Lunas" },
-            { key: "paid", label: "Lunas" },
-            { key: "all", label: "Semua" },
-          ].map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[
-                styles.tabBtn,
-                activeTab === tab.key && styles.tabBtnActive,
-              ]}
-              onPress={() => setActiveTab(tab.key)}
-            >
-              <Text
-                style={[
-                  styles.tabBtnText,
-                  activeTab === tab.key && styles.tabBtnTextActive,
-                ]}
+            {
+              key: "unpaid",
+              label: "Belum Lunas",
+              count: unpaidDebts.length,
+            },
+            {
+              key: "paid",
+              label: "Lunas",
+              count: paidDebts.length,
+            },
+            {
+              key: "all",
+              label: "Semua",
+              count: allDebts.length,
+            },
+          ].map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.tabBtn, isActive && styles.tabBtnActive]}
+                onPress={() => setActiveTab(tab.key)}
+                activeOpacity={0.8}
               >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    isActive && styles.tabBtnTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+                <View
+                  style={[
+                    styles.tabCountPill,
+                    isActive && styles.tabCountPillActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.tabCountText,
+                      isActive && styles.tabCountTextActive,
+                    ]}
+                  >
+                    {tab.count}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
@@ -432,22 +590,30 @@ const BukuKasbonScreen = ({ navigation }) => {
       {loading ? (
         <View style={styles.centerState}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.stateText}>Memuat data kasbon...</Text>
+          <Text style={styles.stateText}>Memuat catatan kasbon...</Text>
         </View>
       ) : filteredDebts.length === 0 ? (
         <View style={styles.centerState}>
-          <MaterialCommunityIcons
-            name="check-circle-outline"
-            size={48}
-            color="#94A3B8"
-          />
-          <Text style={styles.stateTitle}>Tidak Ada Catatan Kasbon</Text>
+          <View style={styles.emptyIconCircle}>
+            <MaterialCommunityIcons
+              name={searchQuery ? "magnify" : "check-all"}
+              size={36}
+              color={colors.primary}
+            />
+          </View>
+          <Text style={styles.stateTitle}>
+            {searchQuery
+              ? "Pencarian Tidak Ditemukan"
+              : activeTab === "unpaid"
+              ? "Semua Kasbon Lunas!"
+              : "Belum Ada Catatan Kasbon"}
+          </Text>
           <Text style={styles.stateText}>
             {searchQuery
-              ? "Tidak ada hasil yang cocok dengan pencarian."
+              ? `Tidak ada kasbon yang cocok dengan "${searchQuery}".`
               : activeTab === "unpaid"
-                ? "Hebat! Semua kasbon pelanggan sudah lunas."
-                : "Belum ada catatan kasbon tercatat."}
+              ? "Tidak ada piutang aktif saat ini. Semua transaksi pelanggan tertib!"
+              : "Tekan tombol Catat Kasbon di bawah untuk menambahkan catatan baru."}
           </Text>
         </View>
       ) : (
@@ -455,24 +621,50 @@ const BukuKasbonScreen = ({ navigation }) => {
           data={filteredDebts}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderDebtItem}
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={[
+            styles.listContainer,
+            { paddingBottom: Math.max(insets.bottom, 16) + 84 },
+          ]}
           showsVerticalScrollIndicator={false}
         />
       )}
 
-      {/* ── Floating Add Button ── */}
+      {/* ── Floating Action Button (Catat Kasbon) ── */}
       <TouchableOpacity
-        style={styles.fabBtn}
-        onPress={() => setShowAddModal(true)}
+        style={[
+          styles.fabBtn,
+          { bottom: Math.max(insets.bottom, 16) + 16 },
+        ]}
+        onPress={() => {
+          setNewName("");
+          setNewPhone("");
+          setNewAmount("");
+          setNewDueDate("");
+          setNewNotes("");
+          setShowAddModal(true);
+        }}
         activeOpacity={0.88}
       >
-        <MaterialCommunityIcons name="plus" size={24} color="#FFFFFF" />
+        <MaterialCommunityIcons
+          name="plus-circle-outline"
+          size={20}
+          color="#FFFFFF"
+        />
         <Text style={styles.fabBtnText}>Catat Kasbon</Text>
       </TouchableOpacity>
 
       {/* ── Modal Bayar Kasbon / Cicil ── */}
-      <Modal visible={showPayModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal
+        visible={showPayModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setShowPayModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View>
@@ -481,19 +673,40 @@ const BukuKasbonScreen = ({ navigation }) => {
                   Pelanggan: {selectedDebt?.customer_name}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowPayModal(false)}>
-                <MaterialCommunityIcons name="close" size={22} color="#64748B" />
+              <TouchableOpacity
+                onPress={() => setShowPayModal(false)}
+                style={styles.modalCloseBtn}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#64748B" />
               </TouchableOpacity>
             </View>
 
             <View style={styles.sisaHutangBanner}>
-              <Text style={styles.sisaHutangLabel}>Sisa Hutang Saat Ini:</Text>
-              <Text style={styles.sisaHutangVal}>
-                {formatRupiah(selectedDebt?.remaining_debt || 0)}
-              </Text>
+              <View>
+                <Text style={styles.sisaHutangLabel}>Sisa Hutang Saat Ini</Text>
+                <Text style={styles.sisaHutangVal}>
+                  {formatRupiah(selectedDebt?.remaining_debt || 0)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.quickPayFullBtn}
+                onPress={() =>
+                  setPayAmountInput(
+                    formatToRp(String(selectedDebt?.remaining_debt || 0)),
+                  )
+                }
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons
+                  name="lightning-bolt"
+                  size={14}
+                  color="#15803D"
+                />
+                <Text style={styles.quickPayFullText}>Bayar Lunas</Text>
+              </TouchableOpacity>
             </View>
 
-            <Text style={styles.inputLabel}>Nominal Pembayaran (Rp)</Text>
+            <Text style={styles.inputLabel}>NOMINAL PEMBAYARAN (RP) *</Text>
             <TextInput
               style={styles.modalInput}
               value={payAmountInput}
@@ -503,51 +716,45 @@ const BukuKasbonScreen = ({ navigation }) => {
               placeholderTextColor="#94A3B8"
             />
 
-            {/* Quick Button: Lunasi Semua */}
-            <TouchableOpacity
-              style={styles.quickPayFullBtn}
-              onPress={() =>
-                setPayAmountInput(
-                  formatToRp(String(selectedDebt?.remaining_debt || 0)),
-                )
-              }
-            >
-              <Text style={styles.quickPayFullText}>
-                ⚡ Bayar Lunas (
-                {formatRupiah(selectedDebt?.remaining_debt || 0)})
-              </Text>
-            </TouchableOpacity>
-
-            <Text style={styles.inputLabel}>Metode Pembayaran</Text>
+            <Text style={styles.inputLabel}>METODE PEMBAYARAN</Text>
             <View style={styles.methodsRow}>
               {[
-                { id: "cash", label: "Tunai" },
-                { id: "transfer", label: "Transfer" },
-                { id: "qris", label: "QRIS" },
-              ].map((m) => (
-                <TouchableOpacity
-                  key={m.id}
-                  style={[
-                    styles.methodChip,
-                    payMethod === m.id && styles.methodChipActive,
-                  ]}
-                  onPress={() => setPayMethod(m.id)}
-                >
-                  <Text
+                { id: "cash", label: "Tunai", icon: "cash" },
+                { id: "transfer", label: "Transfer", icon: "bank-transfer" },
+                { id: "qris", label: "QRIS", icon: "qrcode" },
+              ].map((m) => {
+                const isSelected = payMethod === m.id;
+                return (
+                  <TouchableOpacity
+                    key={m.id}
                     style={[
-                      styles.methodChipText,
-                      payMethod === m.id && styles.methodChipTextActive,
+                      styles.methodChip,
+                      isSelected && styles.methodChipActive,
                     ]}
+                    onPress={() => setPayMethod(m.id)}
+                    activeOpacity={0.75}
                   >
-                    {m.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <MaterialCommunityIcons
+                      name={m.icon}
+                      size={16}
+                      color={isSelected ? "#FFFFFF" : "#64748B"}
+                    />
+                    <Text
+                      style={[
+                        styles.methodChipText,
+                        isSelected && styles.methodChipTextActive,
+                      ]}
+                    >
+                      {m.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
-            <Text style={styles.inputLabel}>Catatan (Opsional)</Text>
+            <Text style={styles.inputLabel}>CATATAN (OPSIONAL)</Text>
             <TextInput
-              style={[styles.modalInput, { height: 40 }]}
+              style={[styles.modalInput, { minHeight: 44 }]}
               value={payNotes}
               onChangeText={setPayNotes}
               placeholder="Misal: Cicilan ke-1"
@@ -558,6 +765,7 @@ const BukuKasbonScreen = ({ navigation }) => {
               <TouchableOpacity
                 style={styles.modalCancelBtn}
                 onPress={() => setShowPayModal(false)}
+                activeOpacity={0.8}
               >
                 <Text style={styles.modalCancelText}>Batal</Text>
               </TouchableOpacity>
@@ -565,6 +773,7 @@ const BukuKasbonScreen = ({ navigation }) => {
                 style={[styles.modalSubmitBtn, paying && { opacity: 0.7 }]}
                 onPress={handleSavePayment}
                 disabled={paying}
+                activeOpacity={0.88}
               >
                 <Text style={styles.modalSubmitText}>
                   {paying ? "Menyimpan..." : "Simpan Pembayaran"}
@@ -572,15 +781,25 @@ const BukuKasbonScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Modal Catat Kasbon Baru Manual ── */}
-      <Modal visible={showAddModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal
+        visible={showAddModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalOverlay}
+        >
           <ScrollView
-            contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
+            contentContainerStyle={styles.modalScrollContent}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
             <View style={styles.modalCard}>
               <View style={styles.modalHeader}>
@@ -590,12 +809,19 @@ const BukuKasbonScreen = ({ navigation }) => {
                     Pencatatan piutang pelanggan langsung
                   </Text>
                 </View>
-                <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                  <MaterialCommunityIcons name="close" size={22} color="#64748B" />
+                <TouchableOpacity
+                  onPress={() => setShowAddModal(false)}
+                  style={styles.modalCloseBtn}
+                >
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={20}
+                    color="#64748B"
+                  />
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.inputLabel}>Nama Pelanggan *</Text>
+              <Text style={styles.inputLabel}>NAMA PELANGGAN *</Text>
               <TextInput
                 style={styles.modalInput}
                 value={newName}
@@ -604,17 +830,19 @@ const BukuKasbonScreen = ({ navigation }) => {
                 placeholderTextColor="#94A3B8"
               />
 
-              <Text style={styles.inputLabel}>No. WhatsApp / Telepon (Opsional)</Text>
+              <Text style={styles.inputLabel}>
+                NO. WHATSAPP / TELEPON (OPSIONAL)
+              </Text>
               <TextInput
                 style={styles.modalInput}
                 value={newPhone}
                 onChangeText={setNewPhone}
                 keyboardType="phone-pad"
-                placeholder="08123456789"
+                placeholder="Contoh: 08123456789"
                 placeholderTextColor="#94A3B8"
               />
 
-              <Text style={styles.inputLabel}>Nominal Kasbon (Rp) *</Text>
+              <Text style={styles.inputLabel}>NOMINAL KASBON (RP) *</Text>
               <TextInput
                 style={styles.modalInput}
                 value={newAmount}
@@ -624,18 +852,40 @@ const BukuKasbonScreen = ({ navigation }) => {
                 placeholderTextColor="#94A3B8"
               />
 
-              <Text style={styles.inputLabel}>Jatuh Tempo (Opsional)</Text>
+              <View style={styles.fieldHeaderBetween}>
+                <Text style={styles.inputLabel}>JATUH TEMPO (OPSIONAL)</Text>
+              </View>
+
+              {/* Quick Preset Buttons untuk Jatuh Tempo */}
+              <View style={styles.quickPresetRow}>
+                {[
+                  { label: "+3 Hari", days: 3 },
+                  { label: "+7 Hari", days: 7 },
+                  { label: "+14 Hari", days: 14 },
+                  { label: "+30 Hari", days: 30 },
+                ].map((p) => (
+                  <TouchableOpacity
+                    key={p.label}
+                    style={styles.presetChip}
+                    onPress={() => setQuickDueDate(p.days)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.presetChipText}>{p.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <TextInput
                 style={styles.modalInput}
                 value={newDueDate}
                 onChangeText={setNewDueDate}
-                placeholder="YYYY-MM-DD (Misal: 2026-11-05)"
+                placeholder="YYYY-MM-DD (Misal: 2026-11-15)"
                 placeholderTextColor="#94A3B8"
               />
 
-              <Text style={styles.inputLabel}>Catatan Kasbon (Opsional)</Text>
+              <Text style={styles.inputLabel}>CATATAN KASBON (OPSIONAL)</Text>
               <TextInput
-                style={[styles.modalInput, { height: 44 }]}
+                style={[styles.modalInput, { minHeight: 44 }]}
                 value={newNotes}
                 onChangeText={setNewNotes}
                 placeholder="Misal: Ambil beras 1 karung & minyak"
@@ -646,6 +896,7 @@ const BukuKasbonScreen = ({ navigation }) => {
                 <TouchableOpacity
                   style={styles.modalCancelBtn}
                   onPress={() => setShowAddModal(false)}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.modalCancelText}>Batal</Text>
                 </TouchableOpacity>
@@ -653,6 +904,7 @@ const BukuKasbonScreen = ({ navigation }) => {
                   style={[styles.modalSubmitBtn, savingNew && { opacity: 0.7 }]}
                   onPress={handleSaveNewDebt}
                   disabled={savingNew}
+                  activeOpacity={0.88}
                 >
                   <Text style={styles.modalSubmitText}>
                     {savingNew ? "Menyimpan..." : "Simpan Kasbon"}
@@ -661,13 +913,19 @@ const BukuKasbonScreen = ({ navigation }) => {
               </View>
             </View>
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Modal Detail & Riwayat Cicilan ── */}
-      <Modal visible={showDetailModal} transparent animationType="fade">
+      <Modal
+        visible={showDetailModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setShowDetailModal(false)}
+      >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { maxHeight: "80%" }]}>
+          <View style={[styles.modalCard, { maxHeight: "85%" }]}>
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalTitle}>Detail Catatan Kasbon</Text>
@@ -675,8 +933,11 @@ const BukuKasbonScreen = ({ navigation }) => {
                   {detailDebt?.customer_name}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowDetailModal(false)}>
-                <MaterialCommunityIcons name="close" size={22} color="#64748B" />
+              <TouchableOpacity
+                onPress={() => setShowDetailModal(false)}
+                style={styles.modalCloseBtn}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#64748B" />
               </TouchableOpacity>
             </View>
 
@@ -695,14 +956,16 @@ const BukuKasbonScreen = ({ navigation }) => {
                       styles.detailVal,
                       {
                         color:
-                          detailDebt?.remaining_debt === 0
-                            ? colors.success
-                            : "#EF4444",
-                        fontFamily: fonts.bold,
+                          (Number(detailDebt?.remaining_debt) || 0) <= 0
+                            ? "#059669"
+                            : "#DC2626",
+                        fontFamily: fonts.extraBold,
                       },
                     ]}
                   >
-                    {formatRupiah(detailDebt?.remaining_debt || 0)}
+                    {(Number(detailDebt?.remaining_debt) || 0) <= 0
+                      ? "Lunas"
+                      : formatRupiah(detailDebt?.remaining_debt || 0)}
                   </Text>
                 </View>
                 {detailDebt?.invoice_number ? (
@@ -716,7 +979,9 @@ const BukuKasbonScreen = ({ navigation }) => {
                 {detailDebt?.due_date ? (
                   <View style={styles.detailRow}>
                     <Text style={styles.detailKey}>Jatuh Tempo</Text>
-                    <Text style={styles.detailVal}>{detailDebt.due_date}</Text>
+                    <Text style={[styles.detailVal, { color: "#D97706" }]}>
+                      {detailDebt.due_date}
+                    </Text>
                   </View>
                 ) : null}
                 {detailDebt?.notes ? (
@@ -730,11 +995,18 @@ const BukuKasbonScreen = ({ navigation }) => {
               <Text style={styles.historySectionTitle}>
                 RIWAYAT PEMBAYARAN & CICILAN
               </Text>
-              {(!detailDebt?.debt_payments ||
-                detailDebt.debt_payments.length === 0) ? (
-                <Text style={styles.noHistoryText}>
-                  Belum ada catatan cicilan untuk kasbon ini.
-                </Text>
+              {!detailDebt?.debt_payments ||
+              detailDebt.debt_payments.length === 0 ? (
+                <View style={styles.emptyHistoryBox}>
+                  <MaterialCommunityIcons
+                    name="cash-clock"
+                    size={28}
+                    color="#94A3B8"
+                  />
+                  <Text style={styles.noHistoryText}>
+                    Belum ada pembayaran cicilan yang dicatat.
+                  </Text>
+                </View>
               ) : (
                 detailDebt.debt_payments.map((p, idx) => (
                   <View key={p.id || idx} style={styles.historyCard}>
@@ -752,6 +1024,11 @@ const BukuKasbonScreen = ({ navigation }) => {
                         })}{" "}
                         • {p.payment_method?.toUpperCase()}
                       </Text>
+                      {p.notes ? (
+                        <Text style={styles.historyNotes}>
+                          Catatan: {p.notes}
+                        </Text>
+                      ) : null}
                     </View>
                     <View style={styles.historyBadge}>
                       <Text style={styles.historyBadgeText}>Tercatat</Text>
@@ -764,6 +1041,7 @@ const BukuKasbonScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.modalCloseFullBtn}
               onPress={() => setShowDetailModal(false)}
+              activeOpacity={0.8}
             >
               <Text style={styles.modalCloseFullText}>Tutup</Text>
             </TouchableOpacity>
@@ -779,46 +1057,64 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
+
+  // ── Hero Summary Card ──
   heroSummaryCard: {
     margin: 16,
-    marginBottom: 8,
+    marginBottom: 10,
     borderRadius: 20,
     backgroundColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
     padding: 18,
     shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
-    elevation: 3,
+    elevation: 4,
   },
   summaryTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  summaryLabel: {
-    fontFamily: fonts.semiBold,
-    fontSize: 11,
+  summaryBadgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  summaryDotLive: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#EF4444",
+  },
+  summaryBadgePillText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
     color: "#94A3B8",
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    letterSpacing: 0.6,
   },
   summaryValue: {
     fontFamily: fonts.extraBold,
-    fontSize: 24,
-    color: "#F8FAFC",
+    fontSize: 26,
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
   },
-  summaryBadge: {
-    width: 44,
-    height: 44,
+  summaryIconBox: {
+    width: 48,
+    height: 48,
     borderRadius: 14,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   summaryDivider: {
     height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     marginVertical: 14,
   },
   summaryBottomRow: {
@@ -835,21 +1131,21 @@ const styles = StyleSheet.create({
   },
   miniStatVal: {
     fontFamily: fonts.bold,
-    fontSize: 14,
+    fontSize: 15,
     color: "#FFFFFF",
     marginTop: 2,
   },
   summaryMiniDivider: {
     width: 1,
-    height: 24,
+    height: 28,
     backgroundColor: "rgba(255, 255, 255, 0.1)",
-    marginHorizontal: 12,
+    marginHorizontal: 14,
   },
 
-  // Filter
+  // ── Filter & Search ──
   filterSection: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    marginBottom: 8,
   },
   searchBar: {
     flexDirection: "row",
@@ -859,7 +1155,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
     paddingHorizontal: 12,
-    height: 42,
+    height: 44,
     marginBottom: 10,
   },
   searchInput: {
@@ -876,12 +1172,15 @@ const styles = StyleSheet.create({
   },
   tabBtn: {
     flex: 1,
-    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 9,
     backgroundColor: "#FFFFFF",
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    alignItems: "center",
   },
   tabBtnActive: {
     backgroundColor: "#0F172A",
@@ -894,12 +1193,30 @@ const styles = StyleSheet.create({
   },
   tabBtnTextActive: {
     color: "#FFFFFF",
+    fontFamily: fonts.bold,
+  },
+  tabCountPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+  },
+  tabCountPillActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  tabCountText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: "#64748B",
+  },
+  tabCountTextActive: {
+    color: "#FFFFFF",
   },
 
-  // List
+  // ── List & Debt Card ──
   listContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 90,
+    paddingTop: 4,
   },
   debtCard: {
     backgroundColor: "#FFFFFF",
@@ -907,51 +1224,94 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
     padding: 14,
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  debtCardHeader: {
+  cardHeaderPressable: {
     flexDirection: "row",
     alignItems: "center",
   },
   avatarWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#EFF6FF",
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
   },
+  avatarUnpaid: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+  },
+  avatarPaid: {
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#D1FAE5",
+  },
   avatarText: {
     fontFamily: fonts.bold,
-    fontSize: 16,
+    fontSize: 17,
+  },
+  avatarTextUnpaid: {
     color: colors.primary,
+  },
+  avatarTextPaid: {
+    color: "#059669",
   },
   customerName: {
     fontFamily: fonts.bold,
     fontSize: 14,
     color: "#0F172A",
   },
+  phoneRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
   customerPhone: {
     fontFamily: fonts.regular,
     fontSize: 11,
     color: "#64748B",
-    marginTop: 2,
   },
   statusBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   badgeUnpaid: {
     backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
   },
   badgePaid: {
-    backgroundColor: "#DCFCE7",
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#D1FAE5",
+  },
+  statusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  statusDotUnpaid: {
+    backgroundColor: "#DC2626",
+  },
+  statusDotPaid: {
+    backgroundColor: "#16A34A",
   },
   statusBadgeText: {
     fontFamily: fonts.bold,
     fontSize: 9,
+    letterSpacing: 0.3,
   },
   textUnpaid: {
     color: "#DC2626",
@@ -959,38 +1319,94 @@ const styles = StyleSheet.create({
   textPaid: {
     color: "#16A34A",
   },
-  remainingLabel: {
-    fontFamily: fonts.medium,
-    fontSize: 10,
-    color: "#94A3B8",
+
+  // Debt Details Side-by-side Box
+  debtDetailsBox: {
+    flexDirection: "row",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    padding: 10,
+    marginTop: 10,
+    alignItems: "center",
   },
-  remainingValue: {
+  debtColLeft: {
+    flex: 1,
+    paddingRight: 6,
+  },
+  debtColRight: {
+    flex: 1,
+    paddingLeft: 6,
+    alignItems: "flex-end",
+  },
+  debtDividerV: {
+    width: 1,
+    height: 36,
+    backgroundColor: "#E2E8F0",
+  },
+  debtColLabel: {
     fontFamily: fonts.bold,
+    fontSize: 10,
+    color: "#64748B",
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  debtColValTotal: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#334155",
+  },
+  debtColValRemaining: {
+    fontFamily: fonts.extraBold,
     fontSize: 15,
   },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+  invoiceMeta: {
+    fontFamily: fonts.regular,
+    fontSize: 10,
+    color: "#94A3B8",
+    marginTop: 2,
   },
-  infoMeta: {
+  dueDateBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 3,
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  dueDateText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: "#D97706",
+  },
+
+  // Notes
+  notesPreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 8,
+    paddingHorizontal: 2,
+  },
+  notesPreviewText: {
+    flex: 1,
     fontFamily: fonts.regular,
     fontSize: 11,
     color: "#64748B",
+    fontStyle: "italic",
   },
-  dueDateText: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#D97706",
-  },
+
+  // Action Buttons
   cardActionsRow: {
     flexDirection: "row",
     gap: 8,
-    marginTop: 10,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
   },
   btnActionWA: {
     flex: 1,
@@ -998,9 +1414,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#DCFCE7",
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    paddingVertical: 9,
+    borderRadius: 10,
   },
   btnActionWAText: {
     fontFamily: fonts.bold,
@@ -1014,66 +1432,106 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     backgroundColor: "#0F172A",
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 9,
+    borderRadius: 10,
+    elevation: 2,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
   },
   btnActionPayText: {
     fontFamily: fonts.bold,
     fontSize: 12,
     color: "#FFFFFF",
   },
+  btnActionHistoryPaid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  btnActionHistoryPaidText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#059669",
+  },
+  btnActionHistoryPaidSub: {
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+    color: "#059669",
+  },
 
-  // Empty / Loading
+  // ── States (Empty / Loading) ──
   centerState: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 30,
+    padding: 32,
+  },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
   },
   stateTitle: {
     fontFamily: fonts.bold,
     fontSize: 16,
     color: "#0F172A",
-    marginTop: 12,
+    marginBottom: 4,
   },
   stateText: {
     fontFamily: fonts.regular,
     fontSize: 12,
     color: "#64748B",
     textAlign: "center",
-    marginTop: 4,
+    lineHeight: 18,
   },
 
-  // FAB
+  // ── Floating Action Button (FAB) ──
   fabBtn: {
     position: "absolute",
-    bottom: 20,
-    right: 20,
+    right: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    backgroundColor: "#0F172A",
+    paddingHorizontal: 20,
+    paddingVertical: 13,
     borderRadius: 28,
-    shadowColor: colors.primary,
+    shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 5,
   },
   fabBtnText: {
     fontFamily: fonts.bold,
     fontSize: 13,
     color: "#FFFFFF",
+    letterSpacing: 0.3,
   },
 
-  // Modal Common
+  // ── Modals Common ──
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
     justifyContent: "center",
     padding: 20,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
   },
   modalCard: {
     backgroundColor: "#FFFFFF",
@@ -1083,7 +1541,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 16,
-    elevation: 5,
+    elevation: 6,
   },
   modalHeader: {
     flexDirection: "row",
@@ -1102,31 +1560,61 @@ const styles = StyleSheet.create({
     color: "#64748B",
     marginTop: 2,
   },
+  modalCloseBtn: {
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: "#F1F5F9",
+  },
   sisaHutangBanner: {
     backgroundColor: "#FEF2F2",
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
     padding: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 12,
   },
   sisaHutangLabel: {
     fontFamily: fonts.medium,
-    fontSize: 12,
+    fontSize: 11,
     color: "#991B1B",
   },
   sisaHutangVal: {
     fontFamily: fonts.extraBold,
     fontSize: 16,
     color: "#DC2626",
+    marginTop: 1,
+  },
+  quickPayFullBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#DCFCE7",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  quickPayFullText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#15803D",
   },
   inputLabel: {
-    fontFamily: fonts.medium,
+    fontFamily: fonts.bold,
     fontSize: 11,
     color: "#475569",
+    letterSpacing: 0.4,
     marginBottom: 6,
     marginTop: 8,
+  },
+  fieldHeaderBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   modalInput: {
     backgroundColor: "#F8FAFC",
@@ -1134,37 +1622,26 @@ const styles = StyleSheet.create({
     borderColor: "#CBD5E1",
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     fontFamily: fonts.semiBold,
     fontSize: 13,
     color: "#0F172A",
   },
-  quickPayFullBtn: {
-    backgroundColor: "#DCFCE7",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    alignSelf: "flex-start",
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  quickPayFullText: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "#15803D",
-  },
   methodsRow: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   methodChip: {
     flex: 1,
-    paddingVertical: 7,
-    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    alignItems: "center",
     backgroundColor: "#F8FAFC",
   },
   methodChipActive: {
@@ -1178,6 +1655,26 @@ const styles = StyleSheet.create({
   },
   methodChipTextActive: {
     color: "#FFFFFF",
+    fontFamily: fonts.bold,
+  },
+  quickPresetRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 8,
+  },
+  presetChip: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+  },
+  presetChipText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#475569",
   },
   modalActions: {
     flexDirection: "row",
@@ -1186,11 +1683,12 @@ const styles = StyleSheet.create({
   },
   modalCancelBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#CBD5E1",
     alignItems: "center",
+    justifyContent: "center",
   },
   modalCancelText: {
     fontFamily: fonts.semiBold,
@@ -1198,11 +1696,12 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   modalSubmitBtn: {
-    flex: 1,
-    paddingVertical: 10,
+    flex: 1.5,
+    paddingVertical: 11,
     borderRadius: 10,
     backgroundColor: "#0F172A",
     alignItems: "center",
+    justifyContent: "center",
   },
   modalSubmitText: {
     fontFamily: fonts.bold,
@@ -1210,7 +1709,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 
-  // Detail Modal
+  // Detail Riwayat Box
   detailBox: {
     backgroundColor: "#F8FAFC",
     borderRadius: 12,
@@ -1222,6 +1721,7 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 4,
   },
   detailKey: {
@@ -1237,16 +1737,22 @@ const styles = StyleSheet.create({
   historySectionTitle: {
     fontFamily: fonts.bold,
     fontSize: 11,
-    color: "#64748B",
+    color: "#475569",
     letterSpacing: 0.5,
     marginBottom: 8,
   },
+  emptyHistoryBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 18,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+  },
   noHistoryText: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
+    fontFamily: fonts.medium,
+    fontSize: 11,
     color: "#94A3B8",
-    fontStyle: "italic",
-    paddingVertical: 6,
+    marginTop: 4,
   },
   historyCard: {
     flexDirection: "row",
@@ -1254,20 +1760,27 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "#E2E8F0",
     padding: 10,
     marginBottom: 6,
   },
   historyAmount: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: colors.success,
+    color: "#059669",
   },
   historyDate: {
     fontFamily: fonts.regular,
     fontSize: 10,
     color: "#94A3B8",
     marginTop: 2,
+  },
+  historyNotes: {
+    fontFamily: fonts.medium,
+    fontSize: 10,
+    color: "#64748B",
+    marginTop: 2,
+    fontStyle: "italic",
   },
   historyBadge: {
     backgroundColor: "#DCFCE7",
@@ -1282,10 +1795,10 @@ const styles = StyleSheet.create({
   },
   modalCloseFullBtn: {
     backgroundColor: "#F1F5F9",
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderRadius: 10,
     alignItems: "center",
-    marginTop: 12,
+    marginTop: 14,
   },
   modalCloseFullText: {
     fontFamily: fonts.bold,

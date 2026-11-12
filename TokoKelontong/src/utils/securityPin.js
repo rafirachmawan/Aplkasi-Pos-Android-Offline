@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../services/supabaseClient";
+import { getAuthSnapshot } from "../services/sessionStore";
 
 const PIN_STORAGE_KEY = "@TokoKelontong:SecurityPin";
 const LOCKED_MENUS_STORAGE_KEY = "@TokoKelontong:LockedMenus";
@@ -23,7 +24,7 @@ export const LOCKABLE_MENU_OPTIONS = [
   {
     key: "Pengaturan",
     name: "Pengaturan Toko",
-    desc: "Profil toko, akun, backup/restore database, dan sistem",
+    desc: "Profil toko, akun, sinkronisasi cloud, dan sistem",
     icon: "cog-outline",
   },
   {
@@ -66,26 +67,55 @@ export const DEFAULT_LOCKED_MENUS = {
  * Mengambil data store aktif (store_id & security_pin dari Supabase)
  * untuk memastikan isolasi antar toko dan mencegah kebocoran PIN ke toko baru.
  */
-export async function getCurrentStoreData() {
+async function fetchOnlineStoreData() {
+  const { data: sess } = await supabase.auth.getSession();
+  const uid = sess?.session?.user?.id;
+  if (!uid) return null;
+
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("store_id, stores(id, security_pin)")
+    .eq("id", uid)
+    .maybeSingle();
+
+  if (error || !profile) return null;
+
+  const storeId = profile.store_id || null;
+  const pin = profile.stores?.security_pin || null;
+  return { storeId, pin };
+}
+
+// Saat offline: toko aktif dari salinan lokal, PIN dari cache lokal toko itu.
+async function getOfflineStoreData() {
   try {
-    const { data: sess } = await supabase.auth.getSession();
-    const uid = sess?.session?.user?.id;
-    if (!uid) return null;
-
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("store_id, stores(id, security_pin)")
-      .eq("id", uid)
-      .maybeSingle();
-
-    if (error || !profile) return null;
-
-    const storeId = profile.store_id || null;
-    const pin = profile.stores?.security_pin || null;
-    return { storeId, pin };
-  } catch (err) {
+    const snap = await getAuthSnapshot();
+    if (!snap?.store_id) return null;
+    const scoped = await AsyncStorage.getItem(
+      `${PIN_STORAGE_KEY}:${snap.store_id}`,
+    );
+    return {
+      storeId: snap.store_id,
+      pin: scoped || snap.security_pin || null,
+      offline: true,
+    };
+  } catch {
     return null;
   }
+}
+
+export async function getCurrentStoreData() {
+  try {
+    const online = await Promise.race([
+      fetchOnlineStoreData(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 5000),
+      ),
+    ]);
+    if (online) return online;
+  } catch (err) {
+    // jatuh ke data lokal di bawah
+  }
+  return getOfflineStoreData();
 }
 
 export const getSecurityPin = async () => {
@@ -94,6 +124,12 @@ export const getSecurityPin = async () => {
     const storeData = await getCurrentStoreData();
     if (storeData && storeData.storeId) {
       const scopedKey = `${PIN_STORAGE_KEY}:${storeData.storeId}`;
+      if (storeData.offline) {
+        // Tanpa server: pakai PIN lokal toko ini, jangan hapus cache apa pun
+        return storeData.pin && String(storeData.pin).length >= 4
+          ? String(storeData.pin)
+          : null;
+      }
       if (storeData.pin && String(storeData.pin).length >= 4) {
         // Toko ini memang telah mengatur PIN di database
         await AsyncStorage.setItem(scopedKey, String(storeData.pin));

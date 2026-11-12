@@ -9,6 +9,7 @@ import {
   Image,
   Dimensions,
   Platform,
+  Alert,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -25,13 +26,18 @@ import {
   getLockedMenus,
 } from "../utils/securityPin";
 import { getOfflineQueueCount } from "../utils/offlineQueue";
+import { refreshSyncCounts } from "../services/syncService";
+import useSyncStatus from "../hooks/useSyncStatus";
 
 const { width } = Dimensions.get("window");
+const isTablet = width >= 600;
 
 const HomeScreen = ({ navigation }) => {
   const { state } = useContext(AppContext);
   const { profile } = useAuth();
   const cloudStoreName = profile?.stores?.store_name;
+  const storeName = cloudStoreName || state.storeName || "Toko Saya";
+
   const [hideBalance, setHideBalance] = useState(false);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
@@ -42,7 +48,8 @@ const HomeScreen = ({ navigation }) => {
     laba: 0,
     count: 0,
   });
-  const [offlineCount, setOfflineCount] = useState(0);
+  const syncStatus = useSyncStatus();
+  const offlineCount = syncStatus.unsynced;
   const [syncingOffline, setSyncingOffline] = useState(false);
 
   useFocusEffect(
@@ -51,15 +58,20 @@ const HomeScreen = ({ navigation }) => {
         try {
           const nowDate = new Date();
           const todayStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
-          const summary =
-            await TransactionRepository.getSummaryByDatePattern(todayStr);
-          setTodaySummary(summary);
+          try {
+            const summary =
+              await TransactionRepository.getSummaryByDatePattern(todayStr);
+            setTodaySummary(summary);
+          } catch (summaryErr) {
+            // Offline: ringkasan server tidak tersedia, bagian lain tetap dimuat
+            console.log("Ringkasan hari ini belum bisa dimuat:", summaryErr?.message);
+          }
           const hasPin = await isPinProtected();
           setPinProtected(hasPin);
           const currentLocked = await getLockedMenus();
           setLockedMenus(currentLocked);
-          const count = await getOfflineQueueCount();
-          setOfflineCount(count);
+          await getOfflineQueueCount(); // memindahkan antrean lama bila ada
+          refreshSyncCounts();
         } catch (e) {
           console.error("Error loading home stats:", e);
         }
@@ -75,19 +87,18 @@ const HomeScreen = ({ navigation }) => {
       const res = await TransactionRepository.syncOfflineQueue();
       if (res.synced > 0) {
         Alert.alert(
-          "✅ Sinkronisasi Berhasil",
+          "Sinkronisasi Berhasil",
           `${res.synced} dari ${res.total} transaksi offline berhasil diunggah ke cloud!`,
         );
       } else if (res.total === 0) {
-        Alert.alert("Info", "Semua transaksi sudah tersinkron ke cloud.");
+        Alert.alert("Informasi", "Semua transaksi sudah tersinkron ke cloud.");
       } else {
         Alert.alert(
-          "⚠️ Perhatian",
+          "Perhatian",
           `Gagal mengunggah transaksi (${res.failed} gagal). Pastikan koneksi internet stabil.`,
         );
       }
-      const count = await getOfflineQueueCount();
-      setOfflineCount(count);
+      await refreshSyncCounts();
       const nowDate = new Date();
       const todayStr = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
       const summary = await TransactionRepository.getSummaryByDatePattern(todayStr);
@@ -110,435 +121,368 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const now = new Date();
-  const dayName = now.toLocaleDateString("id-ID", { weekday: "long" });
-  const dateStr = now.toLocaleDateString("id-ID", {
+  const dateFormatted = now.toLocaleDateString("id-ID", {
+    weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
   });
 
-  const hour = now.getHours();
-  const greetingText =
-    hour < 11
-      ? "Selamat Pagi"
-      : hour < 15
-        ? "Selamat Siang"
-        : hour < 18
-          ? "Selamat Sore"
-          : "Selamat Malam";
-  const greetingEmoji =
-    hour < 11 ? "☀️" : hour < 15 ? "🌤️" : hour < 18 ? "🌇" : "🌙";
-
-  const totalPemasukan = todaySummary.omzet;
+  const totalOmzet = todaySummary.omzet;
   const totalLaba = todaySummary.laba;
-  const todayTransaksi = todaySummary.count;
+  const totalTransaksi = todaySummary.count;
+
+  // Menu Operasional Kasir
+  const operationalMenus = [
+    {
+      key: "Gudang",
+      title: "Gudang Stok",
+      desc: "Kelola produk & stok",
+      icon: "package-variant-closed",
+      iconColor: "#0284C7",
+      bgColor: "#F0F9FF",
+    },
+    {
+      key: "BukuKasbon",
+      title: "Buku Kasbon",
+      desc: "Piutang pelanggan & WA",
+      icon: "book-account-outline",
+      iconColor: "#D97706",
+      bgColor: "#FFFBEB",
+    },
+    {
+      key: "Laporan",
+      title: "Laporan Kasir",
+      desc: "Riwayat & rekap penjualan",
+      icon: "file-document-outline",
+      iconColor: "#059669",
+      bgColor: "#ECFDF5",
+    },
+    {
+      key: "Dashboard",
+      title: "Statistik Toko",
+      desc: "Grafik & analitik omzet",
+      icon: "chart-box-outline",
+      iconColor: "#4F46E5",
+      bgColor: "#EEF2FF",
+    },
+  ];
+
+  // Menu Alat & Konfigurasi
+  const settingsMenus = [
+    {
+      key: "SettingNota",
+      title: "Format Nota & Struk",
+      desc: "Atur logo toko, header/footer, dan printer Bluetooth",
+      icon: "receipt-text-outline",
+      iconColor: "#475569",
+      bgColor: "#F1F5F9",
+    },
+    {
+      key: "Pengaturan",
+      title: "Pengaturan Toko",
+      desc: "Profil usaha, keamanan PIN, dan konfigurasi sistem",
+      icon: "cog-outline",
+      iconColor: "#475569",
+      bgColor: "#F1F5F9",
+    },
+    {
+      key: "Panduan",
+      title: "Buku Panduan",
+      desc: "Petunjuk pemakaian kasir & fitur offline-online",
+      icon: "book-open-outline",
+      iconColor: "#475569",
+      bgColor: "#F1F5F9",
+      directNavigate: true,
+    },
+  ];
 
   return (
     <View style={styles.safe}>
       <StatusBar
-        translucent={true}
+        translucent
         backgroundColor="transparent"
         barStyle="dark-content"
       />
 
-      {/* ─── Clean White Header ─── */}
-      <View style={styles.headerWhite}>
-        {/* Top row: greeting + logo */}
-        <View style={styles.headerTopRow}>
-          <View style={styles.headerLeft}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={styles.headerTitle} numberOfLines={1}>
-                {cloudStoreName || state.storeName || "MarketPos"}
-              </Text>
-              {state.businessMode === "fnb" && (
-                <View style={styles.fnbBadgeHome}>
-                  <Text style={styles.fnbBadgeHomeText}>KAFE / F&B</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.dateRow}>
-              <MaterialCommunityIcons
-                name="calendar-month-outline"
-                size={14}
-                color={colors.textSecondary}
-              />
-              <Text style={styles.dateSubText}>
-                {dayName}, {dateStr}
-              </Text>
-            </View>
-          </View>
-
-          {/* Store Logo / Icon */}
-          <View style={styles.headerIcon}>
-            {state.storeLogo ? (
-              <Image
-                source={{ uri: state.storeLogo }}
-                style={styles.storeLogoImage}
-              />
-            ) : (
-              <MaterialCommunityIcons
-                name="store"
-                size={26}
-                color={colors.iconColor}
-              />
+      {/* ─── Top Navbar Bersih & Kokoh ─── */}
+      <View style={styles.topNavbar}>
+        <View style={styles.storeHeaderLeft}>
+          <View style={styles.storeNameRow}>
+            <Text style={styles.storeNameText} numberOfLines={1}>
+              {storeName}
+            </Text>
+            {state.businessMode === "fnb" && (
+              <View style={styles.fnbTag}>
+                <Text style={styles.fnbTagText}>KAFE / F&B</Text>
+              </View>
             )}
           </View>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.headerDivider} />
-
-        {/* Floating Metric Card */}
-        <View style={styles.statsCardWrapper}>
-          <View style={styles.statsCardTopBar}>
-            <Text style={styles.statsCardTopTitle}>RINGKASAN KEUANGAN</Text>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={styles.eyeToggleBtn}
-              onPress={() => setHideBalance(!hideBalance)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <MaterialCommunityIcons
-                name={hideBalance ? "eye-off-outline" : "eye-outline"}
-                size={16}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Omset Hari Ini</Text>
-              <Text
-                style={[styles.statValue, { color: colors.primary }]}
-                numberOfLines={1}
-              >
-                {hideBalance ? "Rp ••••••" : formatRupiah(totalPemasukan)}
-              </Text>
-            </View>
-
-            <View style={styles.statDividerV} />
-
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Laba Bersih</Text>
-              <Text
-                style={[styles.statValue, { color: colors.success }]}
-                numberOfLines={1}
-              >
-                {hideBalance ? "Rp ••••••" : formatRupiah(totalLaba)}
-              </Text>
-            </View>
-
-            <View style={styles.statDividerV} />
-
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Transaksi</Text>
-              <Text
-                style={[styles.statValue, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                {hideBalance ? "••x" : `${todayTransaksi}x`}
-              </Text>
-            </View>
+          <View style={styles.statusRow}>
+            <View style={styles.onlineDot} />
+            <Text style={styles.statusDateText}>{dateFormatted}</Text>
           </View>
         </View>
+
+        {/* Store Avatar / Setting Shortcut */}
+        <TouchableOpacity
+          style={styles.storeAvatarBtn}
+          activeOpacity={0.8}
+          onPress={() => navigateWithPin("Pengaturan")}
+        >
+          {state.storeLogo ? (
+            <Image
+              source={{ uri: state.storeLogo }}
+              style={styles.storeAvatarImage}
+            />
+          ) : (
+            <MaterialCommunityIcons
+              name="storefront-outline"
+              size={24}
+              color={colors.primary}
+            />
+          )}
+        </TouchableOpacity>
       </View>
 
       <ScrollView
-        style={styles.scrollWrapper}
-        contentContainerStyle={styles.body}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Banner Transaksi Offline Menunggu Sinkron */}
+        {/* ─── Banner Antrean Offline (Hanya tampil jika ada data pending) ─── */}
         {offlineCount > 0 && (
-          <View style={styles.offlineBannerHome}>
-            <View style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10 }}>
-              <MaterialCommunityIcons name="cloud-sync-outline" size={22} color="#B45309" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.offlineBannerHomeTitle}>
-                  {offlineCount} Transaksi Offline Belum Terkirim
+          <View style={styles.offlineAlertCard}>
+            <TouchableOpacity
+              style={styles.offlineAlertLeft}
+              onPress={() => navigation.navigate("TransaksiPending")}
+              activeOpacity={0.7}
+            >
+              <View style={styles.offlineIconBox}>
+                <MaterialCommunityIcons
+                  name="cloud-upload-outline"
+                  size={20}
+                  color="#B45309"
+                />
+              </View>
+              <View style={styles.offlineTextWrap}>
+                <Text style={styles.offlineTitle}>
+                  {offlineCount} Transaksi Belum Terkirim
                 </Text>
-                <Text style={styles.offlineBannerHomeSub}>
-                  Ketuk untuk sinkronisasi ke cloud
+                <Text style={styles.offlineSub}>
+                  {syncStatus.needsReview > 0
+                    ? `${syncStatus.needsReview} perlu ditinjau • ketuk untuk lihat`
+                    : syncStatus.offline
+                      ? "Tidak ada internet • ketuk untuk lihat"
+                      : "Dikirim otomatis • ketuk untuk lihat"}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
             <TouchableOpacity
-              style={styles.offlineSyncBtnHome}
+              style={styles.offlineBtn}
               onPress={handleSyncOffline}
               disabled={syncingOffline}
+              activeOpacity={0.8}
             >
-              <Text style={styles.offlineSyncBtnHomeText}>
-                {syncingOffline ? "..." : "Sinkronkan"}
+              <Text style={styles.offlineBtnText}>
+                {syncingOffline ? "Sinkron..." : "Kirim Sekarang"}
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Primary Hero Action: Buka Kasir */}
+        {/* ─── Hero Sales Overview Card (Modern POS Standard) ─── */}
+        <View style={styles.salesHeroCard}>
+          <View style={styles.salesHeroHeader}>
+            <View style={styles.salesHeroTag}>
+              <MaterialCommunityIcons
+                name="calendar-today"
+                size={13}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.salesHeroTagText}>PENJUALAN HARI INI</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.privacyToggle}
+              activeOpacity={0.7}
+              onPress={() => setHideBalance(!hideBalance)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <MaterialCommunityIcons
+                name={hideBalance ? "eye-off-outline" : "eye-outline"}
+                size={18}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Hero Omzet Number */}
+          <Text style={styles.heroOmzetAmount} numberOfLines={1}>
+            {hideBalance ? "Rp ••••••••" : formatRupiah(totalOmzet)}
+          </Text>
+
+          {/* Sub-Metrics: Laba Bersih & Transaksi */}
+          <View style={styles.metricsDivider} />
+          <View style={styles.metricsRow}>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>Laba Bersih</Text>
+              <Text style={[styles.metricValue, { color: "#059669" }]} numberOfLines={1}>
+                {hideBalance ? "Rp ••••••" : formatRupiah(totalLaba)}
+              </Text>
+            </View>
+
+            <View style={styles.metricVerticalLine} />
+
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>Total Transaksi</Text>
+              <Text style={styles.metricValue} numberOfLines={1}>
+                {hideBalance ? "•• Nota" : `${totalTransaksi} Nota Terbit`}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ─── Primary POS Action: Buka Kasir ─── */}
         <TouchableOpacity
-          activeOpacity={0.88}
-          style={styles.primaryHeroCard}
+          style={styles.mainKasirButton}
+          activeOpacity={0.9}
           onPress={() => navigateWithPin("Kasir")}
         >
-          <View style={styles.primaryCardLeft}>
-            <View style={styles.primaryIconWrapper}>
+          <View style={styles.mainKasirLeft}>
+            <View style={styles.mainKasirIconBadge}>
               <MaterialCommunityIcons
-                name="storefront-outline"
-                size={30}
+                name="point-of-sale"
+                size={28}
                 color="#FFFFFF"
               />
             </View>
-            <View>
-              <Text style={styles.primaryCardTitle}>Buka Kasir</Text>
-              <Text style={styles.primaryCardDesc}>Mulai transaksi baru</Text>
+            <View style={styles.mainKasirTextCol}>
+              <Text style={styles.mainKasirTitle}>Buka Kasir POS</Text>
+              <Text style={styles.mainKasirSubtitle}>
+                Mulai transaksi, scan barcode & cetak struk
+              </Text>
             </View>
           </View>
-          <View style={styles.heroArrowBtn}>
+          <View style={styles.mainKasirArrowWrap}>
             <MaterialCommunityIcons
               name={
-                pinProtected && lockedMenus?.["Kasir"] ? "lock" : "arrow-right"
+                pinProtected && lockedMenus?.["Kasir"]
+                  ? "lock-outline"
+                  : "arrow-right"
               }
-              size={20}
+              size={22}
               color="#FFFFFF"
             />
           </View>
         </TouchableOpacity>
 
-        <Text style={styles.sectionTitle}>Menu Utama</Text>
-
-        {/* Secondary Actions (Bento Grid) */}
-        <View style={styles.grid}>
-          {/* Dashboard */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.bentoCard}
-            onPress={() => navigateWithPin("Dashboard")}
-          >
-            <View style={styles.bentoHeader}>
-              <View style={styles.iconSquircle}>
-                <MaterialCommunityIcons
-                  name="chart-arc"
-                  size={24}
-                  color={colors.iconColor}
-                />
-              </View>
-              <MaterialCommunityIcons
-                name={
-                  pinProtected && lockedMenus?.["Dashboard"]
-                    ? "lock"
-                    : "arrow-top-right"
-                }
-                size={18}
-                color={
-                  pinProtected && lockedMenus?.["Dashboard"]
-                    ? "#EF4444"
-                    : "#94A3B8"
-                }
-              />
-            </View>
-            <Text style={styles.bentoTitle}>Dashboard</Text>
-            <Text style={styles.bentoDesc}>Statistik toko</Text>
-          </TouchableOpacity>
-
-          {/* Gudang */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.bentoCard}
-            onPress={() => navigateWithPin("Gudang")}
-          >
-            <View style={styles.bentoHeader}>
-              <View style={styles.iconSquircle}>
-                <MaterialCommunityIcons
-                  name="package-variant-closed"
-                  size={24}
-                  color={colors.iconColor}
-                />
-              </View>
-              <MaterialCommunityIcons
-                name={
-                  pinProtected && lockedMenus?.["Gudang"]
-                    ? "lock"
-                    : "arrow-top-right"
-                }
-                size={18}
-                color={
-                  pinProtected && lockedMenus?.["Gudang"] ? "#EF4444" : "#94A3B8"
-                }
-              />
-            </View>
-            <Text style={styles.bentoTitle}>Gudang</Text>
-            <Text style={styles.bentoDesc}>Kelola stok</Text>
-          </TouchableOpacity>
-
-          {/* Laporan */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.bentoCard}
-            onPress={() => navigateWithPin("Laporan")}
-          >
-            <View style={styles.bentoHeader}>
-              <View style={styles.iconSquircle}>
-                <MaterialCommunityIcons
-                  name="file-document-outline"
-                  size={24}
-                  color={colors.iconColor}
-                />
-              </View>
-              <MaterialCommunityIcons
-                name={
-                  pinProtected && lockedMenus?.["Laporan"]
-                    ? "lock"
-                    : "arrow-top-right"
-                }
-                size={18}
-                color={
-                  pinProtected && lockedMenus?.["Laporan"]
-                    ? "#EF4444"
-                    : "#94A3B8"
-                }
-              />
-            </View>
-            <Text style={styles.bentoTitle}>Laporan</Text>
-            <Text style={styles.bentoDesc}>Data penjualan</Text>
-          </TouchableOpacity>
-
-          {/* Pengaturan Nota */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.bentoCard}
-            onPress={() => navigateWithPin("SettingNota")}
-          >
-            <View style={styles.bentoHeader}>
-              <View style={styles.iconSquircle}>
-                <MaterialCommunityIcons
-                  name="receipt"
-                  size={24}
-                  color={colors.iconColor}
-                />
-              </View>
-              <MaterialCommunityIcons
-                name={
-                  pinProtected && lockedMenus?.["SettingNota"]
-                    ? "lock"
-                    : "arrow-top-right"
-                }
-                size={18}
-                color={
-                  pinProtected && lockedMenus?.["SettingNota"]
-                    ? "#EF4444"
-                    : "#94A3B8"
-                }
-              />
-            </View>
-            <Text style={styles.bentoTitle}>Format Nota</Text>
-            <Text style={styles.bentoDesc}>Desain struk</Text>
-          </TouchableOpacity>
+        {/* ─── Section 1: Operasional Toko ─── */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionHeading}>Operasional Toko</Text>
         </View>
 
-        {/* Buku Kasbon & Hutang Pelanggan */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.listCard}
-          onPress={() => navigateWithPin("BukuKasbon")}
-        >
-          <View style={[styles.listIconSquircle, { backgroundColor: "#FEF3C7" }]}>
-            <MaterialCommunityIcons
-              name="book-account-outline"
-              size={22}
-              color="#D97706"
-            />
-          </View>
-          <View style={styles.listTextContainer}>
-            <Text style={styles.listTitle}>Buku Kasbon & Hutang</Text>
-            <Text style={styles.listDesc}>Catatan piutang pelanggan & pengingat WA</Text>
-          </View>
-          <MaterialCommunityIcons
-            name={
-              pinProtected && lockedMenus?.["BukuKasbon"]
-                ? "lock"
-                : "chevron-right"
-            }
-            size={22}
-            color={
-              pinProtected && lockedMenus?.["BukuKasbon"]
-                ? "#EF4444"
-                : "#94A3B8"
-            }
-          />
-        </TouchableOpacity>
+        <View style={styles.gridContainer}>
+          {operationalMenus.map((menu) => {
+            const isLocked = pinProtected && lockedMenus?.[menu.key];
+            return (
+              <TouchableOpacity
+                key={menu.key}
+                style={styles.gridCard}
+                activeOpacity={0.82}
+                onPress={() => navigateWithPin(menu.key)}
+              >
+                <View style={styles.gridCardTop}>
+                  <View
+                    style={[
+                      styles.gridIconSquircle,
+                      { backgroundColor: menu.bgColor },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={menu.icon}
+                      size={24}
+                      color={menu.iconColor}
+                    />
+                  </View>
+                  {isLocked && (
+                    <View style={styles.lockBadge}>
+                      <MaterialCommunityIcons
+                        name="lock"
+                        size={12}
+                        color="#EF4444"
+                      />
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.gridCardTitle}>{menu.title}</Text>
+                <Text style={styles.gridCardDesc}>{menu.desc}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-        {/* Administrative Actions */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.listCard}
-          onPress={() => navigateWithPin("Pengaturan")}
-        >
-          <View style={styles.listIconSquircle}>
-            <MaterialCommunityIcons
-              name="cog-outline"
-              size={22}
-              color={colors.iconColor}
-            />
-          </View>
-          <View style={styles.listTextContainer}>
-            <Text style={styles.listTitle}>Pengaturan Toko</Text>
-            <Text style={styles.listDesc}>Konfigurasi profil dan sistem</Text>
-          </View>
-          <MaterialCommunityIcons
-            name={
-              pinProtected && lockedMenus?.["Pengaturan"]
-                ? "lock"
-                : "chevron-right"
-            }
-            size={22}
-            color={
-              pinProtected && lockedMenus?.["Pengaturan"]
-                ? "#EF4444"
-                : "#94A3B8"
-            }
-          />
-        </TouchableOpacity>
+        {/* ─── Section 2: Alat & Konfigurasi ─── */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionHeading}>Alat & Pengaturan</Text>
+        </View>
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.listCard}
-          onPress={() => navigation.navigate("Panduan")}
-        >
-          <View style={styles.listIconSquircle}>
-            <MaterialCommunityIcons
-              name="book-open-page-variant"
-              size={22}
-              color={colors.iconColor}
-            />
-          </View>
-          <View style={styles.listTextContainer}>
-            <Text style={styles.listTitle}>Buku Panduan</Text>
-            <Text style={styles.listDesc}>Cara pakai dan fungsi aplikasi</Text>
-          </View>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={22}
-            color="#94A3B8"
-          />
-        </TouchableOpacity>
+        <View style={styles.settingsGroupCard}>
+          {settingsMenus.map((item, index) => {
+            const isLocked = pinProtected && lockedMenus?.[item.key];
+            const isLast = index === settingsMenus.length - 1;
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.settingsRow, !isLast && styles.settingsRowBorder]}
+                activeOpacity={0.75}
+                onPress={() => {
+                  if (item.directNavigate) {
+                    navigation.navigate(item.key);
+                  } else {
+                    navigateWithPin(item.key);
+                  }
+                }}
+              >
+                <View
+                  style={[
+                    styles.settingsIconBox,
+                    { backgroundColor: item.bgColor },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={item.icon}
+                    size={20}
+                    color={item.iconColor}
+                  />
+                </View>
+                <View style={styles.settingsTextCol}>
+                  <Text style={styles.settingsRowTitle}>{item.title}</Text>
+                  <Text style={styles.settingsRowDesc}>{item.desc}</Text>
+                </View>
+                <MaterialCommunityIcons
+                  name={isLocked ? "lock" : "chevron-right"}
+                  size={20}
+                  color={isLocked ? "#EF4444" : "#94A3B8"}
+                />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-        {/* Footer info */}
-        <View style={styles.footerNote}>
+        {/* ─── Footer Brand Ringan ─── */}
+        <View style={styles.footerWrap}>
           <MaterialCommunityIcons
-            name="shield-check"
-            size={16}
-            color={colors.primary}
+            name="shield-check-outline"
+            size={15}
+            color="#64748B"
           />
           <Text style={styles.footerText}>
-            {" "}
-            MarketPos - 100% Pure Offline Kasir Android
+            MarketPos • Sistem Kasir Pintar & Andal
           </Text>
         </View>
       </ScrollView>
 
-      {/* ── Pin Modal Keamanan Owner ── */}
+      {/* ── Modal PIN Keamanan Pemilik Toko ── */}
       <PinModal
         visible={pinModalVisible}
         title="Masukkan PIN Pemilik"
@@ -565,361 +509,406 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  headerWhite: {
-    backgroundColor: colors.surface,
-    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 24 : 56,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  headerLeft: {
-    flex: 1,
-    paddingRight: 16,
-  },
-  greetingText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontWeight: "600",
-    marginBottom: 2,
-    letterSpacing: 0.2,
-  },
-  headerTitle: {
-    fontFamily: fonts.extraBold,
-    fontSize: 24,
-    fontWeight: "800",
-    color: colors.text,
-    letterSpacing: 0.2,
-    marginBottom: 8,
-  },
-  dateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  dateSubText: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: "500",
-  },
-  headerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: colors.primaryContainer,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: colors.primaryContainer,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  headerDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 16,
-    marginHorizontal: -4,
-  },
-  statsCardWrapper: {
     backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    paddingTop: 10,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginTop: 12,
-    shadowColor: "transparent",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
   },
-  statsCardTopBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-    paddingHorizontal: 4,
-  },
-  statsCardTopTitle: {
-    fontFamily: fonts.extraBold,
-    fontSize: 9,
-    fontWeight: "800",
-    color: colors.textSecondary,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-  eyeToggleBtn: {
-    padding: 3,
-    borderRadius: 6,
-    backgroundColor: "rgba(0,0,0,0.02)",
-  },
-  statsRow: {
+
+  // ── Top Navbar ──
+  topNavbar: {
+    backgroundColor: "#FFFFFF",
+    paddingTop:
+      Platform.OS === "android" ? (StatusBar.currentHeight || 0) + 16 : 52,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
   },
-  statItem: {
+  storeHeaderLeft: {
     flex: 1,
-    alignItems: "center",
+    paddingRight: 14,
   },
-  statLabel: {
-    fontFamily: fonts.medium,
-    fontSize: 9,
-    color: colors.textSecondary,
-    fontWeight: "500",
-    marginBottom: 2,
-    textAlign: "center",
-  },
-  statValue: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.text,
-    textAlign: "center",
-    lineHeight: 16,
-  },
-  statDividerV: {
-    width: 1,
-    height: 24,
-    backgroundColor: colors.border,
-    marginHorizontal: 6,
-  },
-  storeLogoImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 14,
-  },
-  scrollWrapper: {
-    flex: 1,
-  },
-  body: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 48,
-  },
-  primaryHeroCard: {
-    backgroundColor: colors.primary,
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 6,
-  },
-  primaryCardLeft: {
+  storeNameRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
   },
-  primaryIconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-  primaryCardTitle: {
+  storeNameText: {
     fontFamily: fonts.extraBold,
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    marginBottom: 4,
+    fontSize: 22,
+    color: "#0F172A",
     letterSpacing: 0.2,
   },
-  primaryCardDesc: {
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    color: "rgba(255,255,255,0.9)",
-    fontWeight: "400",
-  },
-  heroArrowBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-  sectionTitle: {
-    fontFamily: fonts.extraBold,
-    fontSize: 15,
-    fontWeight: "800",
-    color: colors.text,
-    letterSpacing: 0.3,
-    marginBottom: 14,
-    marginLeft: 2,
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 12,
-  },
-  bentoCard: {
-    width: (width - 40 - 16) / 2,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    padding: 18,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    transition: "all 0.2s ease",
-  },
-  bentoHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  iconSquircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primaryContainer,
-  },
-  bentoTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 4,
-  },
-  bentoDesc: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontWeight: "400",
-  },
-  listCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 14,
-    paddingHorizontal: 16,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.07)",
-    marginBottom: 10,
-  },
-  listIconSquircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
-    backgroundColor: "#F1F5F9",
-  },
-  listTextContainer: {
-    flex: 1,
-  },
-  listTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 2,
-  },
-  listDesc: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  footerNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  footerText: {
-    fontFamily: fonts.semiBold,
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.textSecondary,
-  },
-  fnbBadgeHome: {
+  fnbTag: {
     backgroundColor: "#FEF3C7",
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: "#FDE68A",
   },
-  fnbBadgeHomeText: {
+  fnbTagText: {
     fontFamily: fonts.bold,
     fontSize: 9,
     color: "#B45309",
     letterSpacing: 0.5,
   },
-  offlineBannerHome: {
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 3,
+    gap: 6,
+  },
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#10B981",
+  },
+  statusDateText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: "#64748B",
+  },
+  storeAvatarBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  storeAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  // ── Scroll Content ──
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
+    maxWidth: 680,
+    width: "100%",
+    alignSelf: "center",
+  },
+
+  // ── Alert Sinkronisasi Offline ──
+  offlineAlertCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#FFFBEB",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#FDE68A",
-    marginBottom: 12,
+    padding: 12,
+    marginBottom: 16,
   },
-  offlineBannerHomeTitle: {
+  offlineAlertLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  offlineIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  offlineTextWrap: {
+    flex: 1,
+  },
+  offlineTitle: {
     fontFamily: fonts.bold,
     fontSize: 12,
     color: "#92400E",
   },
-  offlineBannerHomeSub: {
-    fontFamily: fonts.regular,
+  offlineSub: {
+    fontFamily: fonts.medium,
     fontSize: 11,
     color: "#B45309",
     marginTop: 1,
   },
-  offlineSyncBtnHome: {
+  offlineBtn: {
     backgroundColor: "#D97706",
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 8,
+    marginLeft: 10,
   },
-  offlineSyncBtnHomeText: {
+  offlineBtnText: {
     fontFamily: fonts.bold,
     fontSize: 11,
     color: "#FFFFFF",
+  },
+
+  // ── Sales Hero Card (Square / Moka Style) ──
+  salesHeroCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+    marginBottom: 16,
+  },
+  salesHeroHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  salesHeroTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  salesHeroTagText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#64748B",
+    letterSpacing: 0.6,
+  },
+  privacyToggle: {
+    padding: 4,
+    borderRadius: 6,
+  },
+  heroOmzetAmount: {
+    fontFamily: fonts.extraBold,
+    fontSize: 28,
+    color: "#0F172A",
+    letterSpacing: -0.5,
+    marginBottom: 16,
+  },
+  metricsDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginBottom: 14,
+  },
+  metricsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  metricItem: {
+    flex: 1,
+  },
+  metricLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#64748B",
+    marginBottom: 2,
+  },
+  metricValue: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: "#0F172A",
+  },
+  metricVerticalLine: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#E2E8F0",
+    marginHorizontal: 12,
+  },
+
+  // ── Primary Action: Buka Kasir ──
+  mainKasirButton: {
+    backgroundColor: "#0F172A",
+    borderRadius: 18,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+    marginBottom: 24,
+  },
+  mainKasirLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    flex: 1,
+  },
+  mainKasirIconBadge: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mainKasirTextCol: {
+    flex: 1,
+  },
+  mainKasirTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 17,
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+    marginBottom: 2,
+  },
+  mainKasirSubtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: "rgba(255,255,255,0.72)",
+  },
+  mainKasirArrowWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+
+  // ── Section Headings ──
+  sectionHeaderRow: {
+    marginBottom: 12,
+    marginLeft: 2,
+  },
+  sectionHeading: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: "#334155",
+    letterSpacing: 0.2,
+  },
+
+  // ── Grid Operasional (2 Kolom) ──
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 24,
+  },
+  gridCard: {
+    width: (width - 32 - 12) / 2 > 320 ? 320 : (width - 32 - 12) / 2,
+    flexGrow: isTablet ? 0 : 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  gridCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  gridIconSquircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lockBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gridCardTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+  gridCardDesc: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#64748B",
+    lineHeight: 15,
+  },
+
+  // ── Section 2: Group Card Pengaturan ──
+  settingsGroupCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+    marginBottom: 24,
+    overflow: "hidden",
+  },
+  settingsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  settingsRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  settingsIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+  settingsTextCol: {
+    flex: 1,
+  },
+  settingsRowTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#0F172A",
+    marginBottom: 2,
+  },
+  settingsRowDesc: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#64748B",
+  },
+
+  // ── Footer ──
+  footerWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingTop: 4,
+    paddingBottom: 16,
+  },
+  footerText: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#94A3B8",
   },
 });
 

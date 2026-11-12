@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getActiveStoreId } from "../services/sessionStore";
+import { getOutboxCounts, importLegacyQueue } from "../database/localDb";
 
 const OFFLINE_QUEUE_KEY = "@TokoKelontong:OfflineQueue";
 
@@ -28,11 +30,22 @@ export async function getOfflineQueue() {
 }
 
 /**
- * Menghitung jumlah transaksi offline yang tertunda.
+ * Menghitung jumlah transaksi yang belum terkirim ke server
+ * (outbox SQLite + sisa antrean lama yang belum dipindahkan).
  */
 export async function getOfflineQueueCount() {
-  const queue = await getOfflineQueue();
-  return queue.length;
+  const legacy = await getOfflineQueue();
+  try {
+    const storeId = await getActiveStoreId();
+    if (storeId) {
+      if (legacy.length > 0) await importLegacyQueue(storeId, legacy);
+      const counts = await getOutboxCounts(storeId);
+      return counts.pending + counts.needsReview;
+    }
+  } catch (err) {
+    console.warn("Gagal menghitung outbox:", err?.message || err);
+  }
+  return legacy.length;
 }
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -15,40 +15,85 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import ProductRepository from "../database/productRepository";
+import ProductRepository, { isNetworkLikeError } from "../database/productRepository";
 import ProductCard from "../components/ProductCard";
+import { getCatalogSyncedAt } from "../database/localDb";
+import { getActiveStoreId } from "../services/sessionStore";
+import { syncNow } from "../services/syncService";
+import useSyncStatus from "../hooks/useSyncStatus";
 import { colors, fonts } from "../theme/colors";
 
 const GudangScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const syncStatus = useSyncStatus();
+  const [usingCache, setUsingCache] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const isOffline = !!syncStatus.offline || usingCache;
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(["Semua"]);
   const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [stockFilter, setStockFilter] = useState("all"); // 'all' | 'low' | 'out'
+  const [lastSyncText, setLastSyncText] = useState("");
 
   const screenWidth = Dimensions.get("window").width;
 
   const fabBottom =
     Platform.OS === "android"
-      ? Math.max(insets.bottom + 24, 32)
-      : Math.max(insets.bottom + 16, 24);
+      ? Math.max(insets.bottom, 16) + 12
+      : Math.max(insets.bottom, 14) + 10;
 
   const fetchProducts = useCallback(async () => {
     try {
-      const data = await ProductRepository.getAllProducts();
+      setLoadError(null);
+      const { products: data, fromCache } =
+        await ProductRepository.getAllProductsWithSource();
       setProducts(data);
+      setUsingCache(fromCache);
 
       // Ambil kategori unik dari produk
       const uniqueCats = Array.from(
         new Set(data.map((p) => p.category).filter(Boolean)),
       );
       setCategories(["Semua", ...uniqueCats]);
+
+      const storeId = await getActiveStoreId();
+      if (storeId) {
+        const syncedAt = await getCatalogSyncedAt(storeId);
+        if (syncedAt) {
+          const d = new Date(syncedAt);
+          setLastSyncText(
+            d.toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          );
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch products:", error);
+      if (isNetworkLikeError(error)) {
+        setUsingCache(true);
+        setLoadError(
+          "Tidak ada koneksi internet dan belum ada katalog tersimpan di HP.",
+        );
+      } else {
+        setLoadError(error?.message || "Gagal memuat data barang.");
+      }
     }
   }, []);
+
+  const prevOfflineRef = useRef(syncStatus.offline);
+  useEffect(() => {
+    const cameOnline = prevOfflineRef.current && !syncStatus.offline;
+    prevOfflineRef.current = syncStatus.offline;
+    if (cameOnline && (usingCache || loadError)) {
+      fetchProducts();
+    }
+  }, [syncStatus.offline, usingCache, loadError, fetchProducts]);
 
   useFocusEffect(
     useCallback(() => {
@@ -80,7 +125,36 @@ const GudangScreen = ({ navigation }) => {
     return matchCat && matchSearch && matchStock;
   });
 
+  const handleAddProduct = () => {
+    if (isOffline) {
+      Alert.alert(
+        "Mode Offline (Hanya-Baca)",
+        "Menambah barang membutuhkan koneksi internet. Sambungkan internet lalu coba lagi. Penjualan di Kasir tetap dapat dilakukan tanpa internet.",
+      );
+      return;
+    }
+    navigation.navigate("AddProductScreen");
+  };
+
+  const handleEditProduct = (item) => {
+    if (isOffline) {
+      Alert.alert(
+        "Mode Offline (Hanya-Baca)",
+        "Mengubah data barang membutuhkan koneksi internet. Sambungkan internet lalu coba lagi. Penjualan di Kasir tetap dapat dilakukan tanpa internet.",
+      );
+      return;
+    }
+    navigation.navigate("AddProductScreen", { product: item });
+  };
+
   const handleDelete = (id) => {
+    if (isOffline) {
+      Alert.alert(
+        "Mode Offline (Hanya-Baca)",
+        "Menghapus barang membutuhkan koneksi internet. Sambungkan internet lalu coba lagi.",
+      );
+      return;
+    }
     Alert.alert(
       "Hapus Barang",
       "Apakah Anda yakin ingin menghapus barang ini?",
@@ -92,9 +166,10 @@ const GudangScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await ProductRepository.deleteProduct(id);
+              syncNow({ forceCatalog: true }).catch(() => {});
               fetchProducts();
             } catch (error) {
-              Alert.alert("Error", "Gagal menghapus produk");
+              Alert.alert("Error", error.message || "Gagal menghapus produk");
             }
           },
         },
@@ -111,31 +186,84 @@ const GudangScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* ── Info Bar (klik untuk filter isi) ── */}
+      {/* ── Banner Mode Offline (Hanya-Baca) ── */}
+      {isOffline && (
+        <View style={styles.offlineBannerGudang}>
+          <MaterialCommunityIcons
+            name="cloud-off-outline"
+            size={20}
+            color="#B45309"
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.offlineBannerTitle}>
+              Mode Offline (Hanya-Baca)
+            </Text>
+            <Text style={styles.offlineBannerSub}>
+              {lastSyncText
+                ? `Katalog per ${lastSyncText} • Tambah & ubah barang butuh internet`
+                : "Tambah, ubah, atau hapus barang membutuhkan koneksi internet"}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={fetchProducts}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.offlineBannerAction}>Muat Ulang</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ── Summary Metrics Bar (Filter Stok Cepat) ── */}
       <View style={styles.infoBar}>
         <TouchableOpacity
           style={[
             styles.infoItem,
-            stockFilter === "all" && styles.infoItemActiveAll,
+            stockFilter === "all"
+              ? styles.infoItemActiveAll
+              : styles.infoItemInactive,
           ]}
           onPress={() => setStockFilter("all")}
           activeOpacity={0.7}
         >
-          <View style={[styles.infoIconWrap, styles.infoIconAll]}>
+          <View
+            style={[
+              styles.infoIconWrap,
+              stockFilter === "all"
+                ? styles.infoIconAllActive
+                : styles.infoIconAll,
+            ]}
+          >
             <MaterialCommunityIcons
               name="package-variant"
               size={16}
-              color={colors.primary}
+              color={stockFilter === "all" ? "#FFFFFF" : colors.primary}
             />
           </View>
-          <Text style={styles.infoValue}>{products.length}</Text>
-          <Text style={styles.infoLabel}>Total Item</Text>
+          <Text
+            style={[
+              styles.infoValue,
+              stockFilter === "all" && styles.infoValueActiveAll,
+            ]}
+          >
+            {products.length}
+          </Text>
+          <Text
+            style={[
+              styles.infoLabel,
+              stockFilter === "all" && styles.infoLabelActiveAll,
+            ]}
+          >
+            Total Item
+          </Text>
         </TouchableOpacity>
-        <View style={styles.infoSep} />
+
         <TouchableOpacity
           style={[
             styles.infoItem,
-            stockFilter === "low" && styles.infoItemActiveLow,
+            stockFilter === "low"
+              ? styles.infoItemActiveLow
+              : styles.infoItemInactive,
           ]}
           onPress={() => {
             if (stockFilter === "low") {
@@ -148,23 +276,45 @@ const GudangScreen = ({ navigation }) => {
           }}
           activeOpacity={0.7}
         >
-          <View style={[styles.infoIconWrap, styles.infoIconLow]}>
+          <View
+            style={[
+              styles.infoIconWrap,
+              stockFilter === "low"
+                ? styles.infoIconLowActive
+                : styles.infoIconLow,
+            ]}
+          >
             <MaterialCommunityIcons
               name="alert-circle-outline"
               size={16}
-              color={colors.warning}
+              color={stockFilter === "low" ? "#B45309" : "#D97706"}
             />
           </View>
-          <Text style={[styles.infoValue, { color: colors.warning }]}>
+          <Text
+            style={[
+              styles.infoValue,
+              { color: "#D97706" },
+              stockFilter === "low" && styles.infoValueActiveLow,
+            ]}
+          >
             {lowStockCount}
           </Text>
-          <Text style={styles.infoLabel}>Stok Menipis</Text>
+          <Text
+            style={[
+              styles.infoLabel,
+              stockFilter === "low" && styles.infoLabelActiveLow,
+            ]}
+          >
+            Stok Menipis
+          </Text>
         </TouchableOpacity>
-        <View style={styles.infoSep} />
+
         <TouchableOpacity
           style={[
             styles.infoItem,
-            stockFilter === "out" && styles.infoItemActiveOut,
+            stockFilter === "out"
+              ? styles.infoItemActiveOut
+              : styles.infoItemInactive,
           ]}
           onPress={() => {
             if (stockFilter === "out") {
@@ -177,17 +327,37 @@ const GudangScreen = ({ navigation }) => {
           }}
           activeOpacity={0.7}
         >
-          <View style={[styles.infoIconWrap, styles.infoIconOut]}>
+          <View
+            style={[
+              styles.infoIconWrap,
+              stockFilter === "out"
+                ? styles.infoIconOutActive
+                : styles.infoIconOut,
+            ]}
+          >
             <MaterialCommunityIcons
               name="close-circle-outline"
               size={16}
-              color={colors.error}
+              color={stockFilter === "out" ? "#DC2626" : colors.error}
             />
           </View>
-          <Text style={[styles.infoValue, { color: colors.error }]}>
+          <Text
+            style={[
+              styles.infoValue,
+              { color: colors.error },
+              stockFilter === "out" && styles.infoValueActiveOut,
+            ]}
+          >
             {outOfStockCount}
           </Text>
-          <Text style={styles.infoLabel}>Habis</Text>
+          <Text
+            style={[
+              styles.infoLabel,
+              stockFilter === "out" && styles.infoLabelActiveOut,
+            ]}
+          >
+            Habis
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -222,7 +392,7 @@ const GudangScreen = ({ navigation }) => {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingLeft: 12, paddingRight: 8 }}
+          contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
           style={{ flex: 1 }}
         >
           {categories.slice(0, 5).map((cat, idx) => {
@@ -296,39 +466,59 @@ const GudangScreen = ({ navigation }) => {
         renderItem={({ item }) => (
           <ProductCard
             product={item}
-            onEdit={() =>
-              navigation.navigate("AddProductScreen", { product: item })
-            }
+            readOnly={isOffline}
+            onEdit={() => handleEditProduct(item)}
             onDelete={() => handleDelete(item.id)}
           />
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <MaterialCommunityIcons
-              name="package-variant-remove"
+              name={loadError ? "wifi-off" : "package-variant-remove"}
               size={56}
-              color={colors.border}
+              color={loadError ? "#D97706" : colors.border}
             />
             <Text style={styles.emptyText}>
-              {searchQuery ||
-              selectedCategory !== "Semua" ||
-              stockFilter !== "all"
-                ? "Tidak ada barang ditemukan."
-                : "Belum ada barang di gudang."}
+              {loadError
+                ? loadError
+                : searchQuery ||
+                    selectedCategory !== "Semua" ||
+                    stockFilter !== "all"
+                  ? "Tidak ada barang ditemukan."
+                  : "Belum ada barang di gudang."}
             </Text>
+            {loadError && (
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={fetchProducts}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.retryBtnText}>Coba Lagi</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
-        contentContainerStyle={{ paddingBottom: fabBottom + 70 }}
+        contentContainerStyle={{ paddingBottom: fabBottom + 64, paddingTop: 4 }}
       />
 
       {/* ── FAB Tambah Barang ── */}
       <TouchableOpacity
-        style={[styles.fab, { bottom: fabBottom }]}
-        onPress={() => navigation.navigate("AddProductScreen")}
+        style={[
+          styles.fab,
+          { bottom: fabBottom },
+          isOffline && styles.fabReadOnly,
+        ]}
+        onPress={handleAddProduct}
         activeOpacity={0.85}
       >
-        <MaterialCommunityIcons name="plus" size={24} color="#fff" />
-        <Text style={styles.fabText}>TAMBAH BARANG</Text>
+        <MaterialCommunityIcons
+          name={isOffline ? "lock-outline" : "plus"}
+          size={22}
+          color="#fff"
+        />
+        <Text style={styles.fabText}>
+          {isOffline ? "TAMBAH BARANG (BUTUH INTERNET)" : "TAMBAH BARANG"}
+        </Text>
       </TouchableOpacity>
 
       {/* ── Modal Kategori Grid (Centered Card) ── */}
@@ -461,113 +651,161 @@ const styles = StyleSheet.create({
   // Info bar
   infoBar: {
     flexDirection: "row",
-    backgroundColor: colors.surface,
-    marginHorizontal: 12,
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 16,
     marginTop: 12,
-    marginBottom: 6,
+    marginBottom: 10,
     borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
+    padding: 6,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#E2E8F0",
     shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
     alignItems: "center",
-    justifyContent: "space-around",
+    gap: 6,
   },
   infoItem: {
     flex: 1,
     alignItems: "center",
-    gap: 3,
-    paddingVertical: 8,
-    marginHorizontal: 3,
+    paddingVertical: 10,
     borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  infoItemInactive: {
+    backgroundColor: "#F8FAFC",
+    borderColor: "transparent",
   },
   infoItemActiveAll: {
-    backgroundColor: "rgba(15, 23, 42, 0.06)",
+    backgroundColor: "#FFFFFF",
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   infoItemActiveLow: {
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    backgroundColor: "#FFFBEB",
+    borderColor: "#F59E0B",
+    shadowColor: "#F59E0B",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   infoItemActiveOut: {
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    backgroundColor: "#FEF2F2",
+    borderColor: "#EF4444",
+    shadowColor: "#EF4444",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   infoIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 2,
+    marginBottom: 4,
   },
   infoIconAll: {
-    backgroundColor: "rgba(15, 23, 42, 0.08)",
+    backgroundColor: "#F1F5F9",
+  },
+  infoIconAllActive: {
+    backgroundColor: colors.primary,
   },
   infoIconLow: {
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    backgroundColor: "#FEF3C7",
+  },
+  infoIconLowActive: {
+    backgroundColor: "#FDE68A",
   },
   infoIconOut: {
-    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    backgroundColor: "#FEE2E2",
+  },
+  infoIconOutActive: {
+    backgroundColor: "#FECACA",
   },
   infoValue: {
     fontFamily: fonts.extraBold,
-    fontSize: 17,
-    fontWeight: "800",
+    fontSize: 16,
     color: colors.text,
+  },
+  infoValueActiveAll: {
+    color: colors.primary,
+  },
+  infoValueActiveLow: {
+    color: "#B45309",
+  },
+  infoValueActiveOut: {
+    color: "#DC2626",
   },
   infoLabel: {
     fontFamily: fonts.medium,
     fontSize: 10,
     color: colors.textSecondary,
-    fontWeight: "500",
     letterSpacing: 0.2,
+    marginTop: 1,
   },
-  infoSep: {
-    width: 1,
-    height: 44,
-    backgroundColor: colors.border,
+  infoLabelActiveAll: {
+    color: colors.primary,
+    fontFamily: fonts.bold,
+  },
+  infoLabelActiveLow: {
+    color: "#B45309",
+    fontFamily: fonts.bold,
+  },
+  infoLabelActiveOut: {
+    color: "#DC2626",
+    fontFamily: fonts.bold,
   },
 
   // Search
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
-    marginHorizontal: 12,
-    marginTop: 10,
-    marginBottom: 8,
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 16,
+    marginBottom: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.border,
-    elevation: 2,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   searchInput: {
     flex: 1,
-    fontFamily: fonts.regular,
-    fontSize: 14,
+    fontFamily: fonts.medium,
+    fontSize: 13,
     color: colors.text,
+    padding: 0,
   },
 
   // Kategori - Smart Pill + Grid
   categoryBarRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   categoryPill: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: colors.surface,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#E2E8F0",
     marginRight: 8,
     elevation: 1,
     gap: 6,
@@ -578,44 +816,44 @@ const styles = StyleSheet.create({
   },
   categoryPillText: {
     fontFamily: fonts.semiBold,
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.textSecondary,
+    fontSize: 12,
+    color: "#64748B",
   },
   categoryPillTextActive: {
-    color: "#fff",
+    color: "#FFFFFF",
+    fontFamily: fonts.bold,
   },
   categoryCount: {
-    backgroundColor: colors.border,
+    backgroundColor: "#F1F5F9",
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 1,
-    minWidth: 20,
+    minWidth: 18,
     alignItems: "center",
   },
   categoryCountActive: {
-    backgroundColor: "rgba(255,255,255,0.3)",
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
   },
   categoryCountText: {
     fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: "700",
-    color: colors.textSecondary,
+    color: "#475569",
   },
   categoryCountTextActive: {
-    color: "#fff",
+    color: "#FFFFFF",
   },
   categoryGridBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "#F1F5F9",
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 16,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     position: "relative",
+    elevation: 1,
   },
   categoryGridBtnBadge: {
     position: "absolute",
@@ -633,7 +871,7 @@ const styles = StyleSheet.create({
   },
   categoryGridBtnBadgeText: {
     fontSize: 9,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: "#FFFFFF",
   },
 
@@ -758,6 +996,7 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: "center",
     paddingTop: 60,
+    paddingHorizontal: 24,
     gap: 12,
   },
   emptyText: {
@@ -766,15 +1005,26 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: "center",
   },
+  retryBtn: {
+    marginTop: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  retryBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#FFFFFF",
+  },
 
   // FAB
   fab: {
     position: "absolute",
-    bottom: 24,
     left: 16,
     right: 16,
     backgroundColor: colors.primary,
-    borderRadius: 14,
+    borderRadius: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -783,15 +1033,51 @@ const styles = StyleSheet.create({
     elevation: 6,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
   },
   fabText: {
-    fontFamily: fonts.extraBold,
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 14,
+    fontFamily: fonts.bold,
+    color: "#FFFFFF",
+    fontSize: 13,
     letterSpacing: 0.5,
+  },
+  fabReadOnly: {
+    backgroundColor: "#94A3B8",
+    shadowOpacity: 0.1,
+    elevation: 2,
+  },
+
+  // Offline banner
+  offlineBannerGudang: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  offlineBannerTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#92400E",
+  },
+  offlineBannerSub: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#B45309",
+    marginTop: 1,
+  },
+  offlineBannerAction: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#92400E",
   },
 });
 

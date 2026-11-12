@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -11,13 +11,16 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  TextInput,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TransactionRepository from "../database/transactionRepository";
+import useSyncStatus from "../hooks/useSyncStatus";
 import { formatRupiah } from "../utils/helpers";
 import { exportToCSV } from "../utils/exportCSV";
 import {
@@ -25,6 +28,11 @@ import {
   generateWAMessage,
   generateDailyClosingWAMessage,
 } from "../utils/receiptGenerator";
+import {
+  isPrinterConfigured,
+  isBluetoothPrintingSupported,
+  printReceiptViaBluetooth,
+} from "../utils/bluetoothPrinter";
 import { colors, fonts } from "../theme/colors";
 
 const TABS = ["Harian", "Bulanan", "Riwayat"];
@@ -47,14 +55,16 @@ const parseYmd = (ymdStr) => {
   return null;
 };
 
-const LaporanScreen = ({ route }) => {
-  // Terima parameter filter dari Dashboard (initialFilter & dateFilter)
+const LaporanScreen = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
   const initialFilter = route?.params?.initialFilter;
   const dateFilter = route?.params?.dateFilter;
+
   const [activeTab, setActiveTab] = useState(
     FILTER_TO_TAB[initialFilter] || "Harian",
   );
   const [transactions, setTransactions] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [summary, setSummary] = useState({
     omzet: 0,
     omzet_tunai: 0,
@@ -70,9 +80,22 @@ const LaporanScreen = ({ route }) => {
   const [txDetails, setTxDetails] = useState([]);
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
   const [storeProfile, setStoreProfile] = useState({});
+  const [btPrinterReady, setBtPrinterReady] = useState(false);
+  const [offlineError, setOfflineError] = useState(null);
+  const syncStatus = useSyncStatus();
+  const prevUnsyncedRef = useRef(syncStatus.unsynced);
+  const prevOfflineRef = useRef(syncStatus.offline);
+
+  // Deteksi printer Bluetooth
+  useEffect(() => {
+    if (isBluetoothPrintingSupported()) {
+      isPrinterConfigured()
+        .then(setBtPrinterReady)
+        .catch(() => setBtPrinterReady(false));
+    }
+  }, []);
 
   // Terapkan ulang parameter filter bila Dashboard mengirim params baru
-  // saat layar Laporan sudah terbuka di stack navigasi
   useEffect(() => {
     const paramFilter = route?.params?.initialFilter;
     const paramDate = route?.params?.dateFilter;
@@ -100,8 +123,27 @@ const LaporanScreen = ({ route }) => {
     return `${y}-${m}`;
   };
 
+  const isCurrentPeriod = () => {
+    const now = new Date();
+    if (activeTab === "Harian") {
+      return (
+        selectedDate.getDate() === now.getDate() &&
+        selectedDate.getMonth() === now.getMonth() &&
+        selectedDate.getFullYear() === now.getFullYear()
+      );
+    }
+    if (activeTab === "Bulanan") {
+      return (
+        selectedDate.getMonth() === now.getMonth() &&
+        selectedDate.getFullYear() === now.getFullYear()
+      );
+    }
+    return true;
+  };
+
   const loadData = useCallback(async () => {
     try {
+      setOfflineError(null);
       let data = [];
       let datePattern = "";
 
@@ -112,26 +154,34 @@ const LaporanScreen = ({ route }) => {
         datePattern = getMonthStr();
         data = await TransactionRepository.getMonthlyTransactions(datePattern);
       } else {
-        // Riwayat: ambil semua
         datePattern = "";
         data = await TransactionRepository.getMonthlyTransactions("");
       }
 
-      // Hitung Omzet & Laba Bersih presisi via agregasi di repository
       const summaryRes =
         await TransactionRepository.getSummaryByDatePattern(datePattern);
 
-      setTransactions(data);
+      setTransactions(data || []);
       setSummary({
-        omzet: summaryRes.omzet,
-        omzet_tunai: summaryRes.omzet_tunai || 0,
-        omzet_non_tunai: summaryRes.omzet_non_tunai || 0,
-        laba: summaryRes.laba,
-        count: data.length,
-        top_products: summaryRes.top_products || [],
+        omzet: summaryRes?.omzet || 0,
+        omzet_tunai: summaryRes?.omzet_tunai || 0,
+        omzet_non_tunai: summaryRes?.omzet_non_tunai || 0,
+        laba: summaryRes?.laba || 0,
+        count: data?.length || 0,
+        top_products: summaryRes?.top_products || [],
       });
     } catch (e) {
       console.error("Load laporan error:", e);
+      setTransactions([]);
+      setSummary({
+        omzet: 0,
+        omzet_tunai: 0,
+        omzet_non_tunai: 0,
+        laba: 0,
+        count: 0,
+        top_products: [],
+      });
+      setOfflineError(e?.message || "Gagal memuat laporan.");
     }
   }, [activeTab, selectedDate]);
 
@@ -141,17 +191,30 @@ const LaporanScreen = ({ route }) => {
     }, [loadData]),
   );
 
+  // Muat ulang otomatis bila transaksi lokal baru selesai tersinkron atau HP kembali online
+  useEffect(() => {
+    const syncedSome = syncStatus.unsynced < prevUnsyncedRef.current;
+    const cameOnline = prevOfflineRef.current && !syncStatus.offline;
+    prevUnsyncedRef.current = syncStatus.unsynced;
+    prevOfflineRef.current = syncStatus.offline;
+    if (syncedSome || cameOnline) {
+      loadData();
+    }
+  }, [syncStatus.unsynced, syncStatus.offline, loadData]);
+
   const changeDate = (direction) => {
     const d = new Date(selectedDate);
     if (activeTab === "Harian") {
       d.setDate(d.getDate() + direction);
     } else {
-      // Setel ke tanggal 1 dulu agar tanggal 29-31 tidak "lompat"
-      // ke bulan berikutnya saat bulan tujuan lebih pendek.
       d.setDate(1);
       d.setMonth(d.getMonth() + direction);
     }
     setSelectedDate(d);
+  };
+
+  const resetToToday = () => {
+    setSelectedDate(new Date());
   };
 
   const formatDisplayDate = () => {
@@ -172,18 +235,17 @@ const LaporanScreen = ({ route }) => {
   const handleExportCSV = async () => {
     try {
       const data = await TransactionRepository.getFullReportForExport();
-      if (data.length === 0) {
+      if (!data || data.length === 0) {
         Alert.alert("Info", "Tidak ada data untuk diekspor.");
         return;
       }
 
-      // Ekspor selalu mengambil seluruh riwayat transaksi
       const filename = `Laporan_Semua_Transaksi_${getDateStr().replace(/-/g, "")}.csv`;
       const result = await exportToCSV(data, filename);
 
       if (result.success) {
         if (Platform.OS !== "web") {
-          Alert.alert("Berhasil", "Ekspor CSV berhasil!");
+          Alert.alert("Berhasil", "Ekspor CSV berhasil disimpan!");
         }
       } else {
         Alert.alert("Gagal", result.message);
@@ -209,7 +271,6 @@ const LaporanScreen = ({ route }) => {
       const saved = await AsyncStorage.getItem("@TokoKelontong:StoreProfile");
       if (saved) {
         const data = JSON.parse(saved);
-        // Migrasi format lama dari menu Pengaturan ({name, ...})
         if (data.name && !data.storeName) {
           data.storeName = data.name;
         }
@@ -233,11 +294,28 @@ const LaporanScreen = ({ route }) => {
     }
     setIsLoadingReceipt(true);
     try {
-      const storeProfile = await getStoreProfile();
-      const html = generateReceiptHTML(selectedTx, txDetails, storeProfile);
+      const profile = await getStoreProfile();
+      const html = generateReceiptHTML(selectedTx, txDetails, profile);
       await Print.printAsync({ html });
     } catch (e) {
       Alert.alert("Error", "Gagal mencetak nota: " + e.message);
+    } finally {
+      setIsLoadingReceipt(false);
+    }
+  };
+
+  const handlePrintBluetooth = async () => {
+    if (!selectedTx) return;
+    setIsLoadingReceipt(true);
+    try {
+      const profile = await getStoreProfile();
+      await printReceiptViaBluetooth(selectedTx, txDetails, profile);
+      Alert.alert("Berhasil", "Nota berhasil dikirim ke printer Bluetooth.");
+    } catch (e) {
+      Alert.alert(
+        "Gagal Cetak",
+        e.message || "Terjadi kesalahan saat mencetak ke printer Bluetooth.",
+      );
     } finally {
       setIsLoadingReceipt(false);
     }
@@ -251,16 +329,14 @@ const LaporanScreen = ({ route }) => {
     }
     setIsLoadingReceipt(true);
     try {
-      const storeProfile = await getStoreProfile();
-      // Kirim pesan teks ke WhatsApp dulu
-      const waText = generateWAMessage(selectedTx, txDetails, storeProfile);
+      const profile = await getStoreProfile();
+      const waText = generateWAMessage(selectedTx, txDetails, profile);
       const waUrl = `whatsapp://send?text=${encodeURIComponent(waText)}`;
       const canOpenWA = await Linking.canOpenURL(waUrl);
       if (canOpenWA) {
         await Linking.openURL(waUrl);
       } else {
-        // Fallback: share PDF jika WA tidak tersedia
-        const html = generateReceiptHTML(selectedTx, txDetails, storeProfile);
+        const html = generateReceiptHTML(selectedTx, txDetails, profile);
         const { uri } = await Print.printToFileAsync({ html });
         const canShare = await Sharing.isAvailableAsync();
         if (canShare) {
@@ -288,14 +364,64 @@ const LaporanScreen = ({ route }) => {
       if (canOpen) {
         await Linking.openURL(url);
       } else {
-        Alert.alert(
-          "WhatsApp Tidak Ditemukan",
-          "Pastikan aplikasi WhatsApp sudah terpasang di HP ini.",
-        );
+        const webUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+        Linking.openURL(webUrl).catch(() => {
+          Alert.alert(
+            "WhatsApp Tidak Ditemukan",
+            "Pastikan aplikasi WhatsApp sudah terpasang di HP ini.",
+          );
+        });
       }
     } catch (e) {
       Alert.alert("Gagal Kirim", "Tidak dapat membuka WhatsApp: " + e.message);
     }
+  };
+
+  // Filter pencarian live berdasarkan nomor nota atau metode bayar
+  const filteredTransactions = transactions.filter((tx) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    const matchInvoice = (tx.invoice_number || "").toLowerCase().includes(q);
+    const matchMethod = (tx.payment_method || "").toLowerCase().includes(q);
+    return matchInvoice || matchMethod;
+  });
+
+  const getMethodBadgeInfo = (method) => {
+    const m = (method || "cash").toLowerCase();
+    if (m === "qris") {
+      return {
+        label: "QRIS",
+        icon: "qrcode",
+        badgeBg: "#E0F2FE",
+        textClr: "#0369A1",
+        iconClr: "#0284C7",
+      };
+    }
+    if (m === "transfer") {
+      return {
+        label: "TRANSFER",
+        icon: "bank-transfer",
+        badgeBg: "#F3E8FF",
+        textClr: "#7E22CE",
+        iconClr: "#9333EA",
+      };
+    }
+    if (m === "kasbon" || m === "debt") {
+      return {
+        label: "KASBON",
+        icon: "book-account-outline",
+        badgeBg: "#FEE2E2",
+        textClr: "#B91C1C",
+        iconClr: "#DC2626",
+      };
+    }
+    return {
+      label: "TUNAI",
+      icon: "cash",
+      badgeBg: "#F1F5F9",
+      textClr: "#334155",
+      iconClr: "#059669",
+    };
   };
 
   const renderTransaction = ({ item }) => {
@@ -308,237 +434,439 @@ const LaporanScreen = ({ route }) => {
       day: "numeric",
       month: "short",
     });
-    const isNonCash = item.payment_method && item.payment_method !== "cash";
+    const badge = getMethodBadgeInfo(item.payment_method);
+    const isNeedsReview = item.sync_status === "needs_review";
+    const isPendingSync =
+      item.sync_status === "pending" || (!item.sync_status && item.is_offline);
+
     return (
       <TouchableOpacity
         style={styles.txCard}
         onPress={() => openTransactionDetails(item)}
+        activeOpacity={0.78}
       >
+        {/* Ikon Metode Bayar */}
+        <View style={[styles.txMethodIconCircle, { backgroundColor: badge.badgeBg }]}>
+          <MaterialCommunityIcons
+            name={badge.icon}
+            size={18}
+            color={badge.iconClr}
+          />
+        </View>
+
+        {/* Info Transaksi Kiri */}
         <View style={styles.txLeft}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 6,
+            }}
+          >
             <Text style={styles.txInvoice}>{item.invoice_number}</Text>
             <View
               style={[
                 styles.methodBadge,
-                isNonCash ? styles.methodBadgeNonCash : styles.methodBadgeCash,
+                { backgroundColor: badge.badgeBg },
               ]}
             >
               <Text
                 style={[
                   styles.methodBadgeText,
-                  isNonCash
-                    ? styles.methodBadgeTextNonCash
-                    : styles.methodBadgeTextCash,
+                  { color: badge.textClr },
                 ]}
               >
-                {(item.payment_method || "tunai").toUpperCase()}
+                {badge.label}
               </Text>
             </View>
+            {isNeedsReview ? (
+              <View style={[styles.syncBadge, styles.syncBadgeReview]}>
+                <Text style={[styles.syncBadgeText, styles.syncBadgeTextReview]}>
+                  Perlu ditinjau
+                </Text>
+              </View>
+            ) : isPendingSync ? (
+              <View style={[styles.syncBadge, styles.syncBadgePending]}>
+                <Text style={[styles.syncBadgeText, styles.syncBadgeTextPending]}>
+                  Belum terkirim
+                </Text>
+              </View>
+            ) : null}
           </View>
+
           <Text style={styles.txDate}>
             {dateStr} · {timeStr}
           </Text>
+
           {item.discount_amount > 0 && (
-            <Text style={styles.txDiscount}>
-              Diskon: {formatRupiah(item.discount_amount)}
-            </Text>
+            <View style={styles.discountPill}>
+              <MaterialCommunityIcons
+                name="tag-outline"
+                size={11}
+                color="#DC2626"
+              />
+              <Text style={styles.discountPillText}>
+                Diskon: {formatRupiah(item.discount_amount)}
+              </Text>
+            </View>
           )}
         </View>
+
+        {/* Info Transaksi Kanan */}
         <View style={styles.txRight}>
           <Text style={styles.txTotal}>{formatRupiah(item.grand_total)}</Text>
-          <Text style={styles.txCash}>
+          <Text style={styles.txMetaText}>
             Bayar: {formatRupiah(item.cash_received)}
           </Text>
-          <Text style={styles.txReturn}>
+          <Text style={styles.txReturnText}>
             Kembali: {formatRupiah(item.cash_return)}
           </Text>
         </View>
+
+        <MaterialCommunityIcons
+          name="chevron-right"
+          size={18}
+          color="#CBD5E1"
+          style={{ marginLeft: 4 }}
+        />
       </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.container}>
-      {/* Tabs */}
-      <View style={styles.tabRow}>
-        {TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab && styles.tabTextActive,
-              ]}
+      {/* ── Segmented Control Tab Bar (Modern iOS/Android Pill) ── */}
+      <View style={styles.segmentedContainer}>
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.segmentBtn, isActive && styles.segmentBtnActive]}
+              onPress={() => setActiveTab(tab)}
+              activeOpacity={0.8}
             >
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.segmentText,
+                  isActive && styles.segmentTextActive,
+                ]}
+              >
+                {tab}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* Date Navigator (hanya untuk Harian & Bulanan) */}
+      {/* ── Banner Transaksi Belum Terkirim ── */}
+      {syncStatus.unsynced > 0 && (
+        <TouchableOpacity
+          style={styles.unsyncedBanner}
+          onPress={() => navigation?.navigate("TransaksiPending")}
+          activeOpacity={0.75}
+        >
+          <MaterialCommunityIcons
+            name={
+              syncStatus.needsReview > 0
+                ? "alert-circle-outline"
+                : "cloud-upload-outline"
+            }
+            size={18}
+            color={syncStatus.needsReview > 0 ? "#B91C1C" : "#B45309"}
+          />
+          <Text style={styles.unsyncedBannerText} numberOfLines={2}>
+            {syncStatus.unsynced} transaksi belum terkirim ke server
+            {syncStatus.needsReview > 0
+              ? ` (${syncStatus.needsReview} perlu ditinjau)`
+              : ""}
+          </Text>
+          <Text style={styles.unsyncedBannerAction}>Lihat</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* ── Date Navigator Card (Harian & Bulanan) ── */}
       {activeTab !== "Riwayat" && (
-        <View style={styles.dateNav}>
+        <View style={styles.dateNavCard}>
           <TouchableOpacity
             onPress={() => changeDate(-1)}
-            style={styles.navBtn}
+            style={styles.dateNavArrowBtn}
+            activeOpacity={0.7}
           >
             <MaterialCommunityIcons
               name="chevron-left"
-              size={24}
-              color={colors.primary}
+              size={22}
+              color="#0F172A"
             />
           </TouchableOpacity>
-          <Text style={styles.dateText}>{formatDisplayDate()}</Text>
+
+          <View style={styles.dateNavCenter}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <MaterialCommunityIcons
+                name={activeTab === "Harian" ? "calendar" : "calendar-month"}
+                size={16}
+                color={colors.primary}
+              />
+              <Text style={styles.dateNavTitle}>{formatDisplayDate()}</Text>
+            </View>
+            {!isCurrentPeriod() && (
+              <TouchableOpacity
+                onPress={resetToToday}
+                style={styles.badgeJumpToday}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.badgeJumpTodayText}>
+                  {activeTab === "Harian" ? "Kembali ke Hari Ini" : "Bulan Ini"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           <TouchableOpacity
             onPress={() => changeDate(1)}
-            style={styles.navBtn}
-            disabled={
-              activeTab === "Harian"
-                ? getDateStr() >=
-                  `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
-                : getMonthStr() >=
-                  `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
-            }
+            style={[
+              styles.dateNavArrowBtn,
+              isCurrentPeriod() && { opacity: 0.3 },
+            ]}
+            disabled={isCurrentPeriod()}
+            activeOpacity={0.7}
           >
             <MaterialCommunityIcons
               name="chevron-right"
-              size={24}
-              color={colors.primary}
+              size={22}
+              color="#0F172A"
             />
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Summary Cards */}
-      <View style={styles.summaryRow}>
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryIconWrap}>
-            <MaterialCommunityIcons
-              name="cash"
-              size={22}
-              color={colors.iconColor}
-            />
+      {/* ── Ringkasan Finansial Utama (Unified Financial Hero Card) ── */}
+      <View style={styles.heroSummaryCard}>
+        {/* Atas: Total Omzet & Badge Transaksi */}
+        <View style={styles.summaryTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.summaryOmzetLabel}>TOTAL OMZET PENJUALAN</Text>
+            <Text style={styles.summaryOmzetValue}>
+              {formatRupiah(summary.omzet)}
+            </Text>
           </View>
-          <Text style={styles.summaryLabel}>Omzet</Text>
-          <Text style={styles.summaryValue}>{formatRupiah(summary.omzet)}</Text>
+          <View style={styles.summaryTxBadge}>
+            <MaterialCommunityIcons
+              name="receipt-text-check-outline"
+              size={18}
+              color="#F8FAFC"
+            />
+            <Text style={styles.summaryTxBadgeText}>
+              {summary.count} Transaksi
+            </Text>
+          </View>
         </View>
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryIconWrap}>
+
+        {/* Tengah: Estimasi Laba Bersih */}
+        <View style={styles.profitBannerRow}>
+          <View style={styles.profitPill}>
             <MaterialCommunityIcons
               name="trending-up"
-              size={22}
-              color={colors.iconColor}
+              size={15}
+              color="#10B981"
             />
+            <Text style={styles.profitLabel}>Estimasi Laba Bersih:</Text>
+            <Text style={styles.profitValue}>
+              {formatRupiah(summary.laba)}
+            </Text>
           </View>
-          <Text style={styles.summaryLabel}>Laba Bersih</Text>
-          <Text style={styles.summaryValue}>{formatRupiah(summary.laba)}</Text>
         </View>
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryIconWrap}>
-            <MaterialCommunityIcons
-              name="receipt"
-              size={22}
-              color={colors.iconColor}
-            />
+
+        <View style={styles.summaryDivider} />
+
+        {/* Bawah: Rincian Tunai di Laci vs Non-Tunai */}
+        <View style={styles.splitRow}>
+          <View style={styles.splitCol}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <MaterialCommunityIcons
+                name="cash-multiple"
+                size={15}
+                color="#34D399"
+              />
+              <Text style={styles.splitColLabel}>Tunai (Laci Kasir)</Text>
+            </View>
+            <Text style={styles.splitColValue}>
+              {formatRupiah(summary.omzet_tunai || 0)}
+            </Text>
           </View>
-          <Text style={styles.summaryLabel}>Transaksi</Text>
-          <Text style={styles.summaryValue}>{summary.count}x</Text>
+
+          <View style={styles.splitVerticalLine} />
+
+          <View style={styles.splitCol}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <MaterialCommunityIcons
+                name="cellphone-check"
+                size={15}
+                color="#38BDF8"
+              />
+              <Text style={styles.splitColLabel}>Non-Tunai (QRIS/TF)</Text>
+            </View>
+            <Text style={styles.splitColValue}>
+              {formatRupiah(summary.omzet_non_tunai || 0)}
+            </Text>
+          </View>
         </View>
       </View>
 
-      {/* Rincian Tunai di Laci vs Non-Tunai */}
-      <View style={styles.paymentSplitRow}>
-        <View style={styles.paymentSplitCol}>
-          <Text style={styles.paymentSplitLabel}>💵 Tunai di Laci:</Text>
-          <Text style={styles.paymentSplitVal}>
-            {formatRupiah(summary.omzet_tunai || 0)}
-          </Text>
+      {/* ── Subheader Riwayat & Tombol Aksi (Kirim WA Rekap & CSV) ── */}
+      <View style={styles.listHeaderRow}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text style={styles.listHeaderTitle}>Riwayat Transaksi</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>
+              {filteredTransactions.length}
+            </Text>
+          </View>
         </View>
-        <View style={styles.paymentSplitDivider} />
-        <View style={styles.paymentSplitCol}>
-          <Text style={styles.paymentSplitLabel}>📱 Non-Tunai (QRIS/TF):</Text>
-          <Text style={styles.paymentSplitVal}>
-            {formatRupiah(summary.omzet_non_tunai || 0)}
-          </Text>
-        </View>
-      </View>
 
-      {/* Daftar Transaksi */}
-      <View style={styles.listHeader}>
-        <Text style={styles.listTitle}>Riwayat Transaksi</Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <TouchableOpacity
-            style={[
-              styles.exportBtn,
-              { backgroundColor: "#DCFCE7", borderColor: "#BBF7D0" },
-            ]}
+            style={styles.btnActionWA}
             onPress={handleShareWAClosing}
+            activeOpacity={0.8}
           >
             <MaterialCommunityIcons
               name="whatsapp"
-              size={16}
-              color="#16A34A"
+              size={15}
+              color="#15803D"
             />
-            <Text style={[styles.exportText, { color: "#16A34A" }]}>
-              Kirim WA
-            </Text>
+            <Text style={styles.btnActionWAText}>Rekap WA</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.exportBtn} onPress={handleExportCSV}>
+
+          <TouchableOpacity
+            style={styles.btnActionCSV}
+            onPress={handleExportCSV}
+            activeOpacity={0.8}
+          >
             <MaterialCommunityIcons
-              name="file-export"
-              size={16}
-              color={colors.secondary}
+              name="file-delimited-outline"
+              size={15}
+              color="#0284C7"
             />
-            <Text style={styles.exportText}>CSV</Text>
+            <Text style={styles.btnActionCSVText}>CSV</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {transactions.length === 0 ? (
-        <View style={styles.empty}>
-          <MaterialCommunityIcons
-            name="receipt-text-outline"
-            size={60}
-            color={colors.border}
+      {/* ── Filter Pencarian Cepat jika transaksi banyak / Tab Riwayat ── */}
+      {transactions.length > 5 && (
+        <View style={styles.searchBarWrap}>
+          <MaterialCommunityIcons name="magnify" size={18} color="#94A3B8" />
+          <TextInput
+            style={styles.searchBarInput}
+            placeholder="Cari nomor nota atau tunai/qris..."
+            placeholderTextColor="#94A3B8"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
           />
-          <Text style={styles.emptyText}>Belum ada transaksi</Text>
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={16}
+                color="#94A3B8"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* ── List Transaksi ── */}
+      {transactions.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <View
+            style={[
+              styles.emptyIconCircle,
+              offlineError && { backgroundColor: "#FEF3C7" },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={offlineError ? "wifi-off" : "receipt-text-outline"}
+              size={42}
+              color={offlineError ? "#D97706" : colors.primary}
+            />
+          </View>
+          <Text style={styles.emptyTitle}>
+            {offlineError ? "Koneksi Diperlukan" : "Belum Ada Transaksi"}
+          </Text>
+          <Text style={styles.emptySubtitle}>
+            {offlineError
+              ? offlineError
+              : activeTab === "Harian"
+                ? "Tidak ada transaksi penjualan pada tanggal yang dipilih."
+                : activeTab === "Bulanan"
+                  ? "Belum ada transaksi yang tercatat pada bulan ini."
+                  : "Belum ada riwayat transaksi di toko."}
+          </Text>
+          {offlineError && (
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={loadData}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retryBtnText}>Coba Lagi</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <FlatList
-          data={transactions}
-          keyExtractor={(item) => item.id.toString()}
+          data={filteredTransactions}
+          keyExtractor={(item) => String(item.id)}
           renderItem={renderTransaction}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: Math.max(insets.bottom, 16) + 24 },
+          ]}
+          showsVerticalScrollIndicator={false}
         />
       )}
 
-      {/* Modal Detail Transaksi */}
+      {/* ── Modal Pratinjau Struk Termal ── */}
       <Modal
         visible={!!selectedTx}
         animationType="slide"
         transparent
-        statusBarTranslucent={true}
+        statusBarTranslucent
         onRequestClose={() => setSelectedTx(null)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Detail Transaksi</Text>
-              <TouchableOpacity onPress={() => setSelectedTx(null)}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.modalTitle}>Detail Struk Transaksi</Text>
+                <Text style={styles.modalSubtitle}>
+                  {selectedTx?.invoice_number}
+                  {selectedTx?.sync_status === "needs_review"
+                    ? " • Perlu ditinjau"
+                    : selectedTx?.sync_status === "pending" ||
+                        (!selectedTx?.sync_status && selectedTx?.is_offline)
+                      ? " • Belum terkirim"
+                      : ""}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedTx(null)}
+                style={styles.modalCloseBtn}
+              >
                 <MaterialCommunityIcons
                   name="close"
-                  size={24}
-                  color={colors.text}
+                  size={20}
+                  color="#64748B"
                 />
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.modalBody}>
+
+            <ScrollView
+              style={styles.modalBody}
+              showsVerticalScrollIndicator={false}
+            >
               {selectedTx && (
-                /* ── Pratinjau Nota (format struk termal, sama dgn Kasir) ── */
                 <View style={styles.receiptPaper}>
                   <Text style={styles.receiptStoreName}>
                     {storeProfile.storeName || "Toko Kelontong"}
@@ -561,16 +889,13 @@ const LaporanScreen = ({ route }) => {
                       No : {selectedTx.invoice_number}
                     </Text>
                     <Text style={styles.receiptMeta}>
-                      {new Date(selectedTx.created_at).toLocaleString(
-                        "id-ID",
-                        {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        },
-                      )}
+                      {new Date(selectedTx.created_at).toLocaleString("id-ID", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </Text>
                   </View>
 
@@ -604,9 +929,7 @@ const LaporanScreen = ({ route }) => {
                   {selectedTx.discount_amount > 0 && (
                     <View style={styles.receiptMetaRow}>
                       <Text style={styles.receiptMeta}>Diskon</Text>
-                      <Text
-                        style={[styles.receiptMeta, { color: "#DC2626" }]}
-                      >
+                      <Text style={[styles.receiptMeta, { color: "#DC2626" }]}>
                         -{formatRupiah(selectedTx.discount_amount)}
                       </Text>
                     </View>
@@ -618,7 +941,13 @@ const LaporanScreen = ({ route }) => {
                     </Text>
                   </View>
                   <View style={styles.receiptMetaRow}>
-                    <Text style={styles.receiptMeta}>Tunai</Text>
+                    <Text style={styles.receiptMeta}>Metode</Text>
+                    <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
+                      {(selectedTx.payment_method || "tunai").toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.receiptMetaRow}>
+                    <Text style={styles.receiptMeta}>Bayar</Text>
                     <Text style={styles.receiptMeta}>
                       {formatRupiah(selectedTx.cash_received)}
                     </Text>
@@ -639,7 +968,8 @@ const LaporanScreen = ({ route }) => {
                 </View>
               )}
             </ScrollView>
-            {/* Action Buttons */}
+
+            {/* Modal Bottom Actions */}
             <View style={styles.modalActions}>
               {isLoadingReceipt ? (
                 <ActivityIndicator
@@ -648,30 +978,55 @@ const LaporanScreen = ({ route }) => {
                   style={{ marginVertical: 12 }}
                 />
               ) : (
-                <>
+                <View style={{ flexDirection: "column", gap: 8, width: "100%" }}>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    {btPrinterReady && Platform.OS === "android" && (
+                      <TouchableOpacity
+                        style={styles.modalBtBtn}
+                        onPress={handlePrintBluetooth}
+                        activeOpacity={0.88}
+                      >
+                        <MaterialCommunityIcons
+                          name="bluetooth"
+                          size={18}
+                          color="#FFFFFF"
+                        />
+                        <Text style={styles.modalBtBtnText}>
+                          Printer Bluetooth
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    <TouchableOpacity
+                      style={[
+                        styles.modalPrintBtn,
+                        !btPrinterReady && { flex: 1 },
+                      ]}
+                      onPress={handlePrintReceipt}
+                      activeOpacity={0.88}
+                    >
+                      <MaterialCommunityIcons
+                        name="printer"
+                        size={18}
+                        color="#FFFFFF"
+                      />
+                      <Text style={styles.modalPrintBtnText}>Cetak Nota</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={handlePrintReceipt}
-                  >
-                    <MaterialCommunityIcons
-                      name="printer"
-                      size={20}
-                      color="#fff"
-                    />
-                    <Text style={styles.actionBtnText}>Cetak Nota</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: "#25D366" }]}
+                    style={styles.modalWABtn}
                     onPress={handleSharePDF}
+                    activeOpacity={0.88}
                   >
                     <MaterialCommunityIcons
                       name="whatsapp"
-                      size={20}
-                      color="#fff"
+                      size={18}
+                      color="#FFFFFF"
                     />
-                    <Text style={styles.actionBtnText}>Kirim PDF</Text>
+                    <Text style={styles.modalWABtnText}>Kirim Struk via WA</Text>
                   </TouchableOpacity>
-                </>
+                </View>
               )}
             </View>
           </View>
@@ -682,250 +1037,530 @@ const LaporanScreen = ({ route }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-
-  // Tabs
-  tabRow: {
-    flexDirection: "row",
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  tab: {
+  container: {
     flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
+    backgroundColor: "#F8FAFC",
   },
-  tabActive: { borderBottomColor: colors.primary },
-  tabText: { fontSize: 14, color: colors.textSecondary, fontWeight: "600" },
-  tabTextActive: { color: colors.primary },
 
-  // Date Navigator
-  dateNav: {
+  // ── Segmented Control Tab Bar ──
+  segmentedContainer: {
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 12,
+    padding: 4,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+  },
+  segmentBtnActive: {
+    backgroundColor: "#FFFFFF",
+    elevation: 2,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  segmentText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 13,
+    color: "#64748B",
+  },
+  segmentTextActive: {
+    fontFamily: fonts.bold,
+    color: "#0F172A",
+  },
+
+  // ── Date Navigator ──
+  dateNavCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  navBtn: { padding: 4 },
-  dateText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.text,
-    textAlign: "center",
-    flex: 1,
-  },
-
-  // Summary Cards
-  summaryRow: { flexDirection: "row", padding: 12, gap: 8 },
-  summaryCard: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 12,
-    alignItems: "center",
-    elevation: 0,
-    backgroundColor: colors.surface,
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  summaryIconWrap: {
+  dateNavArrowBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: colors.iconBg,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
     alignItems: "center",
     justifyContent: "center",
   },
-  summaryLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 6,
-    textAlign: "center",
+  dateNavCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+    paddingHorizontal: 8,
   },
-  summaryValue: {
+  dateNavTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: "bold",
-    marginTop: 4,
-    textAlign: "center",
-    color: colors.text,
+    color: "#0F172A",
+  },
+  badgeJumpToday: {
+    marginTop: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 1,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+  },
+  badgeJumpTodayText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: colors.primary,
   },
 
-  // List Header
-  listHeader: {
+  // ── Unified Financial Hero Card ──
+  heroSummaryCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 20,
+    backgroundColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    padding: 16,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  summaryTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  summaryOmzetLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: "#94A3B8",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  summaryOmzetValue: {
+    fontFamily: fonts.extraBold,
+    fontSize: 24,
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
+  },
+  summaryTxBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.14)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  summaryTxBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#F8FAFC",
+  },
+  profitBannerRow: {
+    marginTop: 10,
+  },
+  profitPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.25)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+  },
+  profitLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#6EE7B7",
+  },
+  profitValue: {
+    fontFamily: fonts.extraBold,
+    fontSize: 13,
+    color: "#34D399",
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    marginVertical: 12,
+  },
+  splitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  splitCol: {
+    flex: 1,
+  },
+  splitColLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#94A3B8",
+  },
+  splitColValue: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: "#FFFFFF",
+    marginTop: 2,
+  },
+  splitVerticalLine: {
+    width: 1,
+    height: 26,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    marginHorizontal: 12,
+  },
+
+  // ── List Header & Action Buttons ──
+  listHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    marginBottom: 8,
   },
-  listTitle: { fontSize: 14, fontWeight: "700", color: colors.text },
-  exportBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
-  exportText: { fontSize: 13, color: colors.secondary, fontWeight: "600" },
+  listHeaderTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: "#0F172A",
+  },
+  countBadge: {
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+  },
+  countBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: "#475569",
+  },
+  btnActionWA: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  btnActionWAText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#15803D",
+  },
+  btnActionCSV: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  btnActionCSVText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#0284C7",
+  },
 
-  // Transaction Card
+  // ── Search Bar Filter ──
+  searchBarWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    height: 38,
+  },
+  searchBarInput: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: "#0F172A",
+    marginLeft: 6,
+    padding: 0,
+  },
+
+  // ── Transaction Item Card ──
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 2,
+  },
   txCard: {
     flexDirection: "row",
-    backgroundColor: colors.surface,
-    marginHorizontal: 12,
-    marginVertical: 4,
-    padding: 14,
-    borderRadius: 12,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#E2E8F0",
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
     elevation: 1,
   },
-  txLeft: { flex: 1 },
-  txInvoice: { fontSize: 13, fontWeight: "700", color: colors.text },
-  txDate: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  txDiscount: {
+  txMethodIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  txLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  txInvoice: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#0F172A",
+  },
+  methodBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  methodBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+  },
+  syncBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  syncBadgePending: {
+    backgroundColor: "#FEF3C7",
+  },
+  syncBadgeReview: {
+    backgroundColor: "#FEE2E2",
+  },
+  syncBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+  },
+  syncBadgeTextPending: {
+    color: "#B45309",
+  },
+  syncBadgeTextReview: {
+    color: "#B91C1C",
+  },
+  unsyncedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  unsyncedBannerText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: "#92400E",
+  },
+  unsyncedBannerAction: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#B45309",
+  },
+  retryBtn: {
+    marginTop: 14,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  retryBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#FFFFFF",
+  },
+  txDate: {
+    fontFamily: fonts.regular,
     fontSize: 11,
-    color: colors.error,
-    marginTop: 4,
-    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 2,
+  },
+  discountPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#FEF2F2",
+    alignSelf: "flex-start",
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginTop: 3,
+  },
+  discountPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    color: "#DC2626",
+  },
+  txRight: {
+    alignItems: "flex-end",
   },
   txTotal: {
+    fontFamily: fonts.extraBold,
     fontSize: 14,
-    fontWeight: "bold",
-    color: colors.primary,
-    textAlign: "right",
+    color: "#0F172A",
   },
-  txCash: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 4,
-    textAlign: "right",
-  },
-  txReturn: {
-    fontSize: 11,
-    color: colors.textSecondary,
+  txMetaText: {
+    fontFamily: fonts.regular,
+    fontSize: 10,
+    color: "#94A3B8",
     marginTop: 2,
-    textAlign: "right",
+  },
+  txReturnText: {
+    fontFamily: fonts.medium,
+    fontSize: 10,
+    color: "#64748B",
+    marginTop: 1,
   },
 
-  // Modal Detail
+  // ── Empty State ──
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+    marginTop: 20,
+  },
+  emptyIconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+
+  // ── Modal Struk Termal ──
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
   },
   modalContainer: {
-    backgroundColor: colors.surface,
-    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
     width: "100%",
-    maxWidth: 450,
-    maxHeight: "85%",
+    maxWidth: 440,
+    maxHeight: "88%",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 6,
+    overflow: "hidden",
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  modalTitle: { fontSize: 18, fontWeight: "bold", color: colors.text },
-  modalBody: { padding: 20 },
-  detailHeader: { alignItems: "center", marginBottom: 16 },
-  detailInvoice: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: colors.primary,
-    marginBottom: 4,
-  },
-  detailDate: { fontSize: 13, color: colors.textSecondary },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: 12 },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: colors.text,
-    marginBottom: 8,
-  },
-  detailItemRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  detailItemName: { fontSize: 14, fontWeight: "600", color: colors.text },
-  detailItemSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  detailItemTotal: { fontSize: 14, fontWeight: "bold", color: colors.text },
-  calcRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  calcLabel: { fontSize: 14, color: colors.textSecondary },
-  calcValue: { fontSize: 14, fontWeight: "600", color: colors.text },
-
-  // Modal Action Buttons
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
+    alignItems: "flex-start",
     padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: "#F8FAFC",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
+  modalTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: "#0F172A",
   },
-  actionBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-
-  // Empty
-  empty: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingBottom: 40,
+  modalSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 1,
   },
-  emptyText: { fontSize: 15, color: colors.textSecondary, marginTop: 12 },
-
-  // ── Pratinjau Nota (kertas struk termal, sama dgn Kasir) ──
+  modalCloseBtn: {
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: "#F1F5F9",
+  },
+  modalBody: {
+    padding: 16,
+  },
   receiptPaper: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
     padding: 16,
   },
   receiptStoreName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "800",
     textAlign: "center",
-    color: colors.text,
+    color: "#0F172A",
     letterSpacing: 0.5,
     marginBottom: 2,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
-  receiptMeta: {
-    fontSize: 11,
-    lineHeight: 16,
-    color: colors.textSecondary,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
   receiptMetaCenter: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 10,
+    lineHeight: 15,
     textAlign: "center",
-    color: colors.textSecondary,
+    color: "#64748B",
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   receiptMetaRow: {
@@ -934,105 +1569,105 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 4,
   },
+  receiptMeta: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#475569",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
   receiptDash: {
     borderBottomWidth: 1,
-    borderBottomColor: "#9CA3AF",
+    borderBottomColor: "#CBD5E1",
     borderStyle: "dashed",
-    marginVertical: 10,
+    marginVertical: 8,
   },
   receiptItem: {
-    marginBottom: 8,
+    marginBottom: 6,
   },
   receiptItemName: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-    color: colors.text,
+    color: "#0F172A",
     marginBottom: 2,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   receiptItemTotal: {
     fontSize: 11,
     fontWeight: "700",
-    color: colors.text,
+    color: "#0F172A",
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   receiptTotalLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "800",
-    color: colors.text,
+    color: "#0F172A",
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   receiptTotalValue: {
     fontSize: 14,
     fontWeight: "800",
-    color: colors.text,
+    color: "#0F172A",
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   receiptFooter: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 10,
+    lineHeight: 15,
     textAlign: "center",
-    color: colors.textSecondary,
-    marginTop: 2,
-    paddingHorizontal: 6,
+    color: "#94A3B8",
+    marginTop: 4,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
 
-  // ── Payment Split & Badges ──
-  paymentSplitRow: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "space-between",
+  // Modal Actions
+  modalActions: {
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    backgroundColor: "#F8FAFC",
   },
-  paymentSplitCol: {
+  modalBtBtn: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#0F172A",
+    paddingVertical: 11,
+    borderRadius: 10,
   },
-  paymentSplitDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: colors.border,
-    marginHorizontal: 12,
-  },
-  paymentSplitLabel: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  paymentSplitVal: {
+  modalBtBtnText: {
     fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.text,
-    marginTop: 2,
+    fontSize: 12,
+    color: "#FFFFFF",
   },
-  methodBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+  modalPrintBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingVertical: 11,
+    borderRadius: 10,
   },
-  methodBadgeCash: {
-    backgroundColor: "#F1F5F9",
-  },
-  methodBadgeNonCash: {
-    backgroundColor: "#E0F2FE",
-  },
-  methodBadgeText: {
+  modalPrintBtnText: {
     fontFamily: fonts.bold,
-    fontSize: 9,
+    fontSize: 12,
+    color: "#FFFFFF",
   },
-  methodBadgeTextCash: {
-    color: "#475569",
+  modalWABtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#16A34A",
+    paddingVertical: 11,
+    borderRadius: 10,
   },
-  methodBadgeTextNonCash: {
-    color: "#0369A1",
+  modalWABtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#FFFFFF",
   },
 });
 

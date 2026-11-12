@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useContext, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Switch,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import * as Updates from "expo-updates";
 import Constants from "expo-constants";
@@ -32,6 +33,8 @@ import {
   getDeviceId,
 } from "../services/licenseService";
 import { getOfflineQueueCount } from "../utils/offlineQueue";
+import { refreshSyncCounts } from "../services/syncService";
+import useSyncStatus from "../hooks/useSyncStatus";
 import TransactionRepository from "../database/transactionRepository";
 import {
   getPairedPrinters,
@@ -114,15 +117,23 @@ const PengaturanScreen = ({ navigation }) => {
   const [activatingLicense, setActivatingLicense] = useState(false);
 
   // Offline Sync State
-  const [offlineCount, setOfflineCount] = useState(0);
+  const syncStatus = useSyncStatus();
+  const offlineCount = syncStatus.unsynced;
   const [syncingOffline, setSyncingOffline] = useState(false);
 
   useEffect(() => {
     isPinProtected().then(setHasPin);
     getLockedMenus().then(setLockedMenusState);
     getLicenseInfo().then(setLicenseInfo).catch(() => {});
-    getOfflineQueueCount().then(setOfflineCount).catch(() => {});
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      getOfflineQueueCount()
+        .then(() => refreshSyncCounts())
+        .catch(() => {});
+    }, []),
+  );
 
   const handleToggleMenuLock = async (menuKey) => {
     const nextConfig = {
@@ -478,8 +489,7 @@ const PengaturanScreen = ({ navigation }) => {
           `Gagal mengunggah transaksi (${res.failed} gagal). Pastikan koneksi internet stabil lalu coba lagi.`,
         );
       }
-      const count = await getOfflineQueueCount();
-      setOfflineCount(count);
+      await refreshSyncCounts();
     } catch (e) {
       Alert.alert("Gagal Sinkronisasi", e.message || "Terjadi kesalahan koneksi.");
     } finally {
@@ -524,10 +534,20 @@ const PengaturanScreen = ({ navigation }) => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    let unsynced = 0;
+    try {
+      unsynced = await getOfflineQueueCount();
+    } catch {
+      unsynced = 0;
+    }
+    const warning =
+      unsynced > 0
+        ? `Ada ${unsynced} transaksi yang belum terkirim ke cloud. Transaksi tetap tersimpan aman di HP ini dan akan terkirim saat Anda masuk lagi dengan akun yang sama dan ada internet. Tetap keluar?`
+        : "Anda akan keluar dari akun di HP ini. Data toko tetap aman di cloud.";
     Alert.alert(
-      "Keluar Akun",
-      "Anda akan keluar dari akun di HP ini. Data toko tetap aman di cloud.",
+      unsynced > 0 ? "Masih Ada Transaksi Belum Terkirim" : "Keluar Akun",
+      warning,
       [
         { text: "Batal", style: "cancel" },
         {
@@ -627,8 +647,17 @@ const PengaturanScreen = ({ navigation }) => {
             {profile?.stores?.store_name || state.storeName || "MarketPos"}
           </Text>
           <View style={styles.badgeRow}>
-            <View style={styles.greenDot} />
-            <Text style={styles.badgeText}>Sinkronisasi Cloud Aktif</Text>
+            <View
+              style={[
+                styles.greenDot,
+                syncStatus.offline && { backgroundColor: "#F59E0B" },
+              ]}
+            />
+            <Text style={styles.badgeText}>
+              {syncStatus.offline
+                ? "Mode Offline (Sinkronisasi Tertunda)"
+                : "Sinkronisasi Cloud Aktif"}
+            </Text>
           </View>
         </View>
       </View>
@@ -753,38 +782,65 @@ const PengaturanScreen = ({ navigation }) => {
       <Text style={styles.sectionTitle}>ANTREAN TRANSAKSI OFFLINE</Text>
       <View style={styles.card}>
         <View style={styles.offlineSettingsRow}>
-          <View
-            style={[
-              styles.settingIconWrap,
-              {
-                backgroundColor:
-                  offlineCount > 0 ? "#FEF3C7" : "#F1F5F9",
-              },
-            ]}
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+            }}
+            onPress={() => navigation.navigate("TransaksiPending")}
+            activeOpacity={0.7}
           >
-            <MaterialCommunityIcons
-              name={
-                offlineCount > 0
-                  ? "cloud-sync-outline"
-                  : "cloud-check-outline"
-              }
-              size={22}
-              color={offlineCount > 0 ? "#D97706" : "#16A34A"}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.linkText}>
-              {offlineCount > 0
-                ? `${offlineCount} Transaksi Belum Terunggah`
-                : "Semua Transaksi Tersinkron"}
-            </Text>
-            <Text style={styles.linkSubText}>
-              {offlineCount > 0
-                ? "Transaksi tersimpan aman di HP saat sinyal drop"
-                : "Database lokal sinkron dengan cloud"}
-            </Text>
-          </View>
-          {offlineCount > 0 && (
+            <View
+              style={[
+                styles.settingIconWrap,
+                {
+                  backgroundColor:
+                    syncStatus.needsReview > 0
+                      ? "#FEE2E2"
+                      : offlineCount > 0
+                        ? "#FEF3C7"
+                        : "#F1F5F9",
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={
+                  syncStatus.needsReview > 0
+                    ? "alert-circle-outline"
+                    : offlineCount > 0
+                      ? "cloud-sync-outline"
+                      : "cloud-check-outline"
+                }
+                size={22}
+                color={
+                  syncStatus.needsReview > 0
+                    ? "#B91C1C"
+                    : offlineCount > 0
+                      ? "#D97706"
+                      : "#16A34A"
+                }
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkText}>
+                {offlineCount > 0
+                  ? `${offlineCount} Transaksi Belum Terunggah`
+                  : "Semua Transaksi Tersinkron"}
+              </Text>
+              <Text style={styles.linkSubText}>
+                {syncStatus.needsReview > 0
+                  ? `${syncStatus.needsReview} perlu ditinjau • ketuk untuk lihat`
+                  : offlineCount > 0
+                    ? "Tersimpan aman di HP • ketuk untuk lihat"
+                    : syncStatus.offline
+                      ? "Sedang offline • ketuk untuk lihat riwayat lokal"
+                      : "Database lokal sinkron dengan cloud"}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          {offlineCount > 0 ? (
             <TouchableOpacity
               style={styles.syncBtnSettings}
               onPress={handleSyncOfflineInSettings}
@@ -793,6 +849,17 @@ const PengaturanScreen = ({ navigation }) => {
               <Text style={styles.syncBtnSettingsText}>
                 {syncingOffline ? "..." : "Upload"}
               </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => navigation.navigate("TransaksiPending")}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={20}
+                color="#94A3B8"
+              />
             </TouchableOpacity>
           )}
         </View>

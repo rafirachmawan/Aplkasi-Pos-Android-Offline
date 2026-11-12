@@ -72,7 +72,7 @@ const PanduanScreen = () => {
           <View style={styles.headerTextWrap}>
             <Text style={styles.headerTitle}>Buku Panduan Kasir</Text>
             <Text style={styles.headerSubtitle}>
-              Panduan lengkap operasional toko offline & penggunaan fitur kasir POS.
+              Panduan lengkap operasional toko & penggunaan fitur kasir POS, termasuk berjualan tanpa internet.
             </Text>
           </View>
         </View>
@@ -137,7 +137,7 @@ const PanduanScreen = () => {
           content={[
             {
               subtitle: "Pendataan Produk",
-              desc: "Masudkan Nama Produk, Barcode, Kategori, Satuan (Pcs/Pack/Kg), Harga Modal (Kulakan), dan Harga Jual."
+              desc: "Masukkan Nama Produk, Barcode, Kategori, Satuan (Pcs/Pack/Kg), Harga Modal (Kulakan), dan Harga Jual."
             },
             {
               subtitle: "Akumulasi Laba Bersih",
@@ -196,25 +196,52 @@ const PanduanScreen = () => {
           ]}
         />
 
-        {/* 6. Backup & Restore Data */}
+        {/* 6. Berjualan Tanpa Internet */}
         <GuideSection
-          title="Backup & Restore Data (Pure Offline)"
+          title="Berjualan Tanpa Internet"
+          badge="Offline"
+          icon="cloud-off-outline"
+          iconBg={colors.iconBg}
+          iconColor={colors.iconColor}
+          content={[
+            {
+              subtitle: "Kasir Tetap Jalan",
+              desc: "Saat sinyal hilang, transaksi tetap bisa dibuat dan struk tetap bisa dicetak. Transaksi disimpan aman di HP, lalu dikirim otomatis ke cloud saat internet kembali."
+            },
+            {
+              subtitle: "Cek Transaksi Belum Terkirim",
+              desc: "Jika ada transaksi yang belum terkirim, muncul banner di Beranda dan Kasir. Ketuk banner untuk melihat daftarnya, atau tekan 'Kirim Sekarang' untuk mengirim manual."
+            },
+            {
+              subtitle: "Stok Bisa Minus",
+              desc: "Barang tetap bisa dijual walau stok di sistem 0. Stok akan tampil minus (contoh -3) sampai Anda menambah stok di Gudang."
+            },
+            {
+              subtitle: "Yang Butuh Internet",
+              desc: "Kasbon, menambah/mengubah/menghapus barang, serta login pertama kali di HP baru membutuhkan internet. Jangan keluar akun saat masih ada transaksi belum terkirim."
+            }
+          ]}
+        />
+
+        {/* 7. Sinkronisasi Cloud & Mode Offline */}
+        <GuideSection
+          title="Sinkronisasi Cloud & Mode Offline"
           badge="Keamanan Data"
           icon="database-sync"
           iconBg={colors.iconBg}
           iconColor={colors.iconColor}
           content={[
             {
-              subtitle: "Ekspor Backup (.json)",
-              desc: "Buka menu Pengaturan -> 'Cadangkan Data (Backup)'. File berformat `.json` berisi seluruh produk, stok, dan riwayat transaksi akan dibuat di HP Anda."
+              subtitle: "Transaksi Tetap Jalan Offline",
+              desc: "Saat internet mati atau sinyal lemah, transaksi di Kasir tetap tersimpan aman di memori HP dan nomor nota tetap berurutan."
             },
             {
-              subtitle: "Simpan di Luar Perangkat",
-              desc: "Bagikan file backup tersebut ke WhatsApp sendiri, Google Drive, atau flashdisk agar data aman jika HP rusak/hilang."
+              subtitle: "Sinkron Otomatis ke Cloud",
+              desc: "Begitu koneksi internet kembali stabil, transaksi yang tertunda otomatis dikirim ke server cloud tanpa perlu ekspor file manual."
             },
             {
-              subtitle: "Pulihkan Data (Restore)",
-              desc: "Saat pindah ke HP Android baru, pilih 'Pulihkan Data (Restore)', lalu pilih file backup `.json` untuk mengembalikan seluruh data toko secara instan."
+              subtitle: "Akses di Perangkat Lain",
+              desc: "Masuk dengan akun toko yang sama di HP Android baru untuk memulihkan daftar produk dan laporan penjualan dari cloud. Jangan hapus data aplikasi sebelum semua transaksi terkirim."
             }
           ]}
         />
@@ -223,7 +250,7 @@ const PanduanScreen = () => {
         <View style={styles.footerWrap}>
           <MaterialCommunityIcons name="shield-check" size={18} color={colors.primary} />
           <Text style={styles.footerText}>
-            MarketPos - 100% Pure Offline Kasir Android
+            MarketPos - Kasir Android yang tetap jalan tanpa internet
           </Text>
         </View>
 

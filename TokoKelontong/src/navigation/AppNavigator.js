@@ -14,6 +14,7 @@ import SettingNotaScreen from "../screens/SettingNotaScreen";
 import PanduanScreen from "../screens/PanduanScreen";
 import AuthScreen from "../screens/AuthScreen";
 import BukuKasbonScreen from "../screens/BukuKasbonScreen";
+import PendingTransactionsScreen from "../screens/PendingTransactionsScreen";
 
 import { useAuth } from "../context/AuthContext";
 import { colors, fonts } from "../theme/colors";
@@ -105,6 +106,11 @@ export default function AppNavigator() {
             name="BukuKasbon"
             component={BukuKasbonScreen}
             options={{ title: "Buku Kasbon & Hutang" }}
+          />
+          <Stack.Screen
+            name="TransaksiPending"
+            component={PendingTransactionsScreen}
+            options={{ title: "Transaksi Belum Terkirim" }}
           />
           <Stack.Screen
             name="BarcodeScanner"

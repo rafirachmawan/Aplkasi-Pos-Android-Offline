@@ -13,12 +13,13 @@ import {
   StatusBar,
   Linking,
 } from "react-native";
-import { TextInput, Button } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Print from "expo-print";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ProductRepository from "../database/productRepository";
+import { syncNow } from "../services/syncService";
 import { useAuth } from "../context/AuthContext";
 import { colors, fonts } from "../theme/colors";
 import { encodeCode128 } from "../utils/barcode128";
@@ -107,6 +108,7 @@ const barcodeStyles = StyleSheet.create({
 
 // ─── Main Screen ───────────────────────────────────────────────────────────
 const AddProductScreen = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
   const existingProduct = route.params?.product;
   const scannedBarcode = route.params?.scannedBarcode;
 
@@ -197,6 +199,13 @@ const AddProductScreen = ({ navigation, route }) => {
       }
     })();
   }, [storeId]);
+
+  // Header dinamis: Edit Barang jika mengedit, Tambah Barang jika baru
+  useEffect(() => {
+    navigation.setOptions({
+      title: existingProduct ? "Edit Barang" : "Tambah Barang",
+    });
+  }, [existingProduct, navigation]);
 
   // Deteksi printer Bluetooth sekali saat layar dibuka
   useEffect(() => {
@@ -584,8 +593,11 @@ const AddProductScreen = ({ navigation, route }) => {
       Alert.alert("Error", "Harga jual tidak valid.");
       return;
     }
-    if (isNaN(stock) || stock < 0) {
-      Alert.alert("Error", "Stok tidak boleh negatif.");
+    if (isNaN(stock) || (!existingProduct && stock < 0)) {
+      Alert.alert(
+        "Error",
+        existingProduct ? "Stok tidak valid." : "Stok tidak boleh negatif.",
+      );
       return;
     }
 
@@ -657,16 +669,17 @@ const AddProductScreen = ({ navigation, route }) => {
           existingProduct.id,
         );
         const stockDelta = stock - (existingProduct.stock_quantity || 0);
-        data.stock_quantity = Math.max(
-          0,
-          (latest ? latest.stock_quantity : stock) + stockDelta,
-        );
+        // Stok minus diizinkan (K-03), jadi hasilnya tidak dipaksa >= 0.
+        data.stock_quantity =
+          (latest ? latest.stock_quantity : stock) + stockDelta;
         await ProductRepository.updateProduct(existingProduct.id, data);
+        syncNow({ forceCatalog: true }).catch(() => {});
         Alert.alert("✅ Sukses", "Produk berhasil diperbarui.", [
           { text: "OK", onPress: () => navigation.goBack() },
         ]);
       } else {
         await ProductRepository.addProduct(data);
+        syncNow({ forceCatalog: true }).catch(() => {});
         Alert.alert("✅ Sukses", "Produk berhasil ditambahkan.", [
           { text: "OK", onPress: () => navigation.goBack() },
         ]);
@@ -683,359 +696,506 @@ const AddProductScreen = ({ navigation, route }) => {
   const marginPositive = sellNum >= capNum;
 
   return (
-    <>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 130 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Gambar Produk ── */}
-        <Text style={styles.sectionLabel}>Foto Produk</Text>
-        <TouchableOpacity style={styles.imagePicker} onPress={handlePickImage}>
+        {/* ── KARTU 1: FOTO PRODUK ── */}
+        <View style={styles.formCard}>
+          <View style={styles.cardHeaderRow}>
+            <MaterialCommunityIcons
+              name="camera-outline"
+              size={18}
+              color={colors.primary}
+            />
+            <Text style={styles.cardHeaderTitle}>FOTO PRODUK</Text>
+          </View>
+
           {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.productImage} />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <MaterialCommunityIcons
-                name="camera-plus"
-                size={36}
-                color={colors.primary}
-              />
-              <Text style={styles.imagePlaceholderText}>
-                Upload Foto Produk
-              </Text>
+            <View style={styles.photoPreviewCard}>
+              <Image source={{ uri: imageUri }} style={styles.photoPreviewImg} />
+              <View style={styles.photoActionsRow}>
+                <TouchableOpacity
+                  style={styles.photoChangeBtn}
+                  onPress={handlePickImage}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons
+                    name="camera-retake-outline"
+                    size={16}
+                    color="#0F172A"
+                  />
+                  <Text style={styles.photoChangeBtnText}>Ganti Foto</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.photoDeleteBtn}
+                  onPress={() => setImageUri(null)}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons
+                    name="trash-can-outline"
+                    size={16}
+                    color="#EF4444"
+                  />
+                  <Text style={styles.photoDeleteBtnText}>Hapus</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          )}
-          {imageUri && (
+          ) : (
             <TouchableOpacity
-              style={styles.removeImageBtn}
-              onPress={() => setImageUri(null)}
+              style={styles.photoUploadDashed}
+              onPress={handlePickImage}
+              activeOpacity={0.7}
             >
-              <MaterialCommunityIcons
-                name="close-circle"
-                size={24}
-                color="#EF4444"
-              />
+              <View style={styles.photoUploadIconCircle}>
+                <MaterialCommunityIcons
+                  name="camera-plus-outline"
+                  size={24}
+                  color={colors.primary}
+                />
+              </View>
+              <Text style={styles.photoUploadTitle}>Upload Foto Produk</Text>
+              <Text style={styles.photoUploadSub}>
+                Pilih dari Galeri atau Foto Kamera
+              </Text>
             </TouchableOpacity>
           )}
-        </TouchableOpacity>
+        </View>
 
-        {/* ── Barcode + Scan ── */}
-        <Text style={styles.sectionLabel}>Barcode & Label</Text>
-        <View style={styles.barcodeRow}>
-          <View style={{ flex: 1 }}>
-            <TextInput
-              label="Barcode (Opsional)"
-              value={barcode}
-              onChangeText={setBarcode}
-              mode="outlined"
-              style={styles.input}
-              keyboardType="default"
-              placeholder="Ketik atau scan barcode..."
-              right={
-                barcode ? (
-                  <TextInput.Icon
-                    icon="close-circle"
-                    onPress={() => setBarcode("")}
-                  />
-                ) : null
-              }
+        {/* ── KARTU 2: INFORMASI PRODUK & BARCODE ── */}
+        <View style={styles.formCard}>
+          <View style={styles.cardHeaderRow}>
+            <MaterialCommunityIcons
+              name="tag-text-outline"
+              size={18}
+              color={colors.primary}
+            />
+            <Text style={styles.cardHeaderTitle}>INFORMASI PRODUK</Text>
+          </View>
+
+          {/* Nama Barang */}
+          <View style={styles.formGroup}>
+            <Text style={styles.fieldLabel}>NAMA BARANG *</Text>
+            <RNTextInput
+              style={styles.textInputClean}
+              value={productName}
+              onChangeText={setProductName}
+              placeholder="Contoh: Mie Bangladesh Spesial"
+              placeholderTextColor="#94A3B8"
+              autoCapitalize="words"
             />
           </View>
-          <TouchableOpacity style={styles.iconBtn} onPress={openBarcodeScanner}>
-            <MaterialCommunityIcons
-              name="barcode-scan"
-              size={24}
-              color="#fff"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.iconBtn, !barcode.trim() && { opacity: 0.4 }]}
-            onPress={() => {
-              if (!barcode.trim()) {
-                Alert.alert(
-                  "Barcode Kosong",
-                  "Isi kolom barcode terlebih dahulu untuk melihat label.",
-                );
-                return;
-              }
-              setShowBarcodeModal(true);
-            }}
-          >
-            <MaterialCommunityIcons
-              name="tag-outline"
-              size={24}
-              color="#fff"
-            />
-          </TouchableOpacity>
+
+          {/* Barcode & Label */}
+          <View style={styles.formGroup}>
+            <Text style={styles.fieldLabel}>BARCODE & LABEL (OPSIONAL)</Text>
+            <View style={styles.barcodeInputRow}>
+              <View style={styles.barcodeInputWrap}>
+                <RNTextInput
+                  style={styles.barcodeInput}
+                  value={barcode}
+                  onChangeText={setBarcode}
+                  placeholder="Ketik atau scan barcode..."
+                  placeholderTextColor="#94A3B8"
+                />
+                {barcode.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.barcodeClearBtn}
+                    onPress={() => setBarcode("")}
+                  >
+                    <MaterialCommunityIcons
+                      name="close-circle"
+                      size={18}
+                      color="#94A3B8"
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity
+                style={styles.barcodeScanBtn}
+                onPress={openBarcodeScanner}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons
+                  name="barcode-scan"
+                  size={20}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.barcodeTagBtn,
+                  !barcode.trim() && { opacity: 0.4 },
+                ]}
+                onPress={() => {
+                  if (!barcode.trim()) {
+                    Alert.alert(
+                      "Barcode Kosong",
+                      "Isi kolom barcode terlebih dahulu untuk melihat label.",
+                    );
+                    return;
+                  }
+                  setShowBarcodeModal(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons
+                  name="tag-outline"
+                  size={20}
+                  color="#334155"
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Kategori Produk */}
+          <View style={styles.formGroup}>
+            <View style={styles.fieldHeaderBetween}>
+              <Text style={styles.fieldLabel}>KATEGORI PRODUK</Text>
+              <TouchableOpacity
+                style={styles.addMiniBtn}
+                onPress={() => {
+                  setNewCategoryInput("");
+                  setShowAddCategoryModal(true);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={14}
+                  color={colors.primary}
+                />
+                <Text style={styles.addMiniBtnText}>Kategori</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.pillListWrap}>
+              {categories.map((c, index) => (
+                <TouchableOpacity
+                  key={c + index}
+                  style={[
+                    styles.unitPill,
+                    category === c && styles.unitPillActive,
+                  ]}
+                  onPress={() => setCategory(c)}
+                  onLongPress={() => {
+                    setEditingCategory({ index, value: c });
+                    setEditCategoryInput(c);
+                    setShowEditCategoryModal(true);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[
+                      styles.unitPillText,
+                      category === c && styles.unitPillTextActive,
+                    ]}
+                  >
+                    {c}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.fieldHint}>
+              💡 Ketuk untuk memilih. Tekan tahan (long-press) untuk ubah/hapus.
+            </Text>
+          </View>
+
+          {/* Satuan Produk */}
+          <View style={[styles.formGroup, { marginBottom: 0 }]}>
+            <View style={styles.fieldHeaderBetween}>
+              <Text style={styles.fieldLabel}>SATUAN PRODUK</Text>
+              <TouchableOpacity
+                style={styles.addMiniBtn}
+                onPress={() => {
+                  setNewUnitInput("");
+                  setShowAddUnitModal(true);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={14}
+                  color={colors.primary}
+                />
+                <Text style={styles.addMiniBtnText}>Satuan</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.pillListWrap}>
+              {units.map((u, index) => (
+                <TouchableOpacity
+                  key={u + index}
+                  style={[
+                    styles.unitPill,
+                    unit === u && styles.unitPillActive,
+                  ]}
+                  onPress={() => setUnit(u)}
+                  onLongPress={() => {
+                    setEditingUnit({ index, value: u });
+                    setEditUnitInput(u);
+                    setShowEditUnitModal(true);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[
+                      styles.unitPillText,
+                      unit === u && styles.unitPillTextActive,
+                    ]}
+                  >
+                    {u}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.fieldHint}>
+              💡 Ketuk untuk memilih. Tekan tahan (long-press) untuk ubah/hapus.
+            </Text>
+          </View>
         </View>
 
-        {/* ── Info Produk ── */}
-        <Text style={styles.sectionLabel}>Informasi Produk</Text>
-        <TextInput
-          label="Nama Barang *"
-          value={productName}
-          onChangeText={setProductName}
-          mode="outlined"
-          style={styles.input}
-          autoCapitalize="words"
-        />
-
-        {/* ── Harga format Rp otomatis ── */}
-        <View style={styles.row}>
-          <TextInput
-            label="Harga Modal (Rp) *"
-            value={capitalPrice ? `Rp ${capitalPrice}` : ""}
-            onChangeText={(text) => {
-              const raw = text.replace(/^Rp\s?/, "");
-              setCapitalPrice(formatToRp(raw));
-            }}
-            mode="outlined"
-            keyboardType="numeric"
-            style={[styles.input, { flex: 1, marginRight: 8 }]}
-          />
-          <TextInput
-            label="Harga Jual (Rp) *"
-            value={sellingPrice ? `Rp ${sellingPrice}` : ""}
-            onChangeText={(text) => {
-              const raw = text.replace(/^Rp\s?/, "");
-              setSellingPrice(formatToRp(raw));
-            }}
-            mode="outlined"
-            keyboardType="numeric"
-            style={[styles.input, { flex: 1, marginLeft: 8 }]}
-          />
-        </View>
-
-        {/* ── Margin Preview ── */}
-        {capitalPrice !== "" && sellingPrice !== "" && (
-          <View
-            style={[
-              styles.marginPreview,
-              {
-                borderColor: marginPositive ? colors.border : "#FCA5A5",
-                backgroundColor: marginPositive ? colors.iconBg : "#FFF1F2",
-              },
-            ]}
-          >
+        {/* ── KARTU 3: HARGA & KEUNTUNGAN ── */}
+        <View style={styles.formCard}>
+          <View style={styles.cardHeaderRow}>
             <MaterialCommunityIcons
-              name={marginPositive ? "trending-up" : "trending-down"}
-              size={16}
-              color={marginPositive ? colors.primary : colors.error}
+              name="cash-multiple"
+              size={18}
+              color={colors.primary}
             />
-            <Text
+            <Text style={styles.cardHeaderTitle}>HARGA & KEUNTUNGAN</Text>
+          </View>
+
+          <View style={styles.formRow}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={styles.fieldLabel}>HARGA MODAL (RP) *</Text>
+              <RNTextInput
+                style={styles.textInputClean}
+                value={capitalPrice ? `Rp ${capitalPrice}` : ""}
+                onChangeText={(text) => {
+                  const raw = text.replace(/^Rp\s?/, "");
+                  setCapitalPrice(formatToRp(raw));
+                }}
+                placeholder="Rp 0"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={styles.fieldLabel}>HARGA JUAL (RP) *</Text>
+              <RNTextInput
+                style={styles.textInputClean}
+                value={sellingPrice ? `Rp ${sellingPrice}` : ""}
+                onChangeText={(text) => {
+                  const raw = text.replace(/^Rp\s?/, "");
+                  setSellingPrice(formatToRp(raw));
+                }}
+                placeholder="Rp 0"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+
+          {/* Margin Preview Bar */}
+          {capitalPrice !== "" && sellingPrice !== "" && (
+            <View
               style={[
-                styles.marginText,
-                { color: marginPositive ? colors.primary : colors.error },
+                styles.marginPreview,
+                {
+                  borderColor: marginPositive ? "#A7F3D0" : "#FECACA",
+                  backgroundColor: marginPositive ? "#ECFDF5" : "#FEF2F2",
+                },
               ]}
             >
-              Margin: Rp {margin.toLocaleString("id-ID")} ({marginPct}%)
-            </Text>
-          </View>
-        )}
-
-        {/* ── Harga Grosir / Bertingkat (Tiered Pricing) ── */}
-        <View style={styles.wholesaleCard}>
-          <View style={styles.wholesaleHeader}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <MaterialCommunityIcons
-                name="layers-outline"
+                name={marginPositive ? "trending-up" : "trending-down"}
                 size={18}
-                color="#0F172A"
+                color={marginPositive ? "#059669" : "#DC2626"}
               />
-              <Text style={styles.wholesaleTitle}>Harga Grosir / Bertingkat</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.btnAddWholesale}
-              onPress={() => {
-                setWsMinQtyInput("");
-                setWsPriceInput("");
-                setShowAddWholesaleModal(true);
-              }}
-            >
-              <MaterialCommunityIcons name="plus" size={16} color="#0F172A" />
-              <Text style={styles.btnAddWholesaleText}>Tambah</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.wholesaleSubtitle}>
-            Potongan harga satuan otomatis jika pembeli membeli dalam jumlah banyak (misal beli ≥ 12 {unit}).
-          </Text>
-
-          {wholesaleRules.length === 0 ? (
-            <Text style={styles.wholesaleEmptyText}>
-              Belum ada aturan harga grosir. Klik Tambah untuk membuat aturan.
-            </Text>
-          ) : (
-            <View style={styles.wholesaleList}>
-              {wholesaleRules
-                .slice()
-                .sort((a, b) => a.min_qty - b.min_qty)
-                .map((rule, idx) => (
-                  <View key={idx} style={styles.wholesaleItemRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.wholesaleMinQty}>
-                        Beli ≥ {rule.min_qty} {unit}
-                      </Text>
-                      <Text style={styles.wholesalePriceText}>
-                        Rp {rule.price.toLocaleString("id-ID")} / {unit}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setWholesaleRules(
-                          wholesaleRules.filter((_, i) => i !== idx),
-                        );
-                      }}
-                      style={styles.btnDeleteWholesale}
-                    >
-                      <MaterialCommunityIcons
-                        name="trash-can-outline"
-                        size={18}
-                        color="#EF4444"
-                      />
-                    </TouchableOpacity>
-                  </View>
-                ))}
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    styles.marginTitle,
+                    { color: marginPositive ? "#065F46" : "#991B1B" },
+                  ]}
+                >
+                  {marginPositive ? "Estimasi Laba Kotor" : "Peringatan Rugi"}
+                </Text>
+                <Text
+                  style={[
+                    styles.marginText,
+                    { color: marginPositive ? "#047857" : "#B91C1C" },
+                  ]}
+                >
+                  Rp {margin.toLocaleString("id-ID")} ({marginPct}%) per {unit}
+                </Text>
+              </View>
             </View>
           )}
-        </View>
 
-        {/* ── Stok ── */}
-        <View style={styles.row}>
-          <TextInput
-            label={existingProduct ? "Stok Saat Ini *" : "Stok Awal *"}
-            value={stockQuantity}
-            onChangeText={setStockQuantity}
-            mode="outlined"
-            keyboardType="numeric"
-            style={[styles.input, { flex: 1, marginRight: 8 }]}
-          />
-          <TextInput
-            label="Batas Min Stok"
-            value={minStock}
-            onChangeText={setMinStock}
-            mode="outlined"
-            keyboardType="numeric"
-            style={[styles.input, { flex: 1, marginLeft: 8 }]}
-          />
-        </View>
-
-        <Text style={styles.infoText}>
-          💡 Peringatan stok menipis muncul saat stok ≤ batas minimum.
-        </Text>
-
-        {/* ── Satuan Produk ── */}
-        <View style={styles.unitHeader}>
-          <Text style={styles.sectionLabel}>Satuan</Text>
-        </View>
-        <View style={styles.unitPillWrap}>
-          {units.map((u, index) => (
-            <TouchableOpacity
-              key={u + index}
-              style={[styles.unitPill, unit === u && styles.unitPillActive]}
-              onPress={() => setUnit(u)}
-              onLongPress={() => {
-                setEditingUnit({ index, value: u });
-                setEditUnitInput(u);
-                setShowEditUnitModal(true);
-              }}
-            >
-              <Text
-                style={[
-                  styles.unitPillText,
-                  unit === u && styles.unitPillTextActive,
-                ]}
+          {/* Aturan Harga Grosir / Bertingkat */}
+          <View style={styles.wholesaleSubCard}>
+            <View style={styles.wholesaleHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <MaterialCommunityIcons
+                  name="layers-outline"
+                  size={16}
+                  color="#0F172A"
+                />
+                <Text style={styles.wholesaleTitle}>
+                  Harga Grosir / Bertingkat
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.btnAddWholesale}
+                onPress={() => {
+                  setWsMinQtyInput("");
+                  setWsPriceInput("");
+                  setShowAddWholesaleModal(true);
+                }}
               >
-                {u}
+                <MaterialCommunityIcons name="plus" size={14} color="#0F172A" />
+                <Text style={styles.btnAddWholesaleText}>Tambah</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.wholesaleSubtitle}>
+              Potongan harga otomatis jika pembeli membeli dalam jumlah banyak (misal beli ≥ 12 {unit}).
+            </Text>
+
+            {wholesaleRules.length === 0 ? (
+              <View style={styles.wholesaleEmptyBox}>
+                <Text style={styles.wholesaleEmptyText}>
+                  Belum ada aturan harga grosir. Klik Tambah untuk membuat aturan.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.wholesaleList}>
+                {wholesaleRules
+                  .slice()
+                  .sort((a, b) => a.min_qty - b.min_qty)
+                  .map((rule, idx) => (
+                    <View key={idx} style={styles.wholesaleItemRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.wholesaleMinQty}>
+                          Beli ≥ {rule.min_qty} {unit}
+                        </Text>
+                        <Text style={styles.wholesalePriceText}>
+                          Rp {rule.price.toLocaleString("id-ID")} / {unit}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setWholesaleRules(
+                            wholesaleRules.filter((_, i) => i !== idx),
+                          );
+                        }}
+                        style={styles.btnDeleteWholesale}
+                      >
+                        <MaterialCommunityIcons
+                          name="trash-can-outline"
+                          size={18}
+                          color="#EF4444"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ── KARTU 4: MANAJEMEN STOK ── */}
+        <View style={styles.formCard}>
+          <View style={styles.cardHeaderRow}>
+            <MaterialCommunityIcons
+              name="package-variant-closed"
+              size={18}
+              color={colors.primary}
+            />
+            <Text style={styles.cardHeaderTitle}>MANAJEMEN STOK</Text>
+          </View>
+
+          <View style={styles.formRow}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={styles.fieldLabel}>
+                {existingProduct ? "STOK SAAT INI *" : "STOK AWAL *"}
               </Text>
-            </TouchableOpacity>
-          ))}
+              <RNTextInput
+                style={styles.textInputClean}
+                value={stockQuantity}
+                onChangeText={setStockQuantity}
+                placeholder="0"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={styles.fieldLabel}>BATAS MIN STOK</Text>
+              <RNTextInput
+                style={styles.textInputClean}
+                value={minStock}
+                onChangeText={setMinStock}
+                placeholder="5"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+
+          <View style={styles.stockNoteBox}>
+            <MaterialCommunityIcons
+              name="information-outline"
+              size={16}
+              color="#64748B"
+            />
+            <Text style={styles.stockNoteText}>
+              Peringatan stok menipis otomatis muncul saat jumlah stok ≤ batas minimum.
+            </Text>
+          </View>
         </View>
-        <Text style={styles.infoText}>
-          💡 Tekan tahan satuan untuk ubah/hapus.
-        </Text>
-
-        <Button
-          mode="outlined"
-          onPress={() => {
-            setNewUnitInput("");
-            setShowAddUnitModal(true);
-          }}
-          style={[styles.saveButton, { marginTop: 16 }]}
-          textColor={colors.primary}
-          icon="plus"
-        >
-          TAMBAH SATUAN BARU
-        </Button>
-
-        {/* ── Kategori Produk ── */}
-        <View style={styles.unitHeader}>
-          <Text style={styles.sectionLabel}>Kategori</Text>
-        </View>
-        <View style={styles.unitPillWrap}>
-          {categories.map((c, index) => (
-            <TouchableOpacity
-              key={c + index}
-              style={[styles.unitPill, category === c && styles.unitPillActive]}
-              onPress={() => setCategory(c)}
-              onLongPress={() => {
-                setEditingCategory({ index, value: c });
-                setEditCategoryInput(c);
-                setShowEditCategoryModal(true);
-              }}
-            >
-              <Text
-                style={[
-                  styles.unitPillText,
-                  category === c && styles.unitPillTextActive,
-                ]}
-              >
-                {c}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <Text style={styles.infoText}>
-          💡 Tekan tahan kategori untuk ubah/hapus.
-        </Text>
-
-        <Button
-          mode="outlined"
-          onPress={() => {
-            setNewCategoryInput("");
-            setShowAddCategoryModal(true);
-          }}
-          style={[styles.saveButton, { marginTop: 16 }]}
-          textColor={colors.primary}
-          icon="plus"
-        >
-          TAMBAH KATEGORI BARU
-        </Button>
-
-        <Button
-          mode="contained"
-          onPress={handleSave}
-          style={styles.saveButton}
-          buttonColor={colors.primary}
-          labelStyle={{ fontWeight: "bold", fontSize: 16 }}
-          contentStyle={{ paddingVertical: 6 }}
-          icon={existingProduct ? "content-save" : "plus"}
-        >
-          {existingProduct ? "SIMPAN PERUBAHAN" : "TAMBAH BARANG"}
-        </Button>
-
-        {existingProduct && (
-          <Button
-            mode="outlined"
-            onPress={() => navigation.goBack()}
-            style={[styles.saveButton, { marginTop: 8 }]}
-            textColor={colors.textSecondary}
-          >
-            BATAL
-          </Button>
-        )}
       </ScrollView>
+
+      {/* ── DOCKED BOTTOM ACTIONS (Aman Navigasi Android) ── */}
+      <View
+        style={[
+          styles.dockedFooter,
+          {
+            paddingBottom:
+              Platform.OS === "android"
+                ? Math.max(insets.bottom, 16) + 10
+                : Math.max(insets.bottom, 14),
+          },
+        ]}
+      >
+        {existingProduct && (
+          <TouchableOpacity
+            style={styles.dockedCancelBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.dockedCancelBtnText}>Batal</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={[
+            styles.dockedSaveBtn,
+            !existingProduct && { flex: 1 },
+          ]}
+          onPress={handleSave}
+          activeOpacity={0.88}
+        >
+          <MaterialCommunityIcons
+            name={existingProduct ? "content-save-check-outline" : "plus-circle-outline"}
+            size={20}
+            color="#FFFFFF"
+          />
+          <Text style={styles.dockedSaveBtnText}>
+            {existingProduct ? "SIMPAN PERUBAHAN" : "TAMBAH BARANG"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* ── Modal Label Barcode ── */}
       <Modal
@@ -1447,119 +1607,299 @@ const AddProductScreen = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
-    </>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-
-  // Unit header row
-  unitHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  addUnitBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: colors.primaryContainer,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  addUnitBtnText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: "700",
-  },
-
-  // Image
-  imagePicker: {
-    position: "relative",
-    width: "100%",
-    height: 160,
+  // Form Cards
+  formCard: {
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderStyle: "dashed",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  productImage: { width: "100%", height: "100%" },
-  imagePlaceholder: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primaryContainer,
-    gap: 8,
-  },
-  imagePlaceholderText: {
-    fontSize: 14,
-    color: colors.primary,
-    fontWeight: "600",
-  },
-  removeImageBtn: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-  },
-
-  // Barcode row
-  barcodeRow: {
+  cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 14,
     gap: 8,
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    paddingBottom: 10,
   },
-  iconBtn: {
-    width: 52,
-    height: 52,
-    backgroundColor: colors.primary,
+  cardHeaderTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 12,
+    color: "#0F172A",
+    letterSpacing: 0.5,
+  },
+
+  // Photo Uploader
+  photoPreviewCard: {
     borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  photoPreviewImg: {
+    width: "100%",
+    height: 140,
+    resizeMode: "cover",
+  },
+  photoActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+    padding: 10,
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  photoChangeBtn: {
+    flex: 1,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    elevation: 3,
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  photoChangeBtnText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: "#0F172A",
+  },
+  photoDeleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  photoDeleteBtnText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: "#DC2626",
+  },
+  photoUploadDashed: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+    borderStyle: "dashed",
+    backgroundColor: "#F8FAFC",
+  },
+  photoUploadIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  photoUploadTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  photoUploadSub: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#64748B",
   },
 
-  // Inputs
-  input: { marginBottom: 14 },
-  row: { flexDirection: "row", justifyContent: "space-between" },
+  // Form Fields & Groups
+  formGroup: {
+    marginBottom: 14,
+  },
+  formRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  fieldLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#475569",
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  fieldHeaderBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  fieldHint: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#94A3B8",
+    marginTop: 6,
+  },
+  textInputClean: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    color: "#0F172A",
+    minHeight: 46,
+  },
 
+  // Barcode Row
+  barcodeInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  barcodeInputWrap: {
+    flex: 1,
+    position: "relative",
+    justifyContent: "center",
+  },
+  barcodeInput: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    paddingLeft: 14,
+    paddingRight: 36,
+    paddingVertical: 10,
+    fontFamily: fonts.semiBold,
+    fontSize: 13,
+    color: "#0F172A",
+    minHeight: 46,
+  },
+  barcodeClearBtn: {
+    position: "absolute",
+    right: 10,
+    padding: 4,
+  },
+  barcodeScanBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 2,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  barcodeTagBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Add Mini Button
+  addMiniBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  addMiniBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.primary,
+  },
+
+  // Pills
+  pillListWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  unitPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+  },
+  unitPillActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  unitPillText: {
+    fontSize: 12,
+    fontFamily: fonts.semiBold,
+    color: "#475569",
+  },
+  unitPillTextActive: {
+    color: "#FFFFFF",
+    fontFamily: fonts.bold,
+  },
+
+  // Margin preview
   marginPreview: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 14,
+    gap: 10,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
     borderWidth: 1,
   },
+  marginTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 0.3,
+  },
+  marginText: {
+    fontFamily: fonts.extraBold,
+    fontSize: 13,
+    marginTop: 1,
+  },
 
-  // Wholesale Styles
-  wholesaleCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
+  // Wholesale Subcard
+  wholesaleSubCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    padding: 14,
-    marginBottom: 14,
+    padding: 12,
+    marginTop: 4,
   },
   wholesaleHeader: {
     flexDirection: "row",
@@ -1569,20 +1909,22 @@ const styles = StyleSheet.create({
   },
   wholesaleTitle: {
     fontFamily: fonts.bold,
-    fontSize: 13,
+    fontSize: 12,
     color: "#0F172A",
   },
   btnAddWholesale: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#F1F5F9",
+    gap: 3,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   btnAddWholesaleText: {
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.bold,
     fontSize: 11,
     color: "#0F172A",
   },
@@ -1590,21 +1932,26 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 11,
     color: "#64748B",
-    marginBottom: 10,
-    lineHeight: 16,
+    marginBottom: 8,
+    lineHeight: 15,
+  },
+  wholesaleEmptyBox: {
+    paddingVertical: 8,
+    alignItems: "center",
   },
   wholesaleEmptyText: {
-    fontFamily: fonts.regular,
+    fontFamily: fonts.medium,
     fontSize: 11,
     color: "#94A3B8",
     fontStyle: "italic",
-    paddingVertical: 4,
+    textAlign: "center",
   },
   wholesaleList: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFFFFF",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
   },
   wholesaleItemRow: {
     flexDirection: "row",
@@ -1613,7 +1960,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#EDF2F7",
+    borderBottomColor: "#F1F5F9",
   },
   wholesaleMinQty: {
     fontFamily: fonts.semiBold,
@@ -1623,11 +1970,86 @@ const styles = StyleSheet.create({
   wholesalePriceText: {
     fontFamily: fonts.bold,
     fontSize: 12,
-    color: colors.success,
+    color: "#059669",
     marginTop: 1,
   },
   btnDeleteWholesale: {
-    padding: 6,
+    padding: 4,
+  },
+
+  // Stock Note
+  stockNoteBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  stockNoteText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#64748B",
+    lineHeight: 15,
+  },
+
+  // Docked Footer
+  dockedFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    flexDirection: "row",
+    gap: 10,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  dockedCancelBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dockedCancelBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#64748B",
+  },
+  dockedSaveBtn: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 13,
+    elevation: 4,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  dockedSaveBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#FFFFFF",
+    letterSpacing: 0.4,
   },
 
   // Wholesale Modal
@@ -1707,43 +2129,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#FFFFFF",
   },
-  marginText: { fontSize: 13, fontWeight: "600" },
-
-  infoText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  saveButton: { marginTop: 8, paddingVertical: 4 },
-
-  // Unit pills
-  unitPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  unitPillActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryContainer,
-  },
-  unitPillText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.textSecondary,
-  },
-  unitPillTextActive: {
-    color: colors.primary,
-  },
-  unitPillWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
-  },
 
   // Unit Modal (Add / Edit)
   unitModal: {
@@ -1820,6 +2205,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
+    alignItems: "center",
   },
   modalCard: {
     backgroundColor: "#fff",

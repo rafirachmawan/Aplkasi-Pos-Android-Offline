@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "./supabaseClient";
+import { SUPABASE_URL } from "../config/supabaseConfig";
 
 // Semua username disimpan sebagai email internal di Supabase Auth,
 // sehingga pengguna tidak butuh email asli.
@@ -9,20 +10,27 @@ export const toAuthEmail = (username) =>
   `${String(username).trim().toLowerCase()}${EMAIL_DOMAIN}`;
 
 /**
- * Membersihkan data cache lokal toko saat logout atau sebelum mendaftar toko baru
- * agar sesi dan konfigurasi (seperti PIN, menu terkunci, profil) tidak bocor ke akun baru.
+ * Membersihkan data cache lokal toko agar sesi dan konfigurasi tidak bocor
+ * ke akun lain.
+ * - Default (logout): hanya PIN & menu terkunci. Profil nota, nama toko, dan
+ *   pesanan tertahan dipertahankan; semuanya dibersihkan otomatis bila yang
+ *   login berikutnya adalah TOKO LAIN (lihat AuthContext).
+ * - full: bersihkan semua (daftar toko baru / ganti toko).
+ * Outbox transaksi & katalog di SQLite TIDAK pernah dihapus di sini.
  */
-export async function clearStoreLocalSession() {
+export async function clearStoreLocalSession({ full = false } = {}) {
   try {
-    await AsyncStorage.multiRemove([
-      "@TokoKelontong:SecurityPin",
-      "@TokoKelontong:LockedMenus",
-      "@TokoKelontong:StoreProfile",
-      "@TokoKelontong:HeldOrders",
-      "@TokoKelontong:BusinessMode",
-      "storeName",
-      "storeLogo",
-    ]);
+    const keys = ["@TokoKelontong:SecurityPin", "@TokoKelontong:LockedMenus"];
+    if (full) {
+      keys.push(
+        "@TokoKelontong:StoreProfile",
+        "@TokoKelontong:HeldOrders",
+        "@TokoKelontong:BusinessMode",
+        "storeName",
+        "storeLogo",
+      );
+    }
+    await AsyncStorage.multiRemove(keys);
   } catch (err) {
     console.warn("Gagal membersihkan cache lokal sesi toko:", err);
   }
@@ -30,7 +38,7 @@ export async function clearStoreLocalSession() {
 
 // Daftar akun baru: buat auth user, lalu toko + profile (role kasir).
 export async function signUp({ username, password, storeName }) {
-  await clearStoreLocalSession();
+  await clearStoreLocalSession({ full: true });
   const email = toAuthEmail(username);
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
@@ -75,7 +83,32 @@ export async function signIn({ username, password }) {
 
 export async function signOut() {
   await clearStoreLocalSession();
-  return supabase.auth.signOut();
+  let res;
+  try {
+    res = await Promise.race([
+      supabase.auth.signOut(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 8000),
+      ),
+    ]);
+  } catch (e) {
+    res = { error: e };
+  }
+  if (res?.error) {
+    // Offline: sesi di server tidak bisa dicabut, tetapi sesi di HP ini
+    // tetap harus dihapus agar keluar akun benar-benar berlaku.
+    try {
+      const ref = (String(SUPABASE_URL).match(/^https?:\/\/([^./]+)/) || [])[1];
+      if (ref) {
+        const key = `sb-${ref}-auth-token`;
+        await AsyncStorage.multiRemove([key, `${key}-user`, `${key}-code-verifier`]);
+      }
+    } catch (err) {
+      console.warn("Gagal menghapus sesi lokal:", err);
+    }
+    res = await supabase.auth.signOut({ scope: "local" });
+  }
+  return res;
 }
 
 // Profile akun + toko milik user yang sedang login.

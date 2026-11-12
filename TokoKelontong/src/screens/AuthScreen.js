@@ -305,7 +305,7 @@ export default function AuthScreen() {
             <Text style={styles.hint}>
               {mode === "login"
                 ? "1 akun dipakai bersama di seluruh HP kasir toko ini."
-                : "Bisa digunakan offline & online secara otomatis."}
+                : "Pendaftaran & masuk pertama kali membutuhkan internet; setelahnya kasir tetap jalan saat offline."}
             </Text>
           </View>
 
