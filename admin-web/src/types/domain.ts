@@ -30,6 +30,21 @@ export interface KpiSummary {
 export type LicenseType = 'lifetime' | 'trial' | 'subscription'
 export type LicenseStatus = 'active' | 'expired' | 'revoked'
 
+/** Tier langganan toko (SaaS manual). */
+export type Plan = 'free' | 'pro'
+
+export interface SubscriptionRow {
+  storeId: string
+  storeName: string
+  username: string
+  plan: Plan
+  planStartedAt: string | null
+  planExpiresAt: string | null
+  updatedAt: string
+  updatedBy: string
+  daysRemaining: number | null
+}
+
 export interface LicenseRow {
   id: string
   deviceId: string

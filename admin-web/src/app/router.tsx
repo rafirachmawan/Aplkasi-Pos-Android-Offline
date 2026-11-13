@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
 import { ProtectedRoute } from './ProtectedRoute'
@@ -22,9 +22,9 @@ const StoreDetailPage = lazy(() =>
   })),
 )
 
-const LicenseListPage = lazy(() =>
-  import('@/features/licenses/pages/LicenseListPage').then((module) => ({
-    default: module.LicenseListPage,
+const SubscriptionListPage = lazy(() =>
+  import('@/features/subscriptions/pages/SubscriptionListPage').then((module) => ({
+    default: module.SubscriptionListPage,
   })),
 )
 
@@ -59,7 +59,8 @@ export const router = createBrowserRouter([
           { index: true, element: <DashboardPage /> },
           { path: 'toko', element: <StoreListPage /> },
           { path: 'toko/:storeId', element: <StoreDetailPage /> },
-          { path: 'lisensi', element: <LicenseListPage /> },
+          { path: 'langganan', element: <SubscriptionListPage /> },
+          { path: 'lisensi', element: <Navigate to="/langganan" replace /> },
           { path: 'transaksi', element: <TransactionListPage /> },
           { path: 'pengaturan', element: <SettingsPage /> },
           { path: '*', element: <NotFoundPage /> },

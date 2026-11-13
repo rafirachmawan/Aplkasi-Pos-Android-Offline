@@ -17,18 +17,33 @@ export const requireApiToken: RequestHandler = (request, response, next) => {
 }
 
 /**
- * Lapisan pengaman tambahan: service_role punya akses penuh, jadi server ini
- * menolak semua metode tulis kecuali endpoint login yang sudah ditangani
- * sebelum middleware ini.
+ * Endpoint yang boleh menulis data. Semua metode tulis lain tetap ditolak.
+ *
+ * Daftar ini sengaja dibuat sempit: service_role punya akses penuh, jadi
+ * satu path yang salah izinkan bisa berarti perubahan data tak terduga.
+ * Setiap entri wajib diawali `/` dan menunjuk ke router yang sudah
+ * dipasang setelah `requireApiToken`.
  */
+const WRITE_ALLOWLIST: readonly RegExp[] = [
+  // Aktifkan / perpanjang / kembalikan tier langganan toko (migrasi v9).
+  // Pola `/api` opsional supaya tetap cocok bila Express tidak memotong
+  // mount path saat membaca `request.path`.
+  /^(\/api)?\/stores\/[0-9a-fA-F-]{36}\/plan$/,
+]
+
 export const readOnlyGuard: RequestHandler = (request, response, next) => {
   if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
     next()
     return
   }
 
+  if (WRITE_ALLOWLIST.some((pattern) => pattern.test(request.path))) {
+    next()
+    return
+  }
+
   response.status(405).json({
-    error: 'Admin API berjalan dalam mode baca (Opsi B).',
+    error: 'Admin API hanya mengizinkan pembacaan, kecuali pengaturan langganan.',
     code: 'read_only',
   })
 }

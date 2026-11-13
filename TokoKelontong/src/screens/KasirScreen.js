@@ -42,6 +42,8 @@ import {
 import { refreshSyncCounts, syncNow } from "../services/syncService";
 import useSyncStatus from "../hooks/useSyncStatus";
 import { colors, fonts } from "../theme/colors";
+import usePlan from "../hooks/usePlan";
+import { ProLockModal } from "../components/ProLock";
 
 const { width } = Dimensions.get("window");
 const isTablet = width > 600;
@@ -93,7 +95,12 @@ const KasirScreen = ({ navigation }) => {
   const syncStatus = useSyncStatus();
   const offlineQueueCount = syncStatus.unsynced;
   const [syncingOffline, setSyncingOffline] = useState(false);
-  const isFnbMode = state.businessMode === "fnb";
+
+  // Status langganan toko. Mode F&B dan Kasbon hanya aktif pada tier Pro.
+  const plan = usePlan();
+  const isFnbMode = state.businessMode === "fnb" && plan.isPro;
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [lockFeature, setLockFeature] = useState("kasbon");
 
   const [heldOrders, setHeldOrders] = useState([]);
   const [showHeldOrdersModal, setShowHeldOrdersModal] = useState(false);
@@ -274,9 +281,12 @@ const KasirScreen = ({ navigation }) => {
   // ── Helper: Cek Aturan Harga Grosir / Bertingkat ──
   const getCartItemPriceInfo = (item) => {
     const product = allProducts.find((p) => p.id === item.product_id);
-    const rules = (product?.wholesale_rules || item.wholesale_rules || [])
-      .filter((r) => r && r.min_qty && r.price)
-      .sort((a, b) => b.min_qty - a.min_qty); // urutkan dari batas tertinggi
+    // Harga grosir hanya aktif pada tier Pro.
+    const rules = plan.isPro
+      ? (product?.wholesale_rules || item.wholesale_rules || [])
+          .filter((r) => r && r.min_qty && r.price)
+          .sort((a, b) => b.min_qty - a.min_qty)
+      : [];
 
     const qty = item.quantity;
     const applicableRule = rules.find((r) => qty >= r.min_qty);
@@ -1597,6 +1607,11 @@ const KasirScreen = ({ navigation }) => {
                           isActive && styles.paymentMethodPillActive,
                         ]}
                         onPress={() => {
+                          if (m.key === "kasbon" && !plan.isPro) {
+                            setLockFeature("kasbon");
+                            setShowLockModal(true);
+                            return;
+                          }
                           setPaymentMethod(m.key);
                           if (m.key !== "cash" && m.key !== "kasbon") {
                             setCashInput(formatToRpDisplay(grandTotal));
@@ -1616,6 +1631,7 @@ const KasirScreen = ({ navigation }) => {
                           ]}
                         >
                           {m.label}
+                          {m.key === "kasbon" && !plan.isPro ? " (Pro)" : ""}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -2263,6 +2279,13 @@ const KasirScreen = ({ navigation }) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* ── Panel Kunci Fitur (tier Gratis) ── */}
+      <ProLockModal
+        visible={showLockModal}
+        feature={lockFeature}
+        onClose={() => setShowLockModal(false)}
+      />
     </View>
   );
 };

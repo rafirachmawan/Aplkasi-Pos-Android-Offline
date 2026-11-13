@@ -23,6 +23,8 @@ import {
   isBluetoothPrintingSupported,
   printReceiptViaBluetooth,
 } from "../utils/bluetoothPrinter";
+import usePlan from "../hooks/usePlan";
+import { ProLockModal } from "../components/ProLock";
 
 const STORE_PROFILE_KEY = "@TokoKelontong:StoreProfile";
 
@@ -47,6 +49,11 @@ const SettingNotaScreen = ({ navigation }) => {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [btPrinterReady, setBtPrinterReady] = useState(false);
+
+  // Tier langganan toko. Gratis = template nota standar.
+  const plan = usePlan();
+  const isReadOnly = !plan.isPro;
+  const [showLockModal, setShowLockModal] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -78,6 +85,10 @@ const SettingNotaScreen = ({ navigation }) => {
   };
 
   const handleSave = async () => {
+    if (isReadOnly) {
+      setShowLockModal(true);
+      return;
+    }
     setSaving(true);
     try {
       let existing = {};
@@ -177,6 +188,26 @@ const SettingNotaScreen = ({ navigation }) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* ── Banner Mode Gratis (kustomisasi nota Pro) ── */}
+        {isReadOnly && (
+          <TouchableOpacity
+            style={styles.readOnlyBanner}
+            activeOpacity={0.85}
+            onPress={() => setShowLockModal(true)}
+          >
+            <MaterialCommunityIcons
+              name="crown-outline"
+              size={15}
+              color="#92400E"
+            />
+            <Text style={styles.readOnlyBannerText}>
+              Paket Gratis: menggunakan template nota bawaan. Kustomisasi nota,
+              logo, dan pesan footer tersedia di paket Pro.
+            </Text>
+            <Text style={styles.readOnlyBannerAction}>Upgrade</Text>
+          </TouchableOpacity>
+        )}
+
         {/* ── KARTU 1: IDENTITAS TOKO ── */}
         <View style={styles.formCard}>
           <View style={styles.cardHeaderRow}>
@@ -436,6 +467,13 @@ const SettingNotaScreen = ({ navigation }) => {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* ── Panel Kunci Fitur (tier Gratis) ── */}
+      <ProLockModal
+        visible={showLockModal}
+        feature="customNota"
+        onClose={() => setShowLockModal(false)}
+      />
     </View>
   );
 };
@@ -444,6 +482,33 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+
+  // ── Banner Mode Gratis (read-only) ──
+  readOnlyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 12,
+  },
+  readOnlyBannerText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: "#92400E",
+    lineHeight: 16,
+  },
+  readOnlyBannerAction: {
+    fontFamily: fonts.bold,
+    fontSize: 11.5,
+    color: "#92400E",
+    textDecorationLine: "underline",
   },
 
   // ── Form Cards ──

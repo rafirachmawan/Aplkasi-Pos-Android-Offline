@@ -14,6 +14,8 @@ import ProductRepository from "../database/productRepository";
 import TransactionRepository from "../database/transactionRepository";
 import { formatRupiah } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
+import usePlan from "../hooks/usePlan";
+import { ProLockModal } from "../components/ProLock";
 
 const MONTH_NAMES = [
   "Januari",
@@ -69,6 +71,11 @@ const DashboardScreen = ({ navigation }) => {
   const [dateSubTitleText, setDateSubTitleText] = useState("");
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [totalProducts, setTotalProducts] = useState(0);
+
+  // Tier langganan toko. Gratis = ringkasan hari ini saja.
+  const plan = usePlan();
+  const isReadOnly = !plan.isPro;
+  const [showLockModal, setShowLockModal] = useState(false);
 
   const formatYMD = (year, monthIndex, day) => {
     const y = year;
@@ -137,6 +144,10 @@ const DashboardScreen = ({ navigation }) => {
   };
 
   const changeDateByStep = (direction) => {
+    if (isReadOnly) {
+      setShowLockModal(true);
+      return;
+    }
     if (filterMode === "daily") {
       const d = new Date(selectedYear, selectedMonth, selectedDay);
       d.setDate(d.getDate() + direction);
@@ -197,6 +208,26 @@ const DashboardScreen = ({ navigation }) => {
       ]}
       showsVerticalScrollIndicator={false}
     >
+      {/* ── Banner Mode Gratis (ringkasan dasar saja) ── */}
+      {isReadOnly && (
+        <TouchableOpacity
+          style={styles.readOnlyBanner}
+          activeOpacity={0.85}
+          onPress={() => setShowLockModal(true)}
+        >
+          <MaterialCommunityIcons
+            name="crown-outline"
+            size={15}
+            color="#92400E"
+          />
+          <Text style={styles.readOnlyBannerText}>
+            Paket Gratis: ringkasan penjualan hari ini. Analitik tren, produk
+            terlaris, dan filter periode tersedia di paket Pro.
+          </Text>
+          <Text style={styles.readOnlyBannerAction}>Upgrade</Text>
+        </TouchableOpacity>
+      )}
+
       {/* ── Segmented Control Filter Periode (Modern Pill) ── */}
       <View style={styles.segmentedContainer}>
         {[
@@ -207,11 +238,16 @@ const DashboardScreen = ({ navigation }) => {
           const isActive =
             filterMode === item.key &&
             (item.key !== "daily" || isCurrentSelectionToday);
+          const isLocked = isReadOnly && item.key !== "daily";
           return (
             <TouchableOpacity
               key={item.key}
               style={[styles.segmentBtn, isActive && styles.segmentBtnActive]}
               onPress={() => {
+                if (isLocked) {
+                  setShowLockModal(true);
+                  return;
+                }
                 if (item.key === "daily") {
                   handleSetToday();
                 } else {
@@ -220,14 +256,23 @@ const DashboardScreen = ({ navigation }) => {
               }}
               activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.segmentText,
-                  isActive && styles.segmentTextActive,
-                ]}
-              >
-                {item.label}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Text
+                  style={[
+                    styles.segmentText,
+                    isActive && styles.segmentTextActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+                {isLocked && (
+                  <MaterialCommunityIcons
+                    name="lock"
+                    size={11}
+                    color="#94A3B8"
+                  />
+                )}
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -250,7 +295,13 @@ const DashboardScreen = ({ navigation }) => {
 
           <TouchableOpacity
             style={styles.dateNavCenter}
-            onPress={() => setIsPickerVisible(true)}
+            onPress={() => {
+              if (isReadOnly) {
+                setShowLockModal(true);
+                return;
+              }
+              setIsPickerVisible(true);
+            }}
             activeOpacity={0.75}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
@@ -858,6 +909,13 @@ const DashboardScreen = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Panel Kunci Fitur (tier Gratis) ── */}
+      <ProLockModal
+        visible={showLockModal}
+        feature="dashboard"
+        onClose={() => setShowLockModal(false)}
+      />
     </ScrollView>
   );
 };
@@ -869,6 +927,35 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 8,
+  },
+
+  // ── Banner Mode Gratis (read-only) ──
+  readOnlyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 12,
+  },
+  readOnlyBannerText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: "#92400E",
+    lineHeight: 16,
+  },
+  readOnlyBannerAction: {
+    fontFamily: fonts.bold,
+    fontSize: 11.5,
+    color: "#92400E",
+    textDecorationLine: "underline",
   },
 
   // ── Segmented Control Pill ──

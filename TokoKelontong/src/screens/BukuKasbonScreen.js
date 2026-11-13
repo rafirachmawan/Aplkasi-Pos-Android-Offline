@@ -21,6 +21,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import debtRepository from "../database/debtRepository";
 import { formatRupiah } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
+import usePlan from "../hooks/usePlan";
+import { ProLockModal } from "../components/ProLock";
 
 const formatToRp = (raw) => {
   const num = String(raw).replace(/\D/g, "");
@@ -61,6 +63,14 @@ const BukuKasbonScreen = ({ navigation }) => {
   // Modal Detail Riwayat Cicilan
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [detailDebt, setDetailDebt] = useState(null);
+
+  // Panel kunci fitur (tier Gratis). Data tetap terlihat; hanya aksi
+  // tambah/bayar yang dikunci (K-11).
+  const [showLockModal, setShowLockModal] = useState(false);
+
+  // Tier langganan toko. Free = read-only.
+  const plan = usePlan();
+  const isReadOnly = !plan.isPro;
 
   const [storeName, setStoreName] = useState("MarketPos");
 
@@ -409,16 +419,25 @@ const BukuKasbonScreen = ({ navigation }) => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.btnActionPay}
-              onPress={() => openPayModal(item)}
+              style={[styles.btnActionPay, isReadOnly && styles.btnActionLocked]}
+              onPress={() => {
+                // Tier Gratis: pembayaran/cicilan baru dikunci, kartu tetap bisa dibuka.
+                if (isReadOnly) {
+                  setShowLockModal(true);
+                  return;
+                }
+                openPayModal(item);
+              }}
               activeOpacity={0.85}
             >
               <MaterialCommunityIcons
-                name="cash-multiple"
+                name={isReadOnly ? "lock-outline" : "cash-multiple"}
                 size={16}
                 color="#FFFFFF"
               />
-              <Text style={styles.btnActionPayText}>Bayar / Cicil</Text>
+              <Text style={styles.btnActionPayText}>
+                {isReadOnly ? "Bayar (Pro)" : "Bayar / Cicil"}
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -453,6 +472,26 @@ const BukuKasbonScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* ── Banner Mode Gratis (read-only) ── */}
+      {isReadOnly && (
+        <TouchableOpacity
+          style={styles.readOnlyBanner}
+          activeOpacity={0.85}
+          onPress={() => setShowLockModal(true)}
+        >
+          <MaterialCommunityIcons
+            name="crown-outline"
+            size={15}
+            color="#92400E"
+          />
+          <Text style={styles.readOnlyBannerText}>
+            Paket Gratis: data kasbon bisa dilihat, pencatatan & pembayaran
+            baru terkunci.
+          </Text>
+          <Text style={styles.readOnlyBannerAction}>Upgrade</Text>
+        </TouchableOpacity>
+      )}
+
       {/* ── Summary Hero Card (Clean Modern Dark Slate) ── */}
       <View style={styles.heroSummaryCard}>
         <View style={styles.summaryTop}>
@@ -634,8 +673,14 @@ const BukuKasbonScreen = ({ navigation }) => {
         style={[
           styles.fabBtn,
           { bottom: Math.max(insets.bottom, 16) + 16 },
+          isReadOnly && styles.fabBtnLocked,
         ]}
         onPress={() => {
+          // Tier Gratis: data bisa dilihat, pencatatan baru dikunci.
+          if (isReadOnly) {
+            setShowLockModal(true);
+            return;
+          }
           setNewName("");
           setNewPhone("");
           setNewAmount("");
@@ -646,11 +691,13 @@ const BukuKasbonScreen = ({ navigation }) => {
         activeOpacity={0.88}
       >
         <MaterialCommunityIcons
-          name="plus-circle-outline"
+          name={isReadOnly ? "lock-outline" : "plus-circle-outline"}
           size={20}
           color="#FFFFFF"
         />
-        <Text style={styles.fabBtnText}>Catat Kasbon</Text>
+        <Text style={styles.fabBtnText}>
+          {isReadOnly ? "Catat Kasbon (Pro)" : "Catat Kasbon"}
+        </Text>
       </TouchableOpacity>
 
       {/* ── Modal Bayar Kasbon / Cicil ── */}
@@ -1048,6 +1095,13 @@ const BukuKasbonScreen = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Panel Kunci Fitur (tier Gratis) ── */}
+      <ProLockModal
+        visible={showLockModal}
+        feature="kasbon"
+        onClose={() => setShowLockModal(false)}
+      />
     </View>
   );
 };
@@ -1445,6 +1499,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#FFFFFF",
   },
+  // Variasi terkunci (tier Gratis): tetap terlihat, tapi menandai aksi.
+  btnActionLocked: {
+    backgroundColor: "#94A3B8",
+    shadowOpacity: 0.08,
+    elevation: 1,
+  },
   btnActionHistoryPaid: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1520,6 +1580,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#FFFFFF",
     letterSpacing: 0.3,
+  },
+  fabBtnLocked: {
+    backgroundColor: "#64748B",
+    shadowOpacity: 0.12,
+    elevation: 3,
+  },
+
+  // ── Banner Mode Gratis (read-only) ──
+  readOnlyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 12,
+  },
+  readOnlyBannerText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: "#92400E",
+    lineHeight: 16,
+  },
+  readOnlyBannerAction: {
+    fontFamily: fonts.bold,
+    fontSize: 11.5,
+    color: "#92400E",
+    textDecorationLine: "underline",
   },
 
   // ── Modals Common ──

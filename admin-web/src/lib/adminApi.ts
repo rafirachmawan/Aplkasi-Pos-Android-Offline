@@ -30,7 +30,7 @@ export function clearStoredApiToken(): void {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'DELETE'
   body?: unknown
   auth?: boolean
 }

@@ -1,4 +1,4 @@
-import type { DeviceRow, LicenseStatus, LicenseType, StoreStatus } from '@/types/domain'
+import type { DeviceRow, LicenseStatus, LicenseType, Plan, StoreStatus } from '@/types/domain'
 
 export type LabelTone = 'success' | 'warning' | 'danger' | 'neutral' | 'info' | 'accent'
 
@@ -36,6 +36,16 @@ export const DEVICE_STATUS_LABEL: Record<DeviceRow['status'], string> = {
   online: 'Online',
   idle: 'Idle',
   offline: 'Offline',
+}
+
+export const PLAN_LABEL: Record<Plan, string> = {
+  free: 'Gratis',
+  pro: 'Pro',
+}
+
+export const PLAN_TONE: Record<Plan, LabelTone> = {
+  free: 'neutral',
+  pro: 'success',
 }
 
 export const DEVICE_STATUS_TONE: Record<DeviceRow['status'], LabelTone> = {

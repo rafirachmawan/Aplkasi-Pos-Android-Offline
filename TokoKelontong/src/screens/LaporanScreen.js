@@ -34,6 +34,8 @@ import {
   printReceiptViaBluetooth,
 } from "../utils/bluetoothPrinter";
 import { colors, fonts } from "../theme/colors";
+import usePlan from "../hooks/usePlan";
+import { ProLockModal } from "../components/ProLock";
 
 const TABS = ["Harian", "Bulanan", "Riwayat"];
 
@@ -73,6 +75,12 @@ const LaporanScreen = ({ navigation, route }) => {
     count: 0,
     top_products: [],
   });
+
+  // Tier langganan toko. Gratis = hanya laporan hari ini, CSV dikunci.
+  const plan = usePlan();
+  const isReadOnly = !plan.isPro;
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [lockFeature, setLockFeature] = useState("laporanLanjutan");
   const [selectedDate, setSelectedDate] = useState(
     () => parseYmd(dateFilter) || new Date(),
   );
@@ -203,6 +211,11 @@ const LaporanScreen = ({ navigation, route }) => {
   }, [syncStatus.unsynced, syncStatus.offline, loadData]);
 
   const changeDate = (direction) => {
+    if (isReadOnly) {
+      setLockFeature("laporanLanjutan");
+      setShowLockModal(true);
+      return;
+    }
     const d = new Date(selectedDate);
     if (activeTab === "Harian") {
       d.setDate(d.getDate() + direction);
@@ -233,6 +246,11 @@ const LaporanScreen = ({ navigation, route }) => {
   };
 
   const handleExportCSV = async () => {
+    if (isReadOnly) {
+      setLockFeature("laporanLanjutan");
+      setShowLockModal(true);
+      return;
+    }
     try {
       const data = await TransactionRepository.getFullReportForExport();
       if (!data || data.length === 0) {
@@ -536,25 +554,65 @@ const LaporanScreen = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
+      {/* ── Banner Mode Gratis (hanya laporan hari ini) ── */}
+      {isReadOnly && (
+        <TouchableOpacity
+          style={styles.readOnlyBanner}
+          activeOpacity={0.85}
+          onPress={() => {
+            setLockFeature("laporanLanjutan");
+            setShowLockModal(true);
+          }}
+        >
+          <MaterialCommunityIcons
+            name="crown-outline"
+            size={15}
+            color="#92400E"
+          />
+          <Text style={styles.readOnlyBannerText}>
+            Paket Gratis: hanya menampilkan laporan hari ini. Laporan bulanan,
+            riwayat, dan ekspor CSV tersedia di paket Pro.
+          </Text>
+          <Text style={styles.readOnlyBannerAction}>Upgrade</Text>
+        </TouchableOpacity>
+      )}
+
       {/* ── Segmented Control Tab Bar (Modern iOS/Android Pill) ── */}
       <View style={styles.segmentedContainer}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab;
+          const isLocked = isReadOnly && tab !== "Harian";
           return (
             <TouchableOpacity
               key={tab}
               style={[styles.segmentBtn, isActive && styles.segmentBtnActive]}
-              onPress={() => setActiveTab(tab)}
+              onPress={() => {
+                if (isLocked) {
+                  setLockFeature("laporanLanjutan");
+                  setShowLockModal(true);
+                  return;
+                }
+                setActiveTab(tab);
+              }}
               activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.segmentText,
-                  isActive && styles.segmentTextActive,
-                ]}
-              >
-                {tab}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Text
+                  style={[
+                    styles.segmentText,
+                    isActive && styles.segmentTextActive,
+                  ]}
+                >
+                  {tab}
+                </Text>
+                {isLocked && (
+                  <MaterialCommunityIcons
+                    name="lock"
+                    size={11}
+                    color="#94A3B8"
+                  />
+                )}
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -740,16 +798,26 @@ const LaporanScreen = ({ navigation, route }) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.btnActionCSV}
+            style={[
+              styles.btnActionCSV,
+              isReadOnly && { backgroundColor: "#F1F5F9", borderColor: "#CBD5E1" },
+            ]}
             onPress={handleExportCSV}
             activeOpacity={0.8}
           >
             <MaterialCommunityIcons
-              name="file-delimited-outline"
+              name={isReadOnly ? "lock-outline" : "file-delimited-outline"}
               size={15}
-              color="#0284C7"
+              color={isReadOnly ? "#64748B" : "#0284C7"}
             />
-            <Text style={styles.btnActionCSVText}>CSV</Text>
+            <Text
+              style={[
+                styles.btnActionCSVText,
+                isReadOnly && { color: "#64748B" },
+              ]}
+            >
+              {isReadOnly ? "CSV (Pro)" : "CSV"}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1032,6 +1100,13 @@ const LaporanScreen = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Panel Kunci Fitur (tier Gratis) ── */}
+      <ProLockModal
+        visible={showLockModal}
+        feature={lockFeature}
+        onClose={() => setShowLockModal(false)}
+      />
     </View>
   );
 };
@@ -1040,6 +1115,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8FAFC",
+  },
+
+  // ── Banner Mode Gratis (read-only) ──
+  readOnlyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 12,
+  },
+  readOnlyBannerText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: "#92400E",
+    lineHeight: 16,
+  },
+  readOnlyBannerAction: {
+    fontFamily: fonts.bold,
+    fontSize: 11.5,
+    color: "#92400E",
+    textDecorationLine: "underline",
   },
 
   // ── Segmented Control Tab Bar ──

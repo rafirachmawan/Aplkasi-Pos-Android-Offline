@@ -27,11 +27,11 @@ import {
   signOut,
   updateStoreName,
 } from "../services/authService";
-import {
-  getLicenseInfo,
-  activateSerialKey,
-  getDeviceId,
-} from "../services/licenseService";
+import { getDeviceId } from "../services/licenseService";
+import usePlan from "../hooks/usePlan";
+import { openUpgradeChat, ProLockModal } from "../components/ProLock";
+import { SUPPORT_WHATSAPP } from "../config/planConfig";
+import { refreshPlan } from "../services/planService";
 import { getOfflineQueueCount } from "../utils/offlineQueue";
 import { refreshSyncCounts } from "../services/syncService";
 import useSyncStatus from "../hooks/useSyncStatus";
@@ -111,20 +111,23 @@ const PengaturanScreen = ({ navigation }) => {
   const [businessMode, setBusinessModeState] = useState(state.businessMode || "retail");
 
   // License & Device States
-  const [licenseInfo, setLicenseInfo] = useState(null);
-  const [showLicenseModal, setShowLicenseModal] = useState(false);
-  const [serialKeyInput, setSerialKeyInput] = useState("");
-  const [activatingLicense, setActivatingLicense] = useState(false);
+  const [deviceId, setDeviceId] = useState("MPOS-DEV-8888");
 
   // Offline Sync State
   const syncStatus = useSyncStatus();
   const offlineCount = syncStatus.unsynced;
   const [syncingOffline, setSyncingOffline] = useState(false);
 
+  // Status langganan (Gratis/Pro). Dihitung lokal sehingga tetap akurat offline.
+  const plan = usePlan();
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [lockFeature, setLockFeature] = useState("fnb");
+
   useEffect(() => {
     isPinProtected().then(setHasPin);
     getLockedMenus().then(setLockedMenusState);
-    getLicenseInfo().then(setLicenseInfo).catch(() => {});
+    getDeviceId().then(setDeviceId).catch(() => {});
+    void refreshPlan({ force: true });
   }, []);
 
   useFocusEffect(
@@ -437,38 +440,51 @@ const PengaturanScreen = ({ navigation }) => {
   };
 
   const handleSelectBusinessMode = async (mode) => {
+    if (mode === "fnb" && !plan.isPro) {
+      setLockFeature("fnb");
+      setShowLockModal(true);
+      return;
+    }
     setBusinessModeState(mode);
     dispatch({ type: "SET_BUSINESS_MODE", payload: mode });
     await AsyncStorage.setItem("@TokoKelontong:BusinessMode", mode);
   };
 
-  const handleActivateSerialKey = async () => {
-    if (!serialKeyInput.trim()) {
-      Alert.alert("Input Kosong", "Masukkan Serial Key yang Anda dapatkan dari admin/penjual.");
+  const handleUpgradePlan = async () => {
+    if (!SUPPORT_WHATSAPP) {
+      Alert.alert(
+        "Paket Pro",
+        "Nomor WhatsApp pengelola belum diatur. Hubungi pengelola MarketPos untuk mengaktifkan paket Pro.",
+      );
       return;
     }
-    setActivatingLicense(true);
-    try {
-      const res = await activateSerialKey(serialKeyInput.trim());
-      setShowLicenseModal(false);
-      setSerialKeyInput("");
-      const updated = await getLicenseInfo();
-      setLicenseInfo(updated);
-      Alert.alert("✅ Sukses", res.message || "Aplikasi Anda berhasil diaktivasi secara permanen!");
-    } catch (err) {
-      Alert.alert("Aktivasi Gagal", err.message || "Serial Key tidak cocok.");
-    } finally {
-      setActivatingLicense(false);
-    }
+    await openUpgradeChat();
   };
 
-  const handleContactAdminWA = () => {
-    const devId = licenseInfo?.deviceId || "MPOS-DEV";
-    const msg = `Halo Admin MarketPos, saya ingin membeli/mengaktifkan Serial Key lisensi resmi untuk perangkat saya:\n\n*ID Perangkat:* ${devId}\n*Nama Toko:* ${storeNameInput || "MarketPos"}\n\nMohon informasi pembelian dan aktivasi. Terima kasih!`;
-    const url = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-    Linking.openURL(url).catch(() => {
-      Alert.alert("WhatsApp", `Silakan kirim ID Perangkat Anda ke Admin:\n\n${devId}`);
-    });
+  const handleRefreshPlan = async () => {
+    try {
+      const updated = await refreshPlan({ force: true });
+      if (updated.isPro && updated.expiresAt) {
+        Alert.alert(
+          "Langganan Pro Aktif",
+          `Paket Pro aktif sampai ${new Date(updated.expiresAt).toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })} (sisa ${updated.daysRemaining} hari).`,
+        );
+      } else {
+        Alert.alert(
+          "Langganan",
+          "Paket Anda saat ini: Gratis. Hubungi pengelola untuk mengaktifkan paket Pro.",
+        );
+      }
+    } catch (err) {
+      Alert.alert(
+        "Gagal Memeriksa",
+        err?.message || "Tidak dapat memeriksa status langganan ke server.",
+      );
+    }
   };
 
   const handleSyncOfflineInSettings = async () => {
@@ -760,6 +776,40 @@ const PengaturanScreen = ({ navigation }) => {
             <Text style={styles.modeOptionDesc}>
               No. Meja, Dine-In / Take Away, Struk Dapur
             </Text>
+            {!plan.isPro && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 3,
+                  backgroundColor: "#FEF3C7",
+                  borderWidth: 1,
+                  borderColor: "#FDE68A",
+                  borderRadius: 6,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="crown-outline"
+                  size={10}
+                  color="#92400E"
+                />
+                <Text
+                  style={{
+                    fontFamily: fonts.bold,
+                    fontSize: 9,
+                    letterSpacing: 0.5,
+                    color: "#92400E",
+                  }}
+                >
+                  PRO
+                </Text>
+              </View>
+            )}
             {businessMode === "fnb" && (
               <View
                 style={[
@@ -865,64 +915,125 @@ const PengaturanScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* ── Lisensi Perangkat & Aplikasi ── */}
-      <Text style={styles.sectionTitle}>LISENSI PERANGKAT</Text>
+      {/* ── Paket Langganan ── */}
+      <Text style={styles.sectionTitle}>PAKET ANDA</Text>
       <View style={styles.card}>
         <View style={styles.licenseCardHeader}>
           <View
             style={[
               styles.licenseStatusPill,
-              {
-                backgroundColor:
-                  licenseInfo?.status === "lifetime"
-                    ? "#DCFCE7"
-                    : "#FEF3C7",
-              },
+              { backgroundColor: plan.isPro ? "#DCFCE7" : "#F1F5F9" },
             ]}
           >
             <Text
               style={[
                 styles.licenseStatusPillText,
+                { color: plan.isPro ? "#15803D" : "#475569" },
+              ]}
+            >
+              {plan.isPro ? "★ PAKET PRO AKTIF" : "PAKET GRATIS"}
+            </Text>
+          </View>
+
+          {plan.isPro ? (
+            <View
+              style={[
+                styles.licenseStatusPill,
                 {
-                  color:
-                    licenseInfo?.status === "lifetime"
-                      ? "#15803D"
-                      : "#92400E",
+                  backgroundColor:
+                    plan.daysRemaining <= 7 ? "#FEF3C7" : "#EFF6FF",
                 },
               ]}
             >
-              {licenseInfo?.status === "lifetime"
-                ? "✓ LISENSI AKTIF (PERMANEN)"
-                : `TRIAL (Sisa ${licenseInfo?.daysRemaining ?? 14} Hari)`}
-            </Text>
-          </View>
+              <Text
+                style={[
+                  styles.licenseStatusPillText,
+                  { color: plan.daysRemaining <= 7 ? "#92400E" : "#1D4ED8" },
+                ]}
+              >
+                {plan.daysRemaining <= 0
+                  ? "Berakhir hari ini"
+                  : `Sisa ${plan.daysRemaining} hari`}
+              </Text>
+            </View>
+          ) : null}
         </View>
+
+        {plan.isPro ? (
+          <View style={styles.planDatesRow}>
+            <View style={styles.planDateBox}>
+              <Text style={styles.planDateLabel}>Mulai aktif</Text>
+              <Text style={styles.planDateValue}>
+                {plan.startedAt
+                  ? new Date(plan.startedAt).toLocaleDateString("id-ID", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })
+                  : "—"}
+              </Text>
+            </View>
+            <View style={styles.planDateBox}>
+              <Text style={styles.planDateLabel}>Berakhir</Text>
+              <Text
+                style={[
+                  styles.planDateValue,
+                  plan.daysRemaining <= 7 && { color: "#B45309" },
+                ]}
+              >
+                {plan.expiresAt
+                  ? new Date(plan.expiresAt).toLocaleDateString("id-ID", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })
+                  : "—"}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.planFreeHint}>
+            Jualan, struk, dan sinkronisasi tetap berjalan normal. Beberapa
+            fitur manajemen terkunci pada paket Gratis.
+          </Text>
+        )}
 
         <View style={styles.deviceIdBox}>
           <Text style={styles.deviceIdLabel}>ID Perangkat Anda:</Text>
-          <Text style={styles.deviceIdValue}>
-            {licenseInfo?.deviceId || "MPOS-DEV-8888"}
-          </Text>
+          <Text style={styles.deviceIdValue}>{deviceId}</Text>
           <Text style={styles.deviceIdHint}>
-            Berikan ID ini kepada admin/penjual untuk mendapatkan Serial Key aktivasi
+            Sebutkan ID ini saat menghubungi pengelola MarketPos
           </Text>
         </View>
 
         <View style={styles.licenseActionsRow}>
           <TouchableOpacity
             style={styles.licenseBtnOutline}
-            onPress={handleContactAdminWA}
+            onPress={() => void handleRefreshPlan()}
           >
-            <MaterialCommunityIcons name="whatsapp" size={18} color="#15803D" />
-            <Text style={styles.licenseBtnOutlineText}>Hubungi Admin</Text>
+            <MaterialCommunityIcons
+              name="refresh"
+              size={18}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.licenseBtnOutlineText}>Cek Ulang</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.licenseBtnPrimary}
-            onPress={() => setShowLicenseModal(true)}
+            style={[
+              styles.licenseBtnPrimary,
+              plan.isPro && { backgroundColor: "#15803D" },
+            ]}
+            onPress={() => void handleUpgradePlan()}
           >
-            <MaterialCommunityIcons name="key-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.licenseBtnPrimaryText}>Aktivasi Key</Text>
+            <MaterialCommunityIcons
+              name={plan.isPro ? "whatsapp" : "crown-outline"}
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.licenseBtnPrimaryText}>
+              {plan.isPro ? "Perpanjang Pro" : "Upgrade ke Pro"}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1550,76 +1661,6 @@ const PengaturanScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* ── Modal Aktivasi Serial Key ── */}
-      <Modal
-        visible={showLicenseModal}
-        transparent
-        statusBarTranslucent={true}
-        animationType="fade"
-        onRequestClose={() => setShowLicenseModal(false)}
-      >
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.restoreModalCard}>
-            <View style={styles.modalHeaderRow}>
-              <View style={[styles.settingIconWrap, { backgroundColor: "#DCFCE7" }]}>
-                <MaterialCommunityIcons name="key" size={22} color="#16A34A" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.restoreTitle}>Aktivasi Lisensi</Text>
-                <Text style={styles.restoreSub}>
-                  Masukkan Serial Key resmi dari admin/penjual
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowLicenseModal(false)}>
-                <MaterialCommunityIcons name="close-circle" size={22} color="#94A3B8" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={[styles.deviceIdBox, { marginTop: 12 }]}>
-              <Text style={styles.deviceIdLabel}>ID Perangkat Terdaftar:</Text>
-              <Text style={[styles.deviceIdValue, { fontSize: 15 }]}>
-                {licenseInfo?.deviceId || "MPOS-DEV-8888"}
-              </Text>
-            </View>
-
-            <Text style={[styles.pwLabel, { marginTop: 14 }]}>Serial Key Lisensi</Text>
-            <TextInput
-              style={[
-                styles.pwInput,
-                { fontFamily: fonts.bold, letterSpacing: 1.2, fontSize: 13 },
-              ]}
-              value={serialKeyInput}
-              onChangeText={setSerialKeyInput}
-              placeholder="Contoh: MPOS-XXXX-YYYY-ZZZZ-WWWW"
-              placeholderTextColor="#94A3B8"
-              autoCapitalize="characters"
-            />
-
-            <View style={styles.restoreActions}>
-              <TouchableOpacity
-                style={styles.cancelRestoreBtn}
-                onPress={() => setShowLicenseModal(false)}
-              >
-                <Text style={styles.cancelRestoreText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.confirmRestoreBtn,
-                  { backgroundColor: "#16A34A" },
-                  activatingLicense && { opacity: 0.6 },
-                ]}
-                onPress={handleActivateSerialKey}
-                disabled={activatingLicense}
-              >
-                <Text style={styles.confirmRestoreText}>
-                  {activatingLicense ? "Memeriksa..." : "Aktivasi Sekarang"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* ── Pin Modal Handlers ── */}
       <PinModal
         visible={pinFlow !== null}
@@ -1667,6 +1708,13 @@ const PengaturanScreen = ({ navigation }) => {
             Alert.alert("✅ Sukses", "PIN keamanan toko berhasil diaktifkan.");
           }
         }}
+      />
+
+      {/* ── Panel Kunci Fitur (tier Gratis) ── */}
+      <ProLockModal
+        visible={showLockModal}
+        feature={lockFeature}
+        onClose={() => setShowLockModal(false)}
       />
     </ScrollView>
   );
@@ -2303,8 +2351,12 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 
-  // ── Lisensi Perangkat Styles ──
+  // ── Paket Langganan Styles ──
   licenseCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
     paddingHorizontal: 14,
     paddingTop: 14,
   },
@@ -2318,6 +2370,39 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 11,
     letterSpacing: 0.5,
+  },
+  planDatesRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 14,
+    marginTop: 12,
+  },
+  planDateBox: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: 12,
+  },
+  planDateLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#64748B",
+    marginBottom: 3,
+  },
+  planDateValue: {
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+    color: "#0F172A",
+  },
+  planFreeHint: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: "#64748B",
+    lineHeight: 18,
+    paddingHorizontal: 14,
+    marginTop: 10,
   },
   deviceIdBox: {
     marginHorizontal: 14,
@@ -2358,15 +2443,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     borderWidth: 1,
-    borderColor: "#86EFAC",
-    backgroundColor: "#F0FDF4",
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
     paddingVertical: 10,
     borderRadius: 10,
   },
   licenseBtnOutlineText: {
     fontFamily: fonts.bold,
     fontSize: 12,
-    color: "#15803D",
+    color: "#475569",
   },
   licenseBtnPrimary: {
     flex: 1,

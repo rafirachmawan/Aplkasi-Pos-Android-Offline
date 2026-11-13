@@ -28,6 +28,7 @@ import {
 import { getOfflineQueueCount } from "../utils/offlineQueue";
 import { refreshSyncCounts } from "../services/syncService";
 import useSyncStatus from "../hooks/useSyncStatus";
+import usePlan from "../hooks/usePlan";
 
 const { width } = Dimensions.get("window");
 const isTablet = width >= 600;
@@ -51,6 +52,10 @@ const HomeScreen = ({ navigation }) => {
   const syncStatus = useSyncStatus();
   const offlineCount = syncStatus.unsynced;
   const [syncingOffline, setSyncingOffline] = useState(false);
+
+  // Tier langganan toko. Menu Pro TETAP bisa dibuka (K-11: data lama harus
+  // tetap terlihat); badge ini hanya penanda bahwa aksi baru terkunci.
+  const plan = usePlan();
 
   useFocusEffect(
     useCallback(() => {
@@ -149,6 +154,7 @@ const HomeScreen = ({ navigation }) => {
       icon: "book-account-outline",
       iconColor: "#D97706",
       bgColor: "#FFFBEB",
+      proFeature: "kasbon",
     },
     {
       key: "Laporan",
@@ -157,6 +163,7 @@ const HomeScreen = ({ navigation }) => {
       icon: "file-document-outline",
       iconColor: "#059669",
       bgColor: "#ECFDF5",
+      proFeature: "laporanLanjutan",
     },
     {
       key: "Dashboard",
@@ -165,6 +172,7 @@ const HomeScreen = ({ navigation }) => {
       icon: "chart-box-outline",
       iconColor: "#4F46E5",
       bgColor: "#EEF2FF",
+      proFeature: "dashboard",
     },
   ];
 
@@ -177,6 +185,7 @@ const HomeScreen = ({ navigation }) => {
       icon: "receipt-text-outline",
       iconColor: "#475569",
       bgColor: "#F1F5F9",
+      proFeature: "customNota",
     },
     {
       key: "Pengaturan",
@@ -384,6 +393,7 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.gridContainer}>
           {operationalMenus.map((menu) => {
             const isLocked = pinProtected && lockedMenus?.[menu.key];
+            const needsPro = Boolean(menu.proFeature) && !plan.isPro;
             return (
               <TouchableOpacity
                 key={menu.key}
@@ -404,15 +414,27 @@ const HomeScreen = ({ navigation }) => {
                       color={menu.iconColor}
                     />
                   </View>
-                  {isLocked && (
-                    <View style={styles.lockBadge}>
-                      <MaterialCommunityIcons
-                        name="lock"
-                        size={12}
-                        color="#EF4444"
-                      />
-                    </View>
-                  )}
+                  <View style={styles.gridCardBadges}>
+                    {isLocked && (
+                      <View style={styles.lockBadge}>
+                        <MaterialCommunityIcons
+                          name="lock"
+                          size={12}
+                          color="#EF4444"
+                        />
+                      </View>
+                    )}
+                    {needsPro && (
+                      <View style={styles.proBadge}>
+                        <MaterialCommunityIcons
+                          name="crown-outline"
+                          size={10}
+                          color="#92400E"
+                        />
+                        <Text style={styles.proBadgeText}>PRO</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
                 <Text style={styles.gridCardTitle}>{menu.title}</Text>
                 <Text style={styles.gridCardDesc}>{menu.desc}</Text>
@@ -459,6 +481,16 @@ const HomeScreen = ({ navigation }) => {
                   <Text style={styles.settingsRowTitle}>{item.title}</Text>
                   <Text style={styles.settingsRowDesc}>{item.desc}</Text>
                 </View>
+                {item.proFeature && !plan.isPro && (
+                  <View style={styles.proBadge}>
+                    <MaterialCommunityIcons
+                      name="crown-outline"
+                      size={10}
+                      color="#92400E"
+                    />
+                    <Text style={styles.proBadgeText}>PRO</Text>
+                  </View>
+                )}
                 <MaterialCommunityIcons
                   name={isLocked ? "lock" : "chevron-right"}
                   size={20}
@@ -835,6 +867,30 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEE2E2",
     alignItems: "center",
     justifyContent: "center",
+  },
+  gridCardBadges: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  // Badge penanda fitur Pro. Bukan gembok: menu tetap bisa dibuka agar
+  // data yang sudah ada tetap terlihat (K-11).
+  proBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  proBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    letterSpacing: 0.5,
+    color: "#92400E",
   },
   gridCardTitle: {
     fontFamily: fonts.bold,

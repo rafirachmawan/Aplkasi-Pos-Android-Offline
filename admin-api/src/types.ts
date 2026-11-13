@@ -8,6 +8,9 @@ export type StoreStatus = 'active' | 'trial' | 'inactive'
 export type LicenseType = 'lifetime' | 'trial' | 'subscription'
 export type LicenseStatus = 'active' | 'expired' | 'revoked'
 
+/** Tier langganan toko (SaaS manual). Sumber kebenaran: `store_subscriptions`. */
+export type Plan = 'free' | 'pro'
+
 export interface AdminSessionDto {
   name: string
   username: string
@@ -52,6 +55,19 @@ export interface LicenseDto {
   activatedAt: string
   expiresAt: string | null
   notes: string
+}
+
+export interface SubscriptionDto {
+  storeId: string
+  storeName: string
+  username: string
+  plan: Plan
+  planStartedAt: string | null
+  planExpiresAt: string | null
+  updatedAt: string
+  updatedBy: string
+  /** Sisa hari sampai berakhir; null untuk plan 'free' atau tanpa tanggal. */
+  daysRemaining: number | null
 }
 
 export interface ProductDto {
@@ -135,6 +151,16 @@ export interface LicenseRecord {
   expires_at: string | null
   notes: string | null
   created_at: string
+}
+
+/** Baris `public.store_subscriptions` (migrasi v9). */
+export interface SubscriptionRecord {
+  store_id: string
+  plan: string
+  plan_started_at: string | null
+  plan_expires_at: string | null
+  updated_at: string
+  updated_by: string
 }
 
 export interface TransactionRecord {

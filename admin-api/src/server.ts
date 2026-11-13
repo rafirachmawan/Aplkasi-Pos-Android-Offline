@@ -8,6 +8,7 @@ import { devicesRouter } from './routes/devices'
 import { kpiRouter } from './routes/kpi'
 import { licensesRouter } from './routes/licenses'
 import { storesRouter } from './routes/stores'
+import { subscriptionsRouter } from './routes/subscriptions'
 import { transactionsRouter } from './routes/transactions'
 
 const app = express()
@@ -22,7 +23,7 @@ const corsOptions: CorsOptions = {
     }
     callback(new HttpError(403, `Origin ${origin} tidak diizinkan.`))
   },
-  methods: ['GET', 'HEAD', 'OPTIONS'],
+  methods: ['GET', 'HEAD', 'OPTIONS', 'POST', 'DELETE'],
   allowedHeaders: ['Content-Type', 'x-api-token'],
   maxAge: 600,
 }
@@ -34,7 +35,7 @@ app.get('/health', (_request, response) => {
   response.json({
     ok: true,
     service: 'marketpos-admin-api',
-    mode: 'option-b-read-only',
+    mode: 'read-only + langganan',
     now: new Date().toISOString(),
     cacheTtlMs: env.cacheTtlMs,
   })
@@ -43,10 +44,11 @@ app.get('/health', (_request, response) => {
 app.get('/', (_request, response) => {
   response.json({
     service: 'MarketPos Admin API',
-    mode: 'read-only',
+    mode: 'baca + pengaturan langganan',
     docs: 'Lihat admin-api/README.md',
     health: '/health',
     login: 'POST /api/auth/login',
+    subscriptions: 'GET /api/subscriptions',
   })
 })
 
@@ -62,6 +64,8 @@ app.use('/api', storesRouter)
 app.use('/api', transactionsRouter)
 app.use('/api', licensesRouter)
 app.use('/api', devicesRouter)
+// Endpoint tulis langganan: sudah difilter `readOnlyGuard` di atas.
+app.use('/api', subscriptionsRouter)
 
 app.use((_request, response) => {
   response.status(404).json({ error: 'Endpoint tidak ditemukan.' })

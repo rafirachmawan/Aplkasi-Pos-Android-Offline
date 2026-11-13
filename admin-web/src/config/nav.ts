@@ -1,5 +1,5 @@
 import {
-  KeyRound,
+  Crown,
   LayoutDashboard,
   ReceiptText,
   Settings,
@@ -34,7 +34,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Sistem',
     items: [
-      { label: 'Lisensi & Perangkat', to: '/lisensi', icon: KeyRound },
+      { label: 'Langganan', to: '/langganan', icon: Crown },
       { label: 'Pengaturan', to: '/pengaturan', icon: Settings },
     ],
   },

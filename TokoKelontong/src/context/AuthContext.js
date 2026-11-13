@@ -16,6 +16,12 @@ import {
   setLastStoreId,
 } from "../services/sessionStore";
 import { startSyncEngine, stopSyncEngine } from "../services/syncService";
+import {
+  startPlanEngine,
+  stopPlanEngine,
+  refreshPlan,
+  clearPlan,
+} from "../services/planService";
 
 const AuthContext = createContext(null);
 
@@ -85,6 +91,8 @@ export function AuthProvider({ children }) {
         const lastStore = await getLastStoreId();
         if (lastStore && p?.store_id && lastStore !== p.store_id) {
           await clearStoreLocalSession({ full: true });
+          // Cache langganan milik toko lama tidak boleh dipakai toko baru.
+          await clearPlan();
         }
         if (p?.store_id) await setLastStoreId(p.store_id);
         return;
@@ -159,6 +167,8 @@ export function AuthProvider({ children }) {
         setOfflineAuthed(false);
         clearAuthSnapshot();
         clearStoreLocalSession();
+        // Hapus cache langganan milik toko lama. Outbox & katalog tidak disentuh.
+        void clearPlan();
       }
       // Event lain tanpa sesi (mis. INITIAL_SESSION saat offline) diabaikan:
       // status login ditentukan oleh init() di atas.
@@ -175,7 +185,13 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (storeId) {
       startSyncEngine();
-      return () => stopSyncEngine();
+      startPlanEngine();
+      // Segarkan plan begitu toko diketahui (bisa jadi baru diaktifkan Pro).
+      void refreshPlan({ force: true });
+      return () => {
+        stopSyncEngine();
+        stopPlanEngine();
+      };
     }
     return undefined;
   }, [storeId]);

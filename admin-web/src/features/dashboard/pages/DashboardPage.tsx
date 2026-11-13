@@ -1,4 +1,4 @@
-import { Activity, KeyRound, ReceiptText, RefreshCw, Store, Wallet } from 'lucide-react'
+import { Activity, Crown, ReceiptText, RefreshCw, Store, Wallet } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -18,10 +18,10 @@ const QUICK_LINKS = [
     description: 'Lihat profil, produk, dan aktivitas setiap toko.',
   },
   {
-    to: '/lisensi',
-    icon: KeyRound,
-    title: 'Lisensi perangkat',
-    description: 'Pantau masa trial dan perpanjang lisensi.',
+    to: '/langganan',
+    icon: Crown,
+    title: 'Langganan toko',
+    description: 'Atur paket Gratis dan Pro untuk setiap toko.',
   },
   {
     to: '/transaksi',
