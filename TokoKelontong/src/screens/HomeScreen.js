@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
@@ -35,6 +36,7 @@ const { width } = Dimensions.get("window");
 const isTablet = width >= 600;
 
 const HomeScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const { state, dispatch } = useContext(AppContext);
   const { profile } = useAuth();
   const cloudStoreName = profile?.stores?.store_name;
@@ -510,7 +512,17 @@ const HomeScreen = ({ navigation }) => {
       </ScrollView>
 
       {/* ─── Floating Bottom CTA: Buka Kasir POS ─── */}
-      <View style={styles.floatingBottomWrap}>
+      <View
+        style={[
+          styles.floatingBottomWrap,
+          {
+            paddingBottom:
+              Platform.OS === "android"
+                ? Math.max(insets.bottom, 36) + 12
+                : Math.max(insets.bottom, 24),
+          },
+        ]}
+      >
         <TouchableOpacity
           style={styles.mainKasirButton}
           activeOpacity={0.9}
@@ -702,7 +714,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 18,
     paddingTop: 18,
-    paddingBottom: 120,
+    paddingBottom: 155,
     maxWidth: 680,
     width: "100%",
     alignSelf: "center",

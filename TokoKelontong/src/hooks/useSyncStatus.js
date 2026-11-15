@@ -3,6 +3,7 @@ import {
   getSyncState,
   subscribeSync,
   refreshSyncCounts,
+  checkConnectivity,
 } from "../services/syncService";
 
 // Status sinkronisasi (jumlah transaksi belum terkirim, offline, dll.)
@@ -14,7 +15,13 @@ export default function useSyncStatus() {
     const unsubscribe = subscribeSync(setStatus);
     setStatus(getSyncState());
     refreshSyncCounts();
-    return unsubscribe;
+    const interval = setInterval(() => {
+      void checkConnectivity();
+    }, 5000);
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, []);
 
   return status;

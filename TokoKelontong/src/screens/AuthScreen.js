@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Pressable,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
   ActivityIndicator,
@@ -25,10 +26,37 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+  const scrollRef = useRef(null);
   const usernameRef = useRef(null);
   const storeNameRef = useRef(null);
   const passwordRef = useRef(null);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e?.endCoordinates?.height || 280);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const scrollInputIntoView = (yOffset = 140) => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: yOffset, animated: true });
+    }, 120);
+  };
 
   const friendlyError = (e) => {
     const msg = e?.message || "";
@@ -106,24 +134,61 @@ export default function AuthScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          keyboardHeight > 0 && {
+            paddingTop:
+              Platform.OS === "android"
+                ? (StatusBar.currentHeight || 0) + 12
+                : 32,
+            paddingBottom: keyboardHeight + 36,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* ─── Hero Header Modern ─── */}
-        <View style={styles.heroSection}>
-          <View style={styles.heroBadge}>
+        <View
+          style={[
+            styles.heroSection,
+            keyboardHeight > 0 && { marginBottom: 12 },
+          ]}
+        >
+          <View
+            style={[
+              styles.heroBadge,
+              keyboardHeight > 0 && {
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                marginBottom: 8,
+              },
+            ]}
+          >
             <Image
               source={require("../../assets/app-logo.png")}
-              style={styles.heroLogo}
+              style={[
+                styles.heroLogo,
+                keyboardHeight > 0 && { width: 38, height: 34 },
+              ]}
               resizeMode="contain"
             />
           </View>
-          <Text style={styles.heroTitle}>MarketPos</Text>
-          <Text style={styles.heroTagline}>
-            Sistem kasir toko & F&B yang cepat dan siap offline
+          <Text
+            style={[
+              styles.heroTitle,
+              keyboardHeight > 0 && { fontSize: 21 },
+            ]}
+          >
+            MarketPos
           </Text>
+          {keyboardHeight === 0 && (
+            <Text style={styles.heroTagline}>
+              Sistem kasir toko & F&B yang cepat dan siap offline
+            </Text>
+          )}
         </View>
 
         {/* ─── Card Form Terpusat & Bersih ─── */}
@@ -175,6 +240,7 @@ export default function AuthScreen() {
                 autoCorrect={false}
                 editable={!loading}
                 returnKeyType="next"
+                onFocus={() => scrollInputIntoView(60)}
                 onSubmitEditing={() => {
                   if (mode === "register") {
                     storeNameRef.current?.focus();
@@ -202,6 +268,7 @@ export default function AuthScreen() {
                     placeholderTextColor="#94A3B8"
                     editable={!loading}
                     returnKeyType="next"
+                    onFocus={() => scrollInputIntoView(120)}
                     onSubmitEditing={() => passwordRef.current?.focus()}
                   />
                 </Pressable>
@@ -224,6 +291,7 @@ export default function AuthScreen() {
                 secureTextEntry={!showPassword}
                 editable={!loading}
                 returnKeyType="done"
+                onFocus={() => scrollInputIntoView(mode === "register" ? 190 : 120)}
                 onSubmitEditing={handleSubmit}
               />
               <TouchableOpacity

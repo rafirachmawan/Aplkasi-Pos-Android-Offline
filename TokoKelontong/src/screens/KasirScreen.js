@@ -1613,27 +1613,6 @@ const KasirScreen = ({ navigation }) => {
 
                 <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
                   <TouchableOpacity
-                    onPress={handleHoldOrder}
-                    style={styles.modalHeaderActionBtnAmber}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.modalHeaderActionTextAmber}>Tahan</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={clearCart}
-                    style={styles.modalHeaderActionBtnRed}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialCommunityIcons
-                      name="trash-can-outline"
-                      size={16}
-                      color="#EF4444"
-                    />
-                    <Text style={styles.modalHeaderActionTextRed}>Hapus</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
                     onPress={() => setShowCartModal(false)}
                     style={styles.modalCloseBtn}
                   >
@@ -1723,6 +1702,39 @@ const KasirScreen = ({ navigation }) => {
                       </View>
                     </View>
                   ))}
+                </View>
+
+                {/* Baris Aksi Keranjang (Tahan Pesanan & Hapus Semua) — Terpisah Aman dari Tombol Close */}
+                <View style={styles.cartSecondaryActionsRow}>
+                  <TouchableOpacity
+                    onPress={handleHoldOrder}
+                    style={styles.cartSecondaryBtnHold}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons
+                      name="pause-circle-outline"
+                      size={16}
+                      color="#B45309"
+                    />
+                    <Text style={styles.cartSecondaryTextHold}>
+                      Tahan Pesanan
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={clearCart}
+                    style={styles.cartSecondaryBtnClear}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons
+                      name="trash-can-outline"
+                      size={16}
+                      color="#DC2626"
+                    />
+                    <Text style={styles.cartSecondaryTextClear}>
+                      Hapus Semua
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Card Kalkulasi (Subtotal → Diskon → Total Tagihan) */}
@@ -3474,7 +3486,49 @@ const styles = StyleSheet.create({
   },
 
   cartItemListContainer: {
-    marginBottom: 10,
+    marginBottom: 6,
+  },
+  cartSecondaryActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
+  },
+  cartSecondaryBtnHold: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  cartSecondaryTextHold: {
+    fontSize: 12,
+    fontFamily: fonts.bold,
+    color: "#B45309",
+  },
+  cartSecondaryBtnClear: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#FFF1F2",
+    borderWidth: 1,
+    borderColor: "#FECDD3",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  cartSecondaryTextClear: {
+    fontSize: 12,
+    fontFamily: fonts.bold,
+    color: "#DC2626",
   },
   cartItem: {
     flexDirection: "row",

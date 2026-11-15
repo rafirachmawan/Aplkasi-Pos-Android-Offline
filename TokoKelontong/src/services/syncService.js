@@ -1,5 +1,6 @@
 import { AppState } from "react-native";
 import { supabase } from "./supabaseClient";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../config/supabaseConfig";
 import { getActiveStoreId } from "./sessionStore";
 import * as localDb from "../database/localDb";
 import ProductRepository, {
@@ -16,6 +17,8 @@ const SESSION_TIMEOUT_MS = 5000;
 const CATALOG_TIMEOUT_MS = 30000;
 const BACKOFF_MS = [5000, 15000, 60000, 300000];
 const TICK_MS = 45000;
+const CONNECTIVITY_CHECK_MS = 5000;
+const PING_TIMEOUT_MS = 3500;
 const CATALOG_STALE_MS = 10 * 60 * 1000;
 
 const state = {
@@ -56,6 +59,7 @@ export function subscribeSync(fn) {
 }
 
 export async function refreshSyncCounts() {
+  void checkConnectivity();
   try {
     const storeId = await getActiveStoreId();
     if (!storeId) {
@@ -66,6 +70,41 @@ export async function refreshSyncCounts() {
     emit({ pending: counts.pending, needsReview: counts.needsReview });
   } catch {
     // abaikan: tampilan hitungan tidak boleh mengganggu kasir
+  }
+}
+
+let checkingNet = false;
+export async function checkConnectivity() {
+  if (checkingNet) return !state.offline;
+  checkingNet = true;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      method: "GET",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        "Cache-Control": "no-cache",
+      },
+      signal: controller.signal,
+    });
+    const isOnline = res.status >= 200 && res.status < 500;
+    const wasOffline = state.offline;
+    if (state.offline !== !isOnline) {
+      emit({ offline: !isOnline });
+    }
+    if (isOnline && wasOffline && state.unsynced > 0) {
+      kickSync();
+    }
+    return isOnline;
+  } catch {
+    if (!state.offline) {
+      emit({ offline: true });
+    }
+    return false;
+  } finally {
+    clearTimeout(timer);
+    checkingNet = false;
   }
 }
 
@@ -269,6 +308,12 @@ async function runCycle({ manual = false, forceCatalog = false, catalogMaxAgeMs 
   }
   if (!storeId) return result;
 
+  const isOnline = await checkConnectivity();
+  if (!isOnline && !manual) {
+    await refreshSyncCounts();
+    return result;
+  }
+
   emit({ syncing: true });
   try {
     await migrateLegacy(storeId);
@@ -328,18 +373,26 @@ export function kickSync() {
 
 let started = false;
 let timer = null;
+let netTimer = null;
 let appSub = null;
 
 export function startSyncEngine() {
   if (started) return;
   started = true;
+  void checkConnectivity();
   refreshSyncCounts();
   syncNow({ forceCatalog: true }).catch(() => {});
   timer = setInterval(() => {
     syncNow().catch(() => {});
   }, TICK_MS);
+  netTimer = setInterval(() => {
+    void checkConnectivity();
+  }, CONNECTIVITY_CHECK_MS);
   appSub = AppState.addEventListener("change", (s) => {
-    if (s === "active") syncNow({ forceCatalog: true }).catch(() => {});
+    if (s === "active") {
+      void checkConnectivity();
+      syncNow({ forceCatalog: true }).catch(() => {});
+    }
   });
 }
 
@@ -347,6 +400,8 @@ export function stopSyncEngine() {
   started = false;
   if (timer) clearInterval(timer);
   timer = null;
+  if (netTimer) clearInterval(netTimer);
+  netTimer = null;
   if (appSub) appSub.remove();
   appSub = null;
   migratedStores.clear();
