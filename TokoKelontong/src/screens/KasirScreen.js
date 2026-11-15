@@ -87,6 +87,7 @@ const KasirScreen = ({ navigation }) => {
   const [cashInput, setCashInput] = useState("");
   const [discountInput, setDiscountInput] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash"); // 'cash' | 'qris' | 'transfer' | 'debit' | 'kasbon'
+  const [showPaymentDropdown, setShowPaymentDropdown] = useState(false);
   const [paymentNotes, setPaymentNotes] = useState("");
   // Kasbon Customer States
   const [kasbonCustomerName, setKasbonCustomerName] = useState("");
@@ -277,6 +278,72 @@ const KasirScreen = ({ navigation }) => {
       JSON.stringify(newList),
     );
   };
+
+  // Indikator status Online / Offline di header Kasir POS
+  useEffect(() => {
+    const isOff = !!syncStatus.offline;
+    const isSync = !!syncStatus.syncing;
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            if (offlineQueueCount > 0) {
+              navigation.navigate("TransaksiPending");
+            } else {
+              refreshSyncCounts();
+            }
+          }}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderRadius: 20,
+            borderWidth: 1,
+            marginRight: 16,
+            backgroundColor: isOff
+              ? "#FFFBEB"
+              : isSync
+                ? "#FFF7ED"
+                : "#ECFDF5",
+            borderColor: isOff
+              ? "#FDE68A"
+              : isSync
+                ? "#FED7AA"
+                : "#A7F3D0",
+          }}
+        >
+          <View
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: 3.5,
+              backgroundColor: isOff
+                ? "#F59E0B"
+                : isSync
+                  ? colors.primary
+                  : "#10B981",
+            }}
+          />
+          <Text
+            style={{
+              fontFamily: fonts.bold,
+              fontSize: 11,
+              color: isOff
+                ? "#B45309"
+                : isSync
+                  ? colors.primary
+                  : "#047857",
+            }}
+          >
+            {isOff ? "Offline" : isSync ? "Sinkron..." : "Online"}
+          </Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, syncStatus.offline, syncStatus.syncing, offlineQueueCount]);
 
   // Refresh saat screen difokus.
   // Catatan: keranjang TIDAK di-reset saat kehilangan fokus (misal buka
@@ -930,8 +997,11 @@ const KasirScreen = ({ navigation }) => {
 
   // Render POS Grid Item
   const renderProductGrid = ({ item }) => {
-    const lowStock = item.stock_quantity <= item.min_stock_threshold;
-    const isOutOfStock = item.stock_quantity <= 0;
+    const isUnlimitedStock = Number(item.min_stock_threshold) < 0;
+    const lowStock =
+      !isUnlimitedStock &&
+      item.stock_quantity <= (item.min_stock_threshold ?? 5);
+    const isOutOfStock = !isUnlimitedStock && item.stock_quantity <= 0;
 
     const cartItem = cart.find((i) => i.product_id === item.id);
     const qtyInCart = cartItem ? cartItem.quantity : 0;
@@ -956,19 +1026,33 @@ const KasirScreen = ({ navigation }) => {
               />
             ) : (
               <View style={styles.productCardImgPlaceholder}>
-                <MaterialCommunityIcons
-                  name={getPlaceholderIcon(item.category)}
-                  size={48}
-                  color={getCategoryColor(item.category)}
-                  style={{ opacity: 0.35 }}
-                />
+                <Text style={styles.productCardInitialText}>
+                  {(item.product_name || "P").slice(0, 2).toUpperCase()}
+                </Text>
               </View>
             )}
-            {item.category && (
-              <View style={styles.gridCategoryBadge}>
-                <Text style={styles.gridCategoryBadgeText}>{item.category}</Text>
-              </View>
-            )}
+            {/* Badge Stok di Sudut Foto */}
+            <View
+              style={[
+                styles.gridStockFloatingBadge,
+                lowStock && styles.gridStockFloatingBadgeLow,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.gridStockFloatingText,
+                  lowStock && styles.gridStockFloatingTextLow,
+                ]}
+              >
+                {isUnlimitedStock
+                  ? "Tak Terbatas"
+                  : isOutOfStock
+                    ? "Habis"
+                    : lowStock
+                      ? `Sisa ${item.stock_quantity}`
+                      : `Stok ${item.stock_quantity}`}
+              </Text>
+            </View>
             {qtyInCart > 0 && (
               <View style={styles.gridQtyBadge}>
                 <Text style={styles.gridQtyBadgeText}>{qtyInCart}x</Text>
@@ -977,40 +1061,33 @@ const KasirScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.productCardInfo}>
+            {item.category ? (
+              <Text style={styles.productCardCategoryText} numberOfLines={1}>
+                {item.category}
+              </Text>
+            ) : null}
             <Text style={styles.productCardName} numberOfLines={2}>
               {item.product_name}
-            </Text>
-            <Text style={styles.productCardPrice}>
-              {formatRupiah(item.selling_price)}
             </Text>
           </View>
         </TouchableOpacity>
 
         <View style={styles.productCardBottomRow}>
-          <Text
-            style={[
-              styles.productCardStock,
-              { color: lowStock ? colors.error : colors.textSecondary },
-            ]}
-          >
-            {isOutOfStock
-              ? `Stok: ${item.stock_quantity}`
-              : lowStock
-                ? `Sisa ${item.stock_quantity}`
-                : `Stok: ${item.stock_quantity}`}
+          <Text style={styles.productCardPrice} numberOfLines={1}>
+            {formatRupiah(item.selling_price)}
           </Text>
 
           {qtyInCart === 0 ? (
             <TouchableOpacity
               style={styles.cardAddBtn}
               onPress={() => addToCart(item)}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <MaterialCommunityIcons
                 name="plus"
-                size={16}
-                color={colors.primary}
+                size={18}
+                color="#FFFFFF"
               />
             </TouchableOpacity>
           ) : (
@@ -1024,7 +1101,7 @@ const KasirScreen = ({ navigation }) => {
                 <MaterialCommunityIcons
                   name="minus"
                   size={13}
-                  color={colors.error}
+                  color={colors.text}
                 />
               </TouchableOpacity>
               <Text style={styles.qtyTextSmall}>{qtyInCart}</Text>
@@ -1053,25 +1130,20 @@ const KasirScreen = ({ navigation }) => {
       {offlineQueueCount > 0 && !syncStatus.syncing && (
         <View style={styles.offlineBannerKasir}>
           <TouchableOpacity
-            style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}
+            style={{ flex: 1, paddingRight: 10 }}
             onPress={() => navigation.navigate("TransaksiPending")}
             activeOpacity={0.7}
           >
-            <View style={styles.offlineBadgeIcon}>
-              <MaterialCommunityIcons name="cloud-sync-outline" size={22} color="#B45309" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.offlineBannerTitle}>
-                {offlineQueueCount} Transaksi Belum Terkirim
-              </Text>
-              <Text style={styles.offlineBannerSub}>
-                {syncStatus.needsReview > 0
-                  ? `${syncStatus.needsReview} perlu ditinjau • tetap aman di HP`
-                  : syncStatus.offline
-                    ? "Tidak ada internet • tersimpan aman di HP"
-                    : "Tersimpan di HP & akan dikirim otomatis"}
-              </Text>
-            </View>
+            <Text style={styles.offlineBannerTitle}>
+              {offlineQueueCount} Transaksi Belum Terkirim
+            </Text>
+            <Text style={styles.offlineBannerSub}>
+              {syncStatus.needsReview > 0
+                ? `${syncStatus.needsReview} perlu ditinjau • tetap aman di HP`
+                : syncStatus.offline
+                  ? "Tidak ada internet • tersimpan aman di HP"
+                  : "Tersimpan di HP & akan dikirim otomatis"}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.offlineSyncBtnKasir}
@@ -1092,34 +1164,18 @@ const KasirScreen = ({ navigation }) => {
           onPress={() => setShowHeldOrdersModal(true)}
           activeOpacity={0.8}
         >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 10,
-              flex: 1,
-            }}
-          >
-            <View style={styles.heldBadgeIcon}>
-              <MaterialCommunityIcons
-                name="pause-circle"
-                size={22}
-                color="#B45309"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.heldBannerTitle}>
-                {heldOrders.length} Pesanan Sedang Ditahan
-              </Text>
-              <Text style={styles.heldBannerSub}>
-                Ketuk untuk membuka kembali transaksi tertunda
-              </Text>
-            </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heldBannerTitle}>
+              {heldOrders.length} Pesanan Sedang Ditahan
+            </Text>
+            <Text style={styles.heldBannerSub}>
+              Ketuk untuk membuka kembali transaksi tertunda
+            </Text>
           </View>
           <MaterialCommunityIcons
             name="chevron-right"
-            size={22}
-            color="#B45309"
+            size={20}
+            color="#9A3412"
           />
         </TouchableOpacity>
       )}
@@ -1139,16 +1195,9 @@ const KasirScreen = ({ navigation }) => {
               flex: 1,
             }}
           >
-            <View style={styles.tableBadgeIcon}>
-              <MaterialCommunityIcons
-                name="silverware-fork-knife"
-                size={20}
-                color="#FFFFFF"
-              />
-            </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.tableBannerTitle}>
-                {pendingTableOrders.length} Pesanan Meja Menunggu Konfirmasi!
+                {pendingTableOrders.length} Pesanan Meja Menunggu Konfirmasi
               </Text>
               <Text style={styles.tableBannerSub}>
                 Ketuk untuk periksa pesanan, bukti bayar & cetak dapur
@@ -1160,8 +1209,8 @@ const KasirScreen = ({ navigation }) => {
           </View>
           <MaterialCommunityIcons
             name="chevron-right"
-            size={22}
-            color="#D97706"
+            size={20}
+            color={colors.primary}
           />
         </TouchableOpacity>
       )}
@@ -1171,12 +1220,12 @@ const KasirScreen = ({ navigation }) => {
         <MaterialCommunityIcons
           name="magnify"
           size={20}
-          color="#64748B"
+          color="#94A3B8"
           style={{ marginRight: 8 }}
         />
         <TextInput
           style={styles.searchInput}
-          placeholder="Cari nama barang atau barcode..."
+          placeholder="Cari nama produk atau scan barcode..."
           placeholderTextColor="#94A3B8"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -1208,7 +1257,7 @@ const KasirScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* ── Filter Kategori: Simple Horizontal Pills ── */}
+      {/* ── Filter Kategori: Clean Horizontal Pills ── */}
       <View style={styles.categoryContainer}>
         <ScrollView
           horizontal
@@ -1221,27 +1270,18 @@ const KasirScreen = ({ navigation }) => {
               style={[
                 styles.categoryPill,
                 {
-                  backgroundColor: pendingTableOrders.length > 0 ? "#FEF3C7" : "#F8FAFC",
-                  borderColor: pendingTableOrders.length > 0 ? "#F59E0B" : "#CBD5E1",
-                  borderWidth: 1,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
+                  backgroundColor: pendingTableOrders.length > 0 ? "#FFF7ED" : "#FFFFFF",
+                  borderColor: pendingTableOrders.length > 0 ? colors.primary : "#E2E8F0",
                 },
               ]}
               onPress={() => setShowTableOrdersModal(true)}
               activeOpacity={0.7}
             >
-              <MaterialCommunityIcons
-                name="table-chair"
-                size={16}
-                color={pendingTableOrders.length > 0 ? "#D97706" : "#475569"}
-              />
               <Text
                 style={[
                   styles.categoryPillText,
                   {
-                    color: pendingTableOrders.length > 0 ? "#D97706" : "#475569",
+                    color: pendingTableOrders.length > 0 ? colors.primary : "#475569",
                     fontFamily: fonts.bold,
                   },
                 ]}
@@ -1251,7 +1291,7 @@ const KasirScreen = ({ navigation }) => {
               {pendingTableOrders.length > 0 && (
                 <View
                   style={{
-                    backgroundColor: "#D97706",
+                    backgroundColor: colors.primary,
                     borderRadius: 10,
                     paddingHorizontal: 6,
                     paddingVertical: 1,
@@ -1491,25 +1531,13 @@ const KasirScreen = ({ navigation }) => {
           activeOpacity={0.88}
         >
           <View style={styles.dockedBarLeft}>
-            <View
-              style={[
-                styles.dockedCartBadge,
-                cart.length > 0 ? styles.dockedCartBadgeActive : styles.dockedCartBadgeEmpty,
-              ]}
-            >
-              <MaterialCommunityIcons
-                name="cart-outline"
-                size={22}
-                color={cart.length > 0 ? "#FFFFFF" : "#475569"}
-              />
-              {cart.length > 0 && (
-                <View style={styles.dockedCountBubble}>
-                  <Text style={styles.dockedCountText}>
-                    {cart.reduce((s, i) => s + i.quantity, 0)}
-                  </Text>
-                </View>
-              )}
-            </View>
+            {cart.length > 0 && (
+              <View style={styles.dockedCartBadgeActive}>
+                <Text style={styles.dockedCountText}>
+                  {cart.reduce((s, i) => s + i.quantity, 0)}
+                </Text>
+              </View>
+            )}
 
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text
@@ -1531,8 +1559,8 @@ const KasirScreen = ({ navigation }) => {
                 numberOfLines={1}
               >
                 {cart.length === 0
-                  ? "Pilih produk di atas untuk memulai"
-                  : `${cart.length} item • Ketuk untuk bayar`}
+                  ? "Pilih produk di atas untuk memulai transaksi"
+                  : `${cart.length} jenis produk • Ketuk untuk rincian & bayar`}
               </Text>
             </View>
           </View>
@@ -1549,13 +1577,8 @@ const KasirScreen = ({ navigation }) => {
                 cart.length > 0 ? styles.dockedActionTextActive : styles.dockedActionTextEmpty,
               ]}
             >
-              {cart.length === 0 ? "Pilih Menu" : "Bayar"}
+              {cart.length === 0 ? "Pilih Menu" : "Bayar →"}
             </Text>
-            <MaterialCommunityIcons
-              name="arrow-right"
-              size={18}
-              color={cart.length > 0 ? "#FFFFFF" : "#64748B"}
-            />
           </View>
         </TouchableOpacity>
       </View>
@@ -1579,22 +1602,13 @@ const KasirScreen = ({ navigation }) => {
 
               {/* Header */}
               <View style={styles.modalHeaderBottomSheet}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <View style={styles.modalHeaderIconBadge}>
-                    <MaterialCommunityIcons
-                      name="cart-outline"
-                      size={20}
-                      color={colors.primary}
-                    />
-                  </View>
-                  <View>
-                    <Text style={styles.modalTitleBottomSheet}>
-                      Keranjang Belanja
-                    </Text>
-                    <Text style={styles.modalSubBottomSheet}>
-                      {cart.length} macam barang • {cart.reduce((s, i) => s + i.quantity, 0)} item
-                    </Text>
-                  </View>
+                <View>
+                  <Text style={styles.modalTitleBottomSheet}>
+                    Rincian Pesanan
+                  </Text>
+                  <Text style={styles.modalSubBottomSheet}>
+                    {cart.length} jenis barang • {cart.reduce((s, i) => s + i.quantity, 0)} unit
+                  </Text>
                 </View>
 
                 <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
@@ -1603,11 +1617,6 @@ const KasirScreen = ({ navigation }) => {
                     style={styles.modalHeaderActionBtnAmber}
                     activeOpacity={0.8}
                   >
-                    <MaterialCommunityIcons
-                      name="pause-circle-outline"
-                      size={16}
-                      color="#B45309"
-                    />
                     <Text style={styles.modalHeaderActionTextAmber}>Tahan</Text>
                   </TouchableOpacity>
 
@@ -1831,55 +1840,121 @@ const KasirScreen = ({ navigation }) => {
                   </View>
                 )}
 
-                {/* Pilihan Metode Pembayaran (Segmented Pills 2 Baris Rapi) */}
+                {/* Pilihan Metode Pembayaran (Clean Dropdown Selector) */}
                 <Text style={styles.fieldLabelModal}>Metode Pembayaran</Text>
-                <View style={styles.paymentMethodGrid}>
-                  {[
-                    { key: "cash", label: "Tunai", icon: "cash-multiple" },
-                    { key: "qris", label: "QRIS", icon: "qrcode-scan" },
-                    { key: "transfer", label: "Transfer", icon: "bank-transfer" },
-                    { key: "debit", label: "Debit/EDC", icon: "credit-card-outline" },
-                    { key: "kasbon", label: "Kasbon", icon: "book-account-outline" },
-                  ].map((m) => {
-                    const isActive = paymentMethod === m.key;
-                    return (
+                {(() => {
+                  const PAYMENT_OPTIONS = [
+                    { key: "cash", label: "Tunai", desc: "Pembayaran uang tunai di kasir", icon: "cash-multiple" },
+                    { key: "qris", label: "QRIS", desc: "Scan kode QRIS toko", icon: "qrcode-scan" },
+                    { key: "transfer", label: "Transfer Bank", desc: "Transfer antar rekening bank", icon: "bank-transfer" },
+                    { key: "debit", label: "Debit / EDC", desc: "Gesek kartu di mesin EDC", icon: "credit-card-outline" },
+                    { key: "kasbon", label: "Kasbon / Hutang", desc: "Catat ke Buku Kasbon pelanggan", icon: "book-account-outline" },
+                  ];
+                  const activeOption =
+                    PAYMENT_OPTIONS.find((m) => m.key === paymentMethod) || PAYMENT_OPTIONS[0];
+
+                  return (
+                    <View style={styles.paymentDropdownWrapper}>
                       <TouchableOpacity
-                        key={m.key}
                         style={[
-                          styles.paymentMethodPill,
-                          isActive && styles.paymentMethodPillActive,
+                          styles.paymentDropdownTrigger,
+                          showPaymentDropdown && styles.paymentDropdownTriggerOpen,
                         ]}
-                        onPress={() => {
-                          if (m.key === "kasbon" && !plan.isPro) {
-                            setLockFeature("kasbon");
-                            setShowLockModal(true);
-                            return;
-                          }
-                          setPaymentMethod(m.key);
-                          if (m.key !== "cash" && m.key !== "kasbon") {
-                            setCashInput(formatToRpDisplay(grandTotal));
-                          }
-                        }}
-                        activeOpacity={0.8}
+                        onPress={() => setShowPaymentDropdown((prev) => !prev)}
+                        activeOpacity={0.75}
                       >
+                        <View style={styles.paymentDropdownTriggerLeft}>
+                          <View style={styles.paymentDropdownIconBox}>
+                            <MaterialCommunityIcons
+                              name={activeOption.icon}
+                              size={18}
+                              color={colors.primary}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.paymentDropdownSelectedLabel}>
+                              {activeOption.label}
+                            </Text>
+                            <Text style={styles.paymentDropdownSelectedDesc} numberOfLines={1}>
+                              {activeOption.desc}
+                            </Text>
+                          </View>
+                        </View>
                         <MaterialCommunityIcons
-                          name={m.icon}
-                          size={17}
-                          color={isActive ? "#FFFFFF" : "#475569"}
+                          name={showPaymentDropdown ? "chevron-up" : "chevron-down"}
+                          size={22}
+                          color="#64748B"
                         />
-                        <Text
-                          style={[
-                            styles.paymentMethodPillText,
-                            isActive && styles.paymentMethodPillTextActive,
-                          ]}
-                        >
-                          {m.label}
-                          {m.key === "kasbon" && !plan.isPro ? " (Pro)" : ""}
-                        </Text>
                       </TouchableOpacity>
-                    );
-                  })}
-                </View>
+
+                      {showPaymentDropdown && (
+                        <View style={styles.paymentDropdownList}>
+                          {PAYMENT_OPTIONS.map((m, idx) => {
+                            const isActive = paymentMethod === m.key;
+                            const isLockedKasbon = m.key === "kasbon" && !plan.isPro;
+                            return (
+                              <TouchableOpacity
+                                key={m.key}
+                                style={[
+                                  styles.paymentDropdownItem,
+                                  idx === PAYMENT_OPTIONS.length - 1 && { borderBottomWidth: 0 },
+                                  isActive && styles.paymentDropdownItemActive,
+                                ]}
+                                onPress={() => {
+                                  if (isLockedKasbon) {
+                                    setShowPaymentDropdown(false);
+                                    setLockFeature("kasbon");
+                                    setShowLockModal(true);
+                                    return;
+                                  }
+                                  setPaymentMethod(m.key);
+                                  setShowPaymentDropdown(false);
+                                  if (m.key !== "cash" && m.key !== "kasbon") {
+                                    setCashInput(formatToRpDisplay(grandTotal));
+                                  }
+                                }}
+                                activeOpacity={0.7}
+                              >
+                                <View style={styles.paymentDropdownItemLeft}>
+                                  <MaterialCommunityIcons
+                                    name={m.icon}
+                                    size={18}
+                                    color={isActive ? colors.primary : "#64748B"}
+                                  />
+                                  <View style={{ flex: 1 }}>
+                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                      <Text
+                                        style={[
+                                          styles.paymentDropdownItemText,
+                                          isActive && styles.paymentDropdownItemTextActive,
+                                        ]}
+                                      >
+                                        {m.label}
+                                      </Text>
+                                      {isLockedKasbon && (
+                                        <View style={styles.paymentProTag}>
+                                          <Text style={styles.paymentProTagText}>PRO</Text>
+                                        </View>
+                                      )}
+                                    </View>
+                                    <Text style={styles.paymentDropdownItemDesc} numberOfLines={1}>
+                                      {m.desc}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <MaterialCommunityIcons
+                                  name={isActive ? "radiobox-marked" : "radiobox-blank"}
+                                  size={20}
+                                  color={isActive ? colors.primary : "#CBD5E1"}
+                                />
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
 
                 {/* Konten Sesuai Metode Pembayaran */}
                 {paymentMethod === "cash" ? (
@@ -2100,7 +2175,17 @@ const KasirScreen = ({ navigation }) => {
               </ScrollView>
 
               {/* ── Docked Bottom Action Button ── */}
-              <View style={styles.modalFooterDock}>
+              <View
+                style={[
+                  styles.modalFooterDock,
+                  {
+                    paddingBottom:
+                      Platform.OS === "android"
+                        ? Math.max(insets.bottom, 36) + 14
+                        : Math.max(insets.bottom, 20),
+                  },
+                ]}
+              >
                 {(() => {
                   const isCashValid = paymentMethod !== "cash" || cashReceived >= grandTotal;
                   const isKasbonValid =
@@ -2664,7 +2749,7 @@ const KasirScreen = ({ navigation }) => {
                                 {it.name}
                               </Text>
                               {!!it.notes && (
-                                <Text style={styles.orderItemNote}>📝 "{it.notes}"</Text>
+                                <Text style={styles.orderItemNote}>Catatan: "{it.notes}"</Text>
                               )}
                             </View>
                             <Text style={styles.orderItemSubtotal}>
@@ -2678,7 +2763,7 @@ const KasirScreen = ({ navigation }) => {
                       {!!order.notes && (
                         <View style={styles.orderGeneralNoteBox}>
                           <Text style={styles.orderGeneralNoteText}>
-                            💬 Pesan: {order.notes}
+                            Pesan: {order.notes}
                           </Text>
                         </View>
                       )}
@@ -2988,7 +3073,7 @@ const styles = StyleSheet.create({
 
   // Grid Produk
   productGrid: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingTop: 4,
     paddingBottom: 110,
   },
@@ -2996,15 +3081,15 @@ const styles = StyleSheet.create({
     flex: 1,
     margin: 6,
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#F1F5F9",
     maxWidth: isTablet ? "31%" : "48%",
     shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.04,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 1,
   },
   productCardActive: {
@@ -3012,46 +3097,56 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
     elevation: 3,
   },
   productCardImg: {
-    height: 114,
+    height: 118,
     width: "100%",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
   },
   productCardImgPlaceholder: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
   },
-  gridCategoryBadge: {
-    position: "absolute",
-    top: 6,
-    left: 6,
-    backgroundColor: "rgba(15, 23, 42, 0.75)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+  productCardInitialText: {
+    fontFamily: fonts.extraBold,
+    fontSize: 24,
+    color: "#FDBA74",
+    letterSpacing: 1,
   },
-  gridCategoryBadgeText: {
-    fontSize: 9,
+  gridStockFloatingBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  gridStockFloatingBadgeLow: {
+    backgroundColor: "rgba(220, 38, 38, 0.88)",
+  },
+  gridStockFloatingText: {
+    fontSize: 10,
     color: "#FFFFFF",
     fontFamily: fonts.bold,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+  },
+  gridStockFloatingTextLow: {
+    color: "#FFFFFF",
   },
   gridQtyBadge: {
     position: "absolute",
-    top: 6,
-    right: 6,
+    top: 8,
+    right: 8,
     backgroundColor: colors.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: "#FFFFFF",
@@ -3060,7 +3155,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   gridQtyBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     color: "#FFFFFF",
     fontFamily: fonts.bold,
   },
@@ -3068,54 +3163,62 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   productCardInfo: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 2,
+  },
+  productCardCategoryText: {
+    fontSize: 10,
+    fontFamily: fonts.bold,
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 2,
   },
   productCardName: {
     fontSize: 13,
     fontFamily: fonts.semiBold,
     color: colors.text,
-    marginBottom: 4,
-    lineHeight: 17,
-    minHeight: 34,
+    marginBottom: 2,
+    lineHeight: 18,
+    minHeight: 36,
   },
   productCardPrice: {
     fontSize: 14,
     fontFamily: fonts.extraBold,
-    color: colors.primary,
+    color: colors.text,
+    flex: 1,
+    paddingRight: 6,
   },
   productCardBottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingBottom: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
     paddingTop: 4,
-    minHeight: 34,
-  },
-  productCardStock: {
-    fontSize: 11,
-    fontFamily: fonts.medium,
-    color: colors.textSecondary,
+    minHeight: 38,
   },
   cardAddBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#F1F5F9",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
   },
   qtyControl: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 14,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 15,
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: "#FED7AA",
     padding: 2,
   },
   qtyBtnSmall: {
@@ -3126,7 +3229,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#FED7AA",
   },
   qtyBtnSmallPlus: {
     width: 24,
@@ -3152,10 +3255,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   emptyIconBox: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    backgroundColor: "#F1F5F9",
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
@@ -3177,28 +3280,23 @@ const styles = StyleSheet.create({
 
   // Docked Bottom Checkout Bar (Modern POS Standard)
   dockedBottomBar: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.background,
     borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
+    borderTopColor: "#F1F5F9",
     paddingHorizontal: 16,
     paddingTop: 10,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 8,
   },
   dockedBarBtn: {
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    borderRadius: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   dockedBarBtnEmpty: {
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1.5,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
     borderColor: "#E2E8F0",
   },
   dockedBarBtnActive: {
@@ -3206,10 +3304,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primary,
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 5,
   },
   dockedBarLeft: {
     flexDirection: "row",
@@ -3217,44 +3315,27 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1,
   },
-  dockedCartBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  dockedCartBadgeEmpty: {
-    backgroundColor: "#EDF2F7",
-  },
   dockedCartBadgeActive: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-  },
-  dockedCountBubble: {
-    position: "absolute",
-    top: -4,
-    right: -4,
-    backgroundColor: colors.error,
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
+    minWidth: 36,
+    height: 36,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
   },
   dockedCountText: {
     color: "#FFFFFF",
-    fontSize: 10,
-    fontFamily: fonts.bold,
+    fontSize: 14,
+    fontFamily: fonts.extraBold,
   },
   dockedBarTotal: {
     fontFamily: fonts.extraBold,
-    fontSize: 16,
-    letterSpacing: -0.2,
+    fontSize: 17,
+    letterSpacing: -0.3,
   },
   dockedBarTotalMuted: {
-    color: "#1E293B",
+    color: colors.text,
     fontSize: 15,
     fontFamily: fonts.bold,
   },
@@ -3266,36 +3347,35 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   dockedBarSubMuted: {
-    color: "#64748B",
+    color: colors.textSecondary,
     fontFamily: fonts.medium,
   },
   dockedBarSubActive: {
-    color: "rgba(255,255,255,0.75)",
+    color: "rgba(255,255,255,0.85)",
     fontFamily: fonts.medium,
   },
   dockedActionPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
     borderRadius: 12,
   },
   dockedActionPillEmpty: {
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "#F1F5F9",
   },
   dockedActionPillActive: {
-    backgroundColor: "rgba(255,255,255,0.22)",
+    backgroundColor: "#FFFFFF",
   },
   dockedActionText: {
     fontFamily: fonts.bold,
     fontSize: 13,
   },
   dockedActionTextEmpty: {
-    color: "#475569",
+    color: "#64748B",
   },
   dockedActionTextActive: {
-    color: "#FFFFFF",
+    color: colors.primary,
   },
 
   // Modal Keranjang Bottom Sheet
@@ -3556,36 +3636,110 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // Payment Method Grid
-  paymentMethodGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+  // Payment Method Dropdown
+  paymentDropdownWrapper: {
     marginBottom: 14,
   },
-  paymentMethodPill: {
+  paymentDropdownTrigger: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    justifyContent: "space-between",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  paymentMethodPillActive: {
-    backgroundColor: colors.primary,
+  paymentDropdownTriggerOpen: {
     borderColor: colors.primary,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
-  paymentMethodPillText: {
+  paymentDropdownTriggerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    marginRight: 8,
+  },
+  paymentDropdownIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  paymentDropdownSelectedLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+    color: colors.text,
+  },
+  paymentDropdownSelectedDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 1,
+  },
+  paymentDropdownList: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: colors.primary,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    overflow: "hidden",
+  },
+  paymentDropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  paymentDropdownItemActive: {
+    backgroundColor: "#FFF7ED",
+  },
+  paymentDropdownItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    marginRight: 8,
+  },
+  paymentDropdownItemText: {
     fontFamily: fonts.semiBold,
-    fontSize: 12,
+    fontSize: 13,
     color: "#334155",
   },
-  paymentMethodPillTextActive: {
-    color: "#FFFFFF",
+  paymentDropdownItemTextActive: {
     fontFamily: fonts.bold,
+    color: colors.primary,
+  },
+  paymentDropdownItemDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 1,
+  },
+  paymentProTag: {
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 5,
+  },
+  paymentProTagText: {
+    fontFamily: fonts.bold,
+    fontSize: 9.5,
+    color: colors.primary,
+    letterSpacing: 0.3,
   },
 
   // Cash Section

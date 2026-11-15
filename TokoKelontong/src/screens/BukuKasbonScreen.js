@@ -304,11 +304,6 @@ const BukuKasbonScreen = ({ navigation }) => {
               {item.customer_name}
             </Text>
             <View style={styles.phoneRow}>
-              <MaterialCommunityIcons
-                name={item.customer_phone ? "phone-outline" : "phone-off-outline"}
-                size={13}
-                color={item.customer_phone ? "#64748B" : "#94A3B8"}
-              />
               <Text
                 style={[
                   styles.customerPhone,
@@ -381,12 +376,7 @@ const BukuKasbonScreen = ({ navigation }) => {
             </Text>
             {item.due_date ? (
               <View style={styles.dueDateBadge}>
-                <MaterialCommunityIcons
-                  name="calendar-clock-outline"
-                  size={12}
-                  color="#D97706"
-                />
-                <Text style={styles.dueDateText}>{item.due_date}</Text>
+                <Text style={styles.dueDateText}>Jatuh Tempo: {item.due_date}</Text>
               </View>
             ) : null}
           </View>
@@ -395,13 +385,8 @@ const BukuKasbonScreen = ({ navigation }) => {
         {/* Catatan Produk / Kasbon jika ada */}
         {item.notes ? (
           <View style={styles.notesPreviewRow}>
-            <MaterialCommunityIcons
-              name="note-text-outline"
-              size={13}
-              color="#64748B"
-            />
             <Text style={styles.notesPreviewText} numberOfLines={1}>
-              {item.notes}
+              Catatan: {item.notes}
             </Text>
           </View>
         ) : null}
@@ -414,7 +399,6 @@ const BukuKasbonScreen = ({ navigation }) => {
               onPress={() => handleSendReminderWA(item)}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons name="whatsapp" size={16} color="#15803D" />
               <Text style={styles.btnActionWAText}>Ingatkan WA</Text>
             </TouchableOpacity>
 
@@ -430,11 +414,6 @@ const BukuKasbonScreen = ({ navigation }) => {
               }}
               activeOpacity={0.85}
             >
-              <MaterialCommunityIcons
-                name={isReadOnly ? "lock-outline" : "cash-multiple"}
-                size={16}
-                color="#FFFFFF"
-              />
               <Text style={styles.btnActionPayText}>
                 {isReadOnly ? "Bayar (Pro)" : "Bayar / Cicil"}
               </Text>
@@ -446,16 +425,9 @@ const BukuKasbonScreen = ({ navigation }) => {
             onPress={() => openDetail(item)}
             activeOpacity={0.8}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <MaterialCommunityIcons
-                name="check-circle"
-                size={16}
-                color="#059669"
-              />
-              <Text style={styles.btnActionHistoryPaidText}>
-                Lunas Sepenuhnya
-              </Text>
-            </View>
+            <Text style={styles.btnActionHistoryPaidText}>
+              Lunas Sepenuhnya
+            </Text>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
               <Text style={styles.btnActionHistoryPaidSub}>Riwayat Cicilan</Text>
               <MaterialCommunityIcons
@@ -479,11 +451,6 @@ const BukuKasbonScreen = ({ navigation }) => {
           activeOpacity={0.85}
           onPress={() => setShowLockModal(true)}
         >
-          <MaterialCommunityIcons
-            name="crown-outline"
-            size={15}
-            color="#92400E"
-          />
           <Text style={styles.readOnlyBannerText}>
             Paket Gratis: data kasbon bisa dilihat, pencatatan & pembayaran
             baru terkunci.
@@ -492,7 +459,7 @@ const BukuKasbonScreen = ({ navigation }) => {
         </TouchableOpacity>
       )}
 
-      {/* ── Summary Hero Card (Clean Modern Dark Slate) ── */}
+      {/* ── Summary Hero Card (Warm Orange) ── */}
       <View style={styles.heroSummaryCard}>
         <View style={styles.summaryTop}>
           <View style={{ flex: 1 }}>
@@ -504,41 +471,20 @@ const BukuKasbonScreen = ({ navigation }) => {
               {formatRupiah(totalUnpaidDebt)}
             </Text>
           </View>
-          <View style={styles.summaryIconBox}>
-            <MaterialCommunityIcons
-              name="book-account-outline"
-              size={24}
-              color="#F8FAFC"
-            />
-          </View>
         </View>
 
         <View style={styles.summaryDivider} />
 
         <View style={styles.summaryBottomRow}>
           <View style={styles.summaryMiniStat}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <MaterialCommunityIcons
-                name="account-clock-outline"
-                size={14}
-                color="#94A3B8"
-              />
-              <Text style={styles.miniStatLabel}>Pelanggan Berhutang</Text>
-            </View>
+            <Text style={styles.miniStatLabel}>Pelanggan Berhutang</Text>
             <Text style={styles.miniStatVal}>{unpaidCustomerCount} Orang</Text>
           </View>
 
           <View style={styles.summaryMiniDivider} />
 
           <View style={styles.summaryMiniStat}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <MaterialCommunityIcons
-                name="receipt-text-outline"
-                size={14}
-                color="#94A3B8"
-              />
-              <Text style={styles.miniStatLabel}>Total Catatan</Text>
-            </View>
+            <Text style={styles.miniStatLabel}>Total Catatan</Text>
             <Text style={styles.miniStatVal}>{unpaidDebts.length} Nota</Text>
           </View>
         </View>
@@ -690,13 +636,8 @@ const BukuKasbonScreen = ({ navigation }) => {
         }}
         activeOpacity={0.88}
       >
-        <MaterialCommunityIcons
-          name={isReadOnly ? "lock-outline" : "plus-circle-outline"}
-          size={20}
-          color="#FFFFFF"
-        />
         <Text style={styles.fabBtnText}>
-          {isReadOnly ? "Catat Kasbon (Pro)" : "Catat Kasbon"}
+          {isReadOnly ? "Catat Kasbon (Pro)" : "+ Catat Kasbon"}
         </Text>
       </TouchableOpacity>
 
@@ -744,11 +685,6 @@ const BukuKasbonScreen = ({ navigation }) => {
                 }
                 activeOpacity={0.8}
               >
-                <MaterialCommunityIcons
-                  name="lightning-bolt"
-                  size={14}
-                  color="#15803D"
-                />
                 <Text style={styles.quickPayFullText}>Bayar Lunas</Text>
               </TouchableOpacity>
             </View>
@@ -766,9 +702,9 @@ const BukuKasbonScreen = ({ navigation }) => {
             <Text style={styles.inputLabel}>METODE PEMBAYARAN</Text>
             <View style={styles.methodsRow}>
               {[
-                { id: "cash", label: "Tunai", icon: "cash" },
-                { id: "transfer", label: "Transfer", icon: "bank-transfer" },
-                { id: "qris", label: "QRIS", icon: "qrcode" },
+                { id: "cash", label: "Tunai" },
+                { id: "transfer", label: "Transfer" },
+                { id: "qris", label: "QRIS" },
               ].map((m) => {
                 const isSelected = payMethod === m.id;
                 return (
@@ -781,11 +717,6 @@ const BukuKasbonScreen = ({ navigation }) => {
                     onPress={() => setPayMethod(m.id)}
                     activeOpacity={0.75}
                   >
-                    <MaterialCommunityIcons
-                      name={m.icon}
-                      size={16}
-                      color={isSelected ? "#FFFFFF" : "#64748B"}
-                    />
                     <Text
                       style={[
                         styles.methodChipText,
@@ -1109,7 +1040,7 @@ const BukuKasbonScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.background,
   },
 
   // ── Hero Summary Card ──
@@ -1117,15 +1048,15 @@ const styles = StyleSheet.create({
     margin: 16,
     marginBottom: 10,
     borderRadius: 20,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "rgba(255, 255, 255, 0.14)",
     padding: 18,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    elevation: 5,
   },
   summaryTop: {
     flexDirection: "row",
@@ -1142,12 +1073,12 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#EF4444",
+    backgroundColor: "#FDE047",
   },
   summaryBadgePillText: {
     fontFamily: fonts.bold,
     fontSize: 10,
-    color: "#94A3B8",
+    color: "rgba(255, 255, 255, 0.85)",
     letterSpacing: 0.6,
   },
   summaryValue: {
@@ -1160,15 +1091,15 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.14)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
   },
   summaryDivider: {
     height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
     marginVertical: 14,
   },
   summaryBottomRow: {
@@ -1181,7 +1112,7 @@ const styles = StyleSheet.create({
   miniStatLabel: {
     fontFamily: fonts.medium,
     fontSize: 11,
-    color: "#94A3B8",
+    color: "rgba(255, 255, 255, 0.82)",
   },
   miniStatVal: {
     fontFamily: fonts.bold,
@@ -1192,7 +1123,7 @@ const styles = StyleSheet.create({
   summaryMiniDivider: {
     width: 1,
     height: 28,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     marginHorizontal: 14,
   },
 
@@ -1237,8 +1168,8 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   tabBtnActive: {
-    backgroundColor: "#0F172A",
-    borderColor: "#0F172A",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   tabBtnText: {
     fontFamily: fonts.semiBold,
@@ -1298,9 +1229,9 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   avatarUnpaid: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#DBEAFE",
+    borderColor: "#FED7AA",
   },
   avatarPaid: {
     backgroundColor: "#ECFDF5",
@@ -1485,13 +1416,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     paddingVertical: 9,
     borderRadius: 10,
     elevation: 2,
-    shadowColor: "#0F172A",
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
   },
   btnActionPayText: {
@@ -1539,7 +1470,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
@@ -1565,11 +1496,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 13,
     borderRadius: 28,
-    shadowColor: "#0F172A",
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -1738,8 +1669,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
   },
   methodChipActive: {
-    backgroundColor: "#0F172A",
-    borderColor: "#0F172A",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   methodChipText: {
     fontFamily: fonts.semiBold,
@@ -1759,15 +1690,15 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#FED7AA",
     alignItems: "center",
   },
   presetChipText: {
     fontFamily: fonts.bold,
     fontSize: 11,
-    color: "#475569",
+    color: colors.primary,
   },
   modalActions: {
     flexDirection: "row",
@@ -1792,7 +1723,7 @@ const styles = StyleSheet.create({
     flex: 1.5,
     paddingVertical: 11,
     borderRadius: 10,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },

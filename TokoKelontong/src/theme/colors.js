@@ -1,19 +1,23 @@
 export const colors = {
-  primary: '#0F172A', // Dark Slate (Utama)
-  primaryContainer: '#E2E8F0', // Light Slate (Background ikon/badge)
-  secondary: '#334155', // Slate menengah
-  background: '#F8FAFC',
-  surface: '#FFFFFF',
-  error: '#EF4444',
-  warning: '#F59E0B',
-  text: '#0F172A',
-  textSecondary: '#64748B',
-  border: '#E2E8F0',
-  // ─ Clean Monochrome Tokens ─
-  iconBg: '#F1F5F9',     // Background unified untuk semua ikon
-  iconColor: '#334155',  // Warna unified untuk semua ikon
-  success: '#10B981',    // Semantik: sukses/positif
-  cardBorder: 'rgba(0,0,0,0.06)', // Border tipis card
+  primary: '#EA580C',          // Warm Vibrant Orange (Utama, selaras logo)
+  primaryBright: '#F97316',    // Bright Orange (Hover/Highlight/Accent)
+  primaryDark: '#C2410C',      // Deep Orange (Pressed/Kontras)
+  primaryContainer: '#FFF7ED', // Warm Peach lembut (Background badge/chip/ikon)
+  primaryBorder: '#FED7AA',    // Border oranye lembut
+  secondary: '#1E293B',        // Deep Logo Navy (Teks sekunder tegas / elemen kontras)
+  background: '#FFFDFB',       // Clean Warm White (Nyaman di mata seharian)
+  surface: '#FFFFFF',          // Putih bersih untuk kartu
+  surfaceMuted: '#F8FAFC',     // Abu sangat muda untuk input/section
+  error: '#DC2626',
+  warning: '#D97706',
+  text: '#0F172A',             // Deep Navy untuk keterbacaan tajam
+  textSecondary: '#64748B',    // Slate untuk label pendukung
+  border: '#E2E8F0',           // Garis pemisah bersih
+  // ─ Clean Modern Tokens ─
+  iconBg: '#FFF7ED',           // Background hangat untuk ikon
+  iconColor: '#EA580C',        // Warna utama ikon
+  success: '#10B981',          // Semantik: sukses/positif
+  cardBorder: '#F1F5F9',       // Border tipis card
 };
 
 export const fonts = {

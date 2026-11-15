@@ -16,11 +16,13 @@ export default function usePlan() {
   const [status, setStatus] = useState(() => getPlanStatus());
 
   useEffect(() => {
-    const unsubscribe = subscribePlan(setStatus);
+    const unsubscribe = subscribePlan(() => {
+      setStatus(getPlanStatus());
+    });
     setStatus(getPlanStatus());
 
-    // Tarik plan dari server bila perlu (sudah di-throttle di service).
-    void refreshPlan();
+    // Tarik plan terbaru dari server setiap layar dibuka.
+    void refreshPlan({ force: true });
 
     const timer = setInterval(() => {
       setStatus(getPlanStatus());

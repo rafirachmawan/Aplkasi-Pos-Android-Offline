@@ -70,12 +70,8 @@ function ProLockCard({ feature, plan }) {
 
   return (
     <View style={styles.card}>
-      <View style={styles.iconWrap}>
-        <MaterialCommunityIcons
-          name="crown-outline"
-          size={26}
-          color={colors.warning}
-        />
+      <View style={styles.proPill}>
+        <Text style={styles.proPillText}>FITUR PRO</Text>
       </View>
 
       <Text style={styles.title}>{meta.title}</Text>
@@ -83,11 +79,6 @@ function ProLockCard({ feature, plan }) {
 
       {plan.expired ? (
         <View style={styles.expiredTag}>
-          <MaterialCommunityIcons
-            name="clock-alert-outline"
-            size={13}
-            color="#92400E"
-          />
           <Text style={styles.expiredText}>
             Masa aktif Pro Anda sudah berakhir
           </Text>
@@ -100,13 +91,8 @@ function ProLockCard({ feature, plan }) {
         activeOpacity={0.85}
         disabled={!SUPPORT_WHATSAPP}
       >
-        <MaterialCommunityIcons
-          name="whatsapp"
-          size={17}
-          color="#FFFFFF"
-        />
         <Text style={styles.upgradeText}>
-          {SUPPORT_WHATSAPP ? "Upgrade ke Pro" : "Hubungi pengelola"}
+          {SUPPORT_WHATSAPP ? "Upgrade ke Pro via WhatsApp" : "Hubungi pengelola"}
         </Text>
       </TouchableOpacity>
 
@@ -199,14 +185,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     alignItems: "center",
   },
-  iconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#FEF3C7",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
+  proPill: {
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  proPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: colors.primary,
   },
   title: {
     fontFamily: fonts.bold,
@@ -243,15 +235,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#15803D",
+    backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 13,
     paddingHorizontal: 22,
     marginTop: 20,
     alignSelf: "stretch",
     ...Platform.select({
-      android: { elevation: 1 },
-      ios: { shadowColor: "#15803D", shadowOpacity: 0.2, shadowRadius: 6 },
+      android: { elevation: 2 },
+      ios: { shadowColor: colors.primary, shadowOpacity: 0.2, shadowRadius: 6 },
     }),
   },
   upgradeText: {

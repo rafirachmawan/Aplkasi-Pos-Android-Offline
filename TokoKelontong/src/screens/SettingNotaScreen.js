@@ -27,18 +27,21 @@ import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
 
 const STORE_PROFILE_KEY = "@TokoKelontong:StoreProfile";
+const getCustomPresetsKey = (storeId) =>
+  `@TokoKelontong:FooterPresets:${storeId || "default"}`;
 
-const FOOTER_PRESETS = [
+const DEFAULT_FOOTER_PRESETS = [
   "Terima kasih telah berbelanja!",
   "Barang yang dibeli tidak dapat ditukar",
-  "Terima kasih atas kunjungan Anda 🙏",
+  "Terima kasih atas kunjungan Anda",
   "Selamat Berbelanja Kembali!",
 ];
 
 const SettingNotaScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { dispatch } = useContext(AppContext);
-  const { refreshProfile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
+  const activeStoreId = profile?.store_id || profile?.stores?.id || "default";
 
   const [storeName, setStoreName] = useState("");
   const [storeAddress, setStoreAddress] = useState("");
@@ -46,6 +49,10 @@ const SettingNotaScreen = ({ navigation }) => {
   const [footerMessage, setFooterMessage] = useState(
     "Terima kasih telah berbelanja!",
   );
+  const [customPresets, setCustomPresets] = useState([]);
+  const [showPresetDropdown, setShowPresetDropdown] = useState(false);
+  const [showAddPresetInput, setShowAddPresetInput] = useState(false);
+  const [newPresetText, setNewPresetText] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [btPrinterReady, setBtPrinterReady] = useState(false);
@@ -63,6 +70,86 @@ const SettingNotaScreen = ({ navigation }) => {
         .catch(() => setBtPrinterReady(false));
     }
   }, []);
+
+  useEffect(() => {
+    loadCustomPresets(activeStoreId);
+  }, [activeStoreId]);
+
+  const loadCustomPresets = async (storeId) => {
+    try {
+      const raw = await AsyncStorage.getItem(getCustomPresetsKey(storeId));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setCustomPresets(parsed);
+          return;
+        }
+      }
+      setCustomPresets([]);
+    } catch (e) {
+      console.warn("Gagal memuat pilihan cepat toko:", e);
+      setCustomPresets([]);
+    }
+  };
+
+  const handleAddCustomPreset = async () => {
+    const trimmed = newPresetText.trim();
+    if (!trimmed) {
+      Alert.alert("Perhatian", "Tulis teks pilihan cepat terlebih dahulu.");
+      return;
+    }
+    const allExisting = [...DEFAULT_FOOTER_PRESETS, ...customPresets];
+    if (allExisting.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+      setFooterMessage(trimmed);
+      setNewPresetText("");
+      setShowAddPresetInput(false);
+      setShowPresetDropdown(false);
+      return;
+    }
+    try {
+      const updated = [...customPresets, trimmed];
+      setCustomPresets(updated);
+      await AsyncStorage.setItem(
+        getCustomPresetsKey(activeStoreId),
+        JSON.stringify(updated),
+      );
+      setFooterMessage(trimmed);
+      setNewPresetText("");
+      setShowAddPresetInput(false);
+      setShowPresetDropdown(false);
+    } catch (e) {
+      Alert.alert("Gagal", "Tidak dapat menyimpan pilihan cepat baru.");
+    }
+  };
+
+  const handleDeleteCustomPreset = (presetToDelete) => {
+    Alert.alert(
+      "Hapus Pilihan Cepat",
+      `Hapus "${presetToDelete}" dari daftar pilihan toko ini?`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const updated = customPresets.filter((p) => p !== presetToDelete);
+              setCustomPresets(updated);
+              await AsyncStorage.setItem(
+                getCustomPresetsKey(activeStoreId),
+                JSON.stringify(updated),
+              );
+              if (footerMessage === presetToDelete) {
+                setFooterMessage(DEFAULT_FOOTER_PRESETS[0]);
+              }
+            } catch (e) {
+              console.warn("Gagal menghapus pilihan cepat:", e);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const loadSettings = async () => {
     try {
@@ -195,11 +282,6 @@ const SettingNotaScreen = ({ navigation }) => {
             activeOpacity={0.85}
             onPress={() => setShowLockModal(true)}
           >
-            <MaterialCommunityIcons
-              name="crown-outline"
-              size={15}
-              color="#92400E"
-            />
             <Text style={styles.readOnlyBannerText}>
               Paket Gratis: menggunakan template nota bawaan. Kustomisasi nota,
               logo, dan pesan footer tersedia di paket Pro.
@@ -211,11 +293,6 @@ const SettingNotaScreen = ({ navigation }) => {
         {/* ── KARTU 1: IDENTITAS TOKO ── */}
         <View style={styles.formCard}>
           <View style={styles.cardHeaderRow}>
-            <MaterialCommunityIcons
-              name="store-outline"
-              size={18}
-              color={colors.primary}
-            />
             <Text style={styles.cardHeaderTitle}>IDENTITAS TOKO DI STRUK</Text>
           </View>
 
@@ -261,11 +338,6 @@ const SettingNotaScreen = ({ navigation }) => {
         {/* ── KARTU 2: FORMAT PESAN STRUK ── */}
         <View style={styles.formCard}>
           <View style={styles.cardHeaderRow}>
-            <MaterialCommunityIcons
-              name="message-text-outline"
-              size={18}
-              color={colors.primary}
-            />
             <Text style={styles.cardHeaderTitle}>PESAN PENUTUP STRUK</Text>
           </View>
 
@@ -280,37 +352,133 @@ const SettingNotaScreen = ({ navigation }) => {
             />
           </View>
 
-          {/* Preset Cepat Pesan Footer */}
-          <Text style={styles.presetLabel}>PILIHAN CEPAT:</Text>
-          <View style={styles.presetWrap}>
-            {FOOTER_PRESETS.map((preset, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.presetChip,
-                  footerMessage === preset && styles.presetChipActive,
-                ]}
-                onPress={() => setFooterMessage(preset)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.presetChipText,
-                    footerMessage === preset && styles.presetChipTextActive,
-                  ]}
-                >
-                  {preset}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Preset Cepat Pesan Footer (Dropdown + Tambah Pilihan Per Toko) */}
+          <View style={styles.presetHeaderRow}>
+            <Text style={styles.presetLabel}>PILIHAN CEPAT:</Text>
+            <TouchableOpacity
+              style={styles.addPresetBtnMini}
+              onPress={() => {
+                setShowAddPresetInput((prev) => !prev);
+                setShowPresetDropdown(false);
+              }}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.addPresetBtnMiniText}>
+                {showAddPresetInput ? "Batal" : "+ Tambah Pilihan"}
+              </Text>
+            </TouchableOpacity>
           </View>
 
+          {showAddPresetInput && (
+            <View style={styles.addPresetBox}>
+              <TextInput
+                style={styles.addPresetInput}
+                value={newPresetText}
+                onChangeText={setNewPresetText}
+                placeholder="Ketik pilihan cepat baru untuk toko ini..."
+                placeholderTextColor="#94A3B8"
+              />
+              <TouchableOpacity
+                style={styles.addPresetSaveBtn}
+                onPress={handleAddCustomPreset}
+                activeOpacity={0.82}
+              >
+                <Text style={styles.addPresetSaveBtnText}>Simpan</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {(() => {
+            const allPresets = [
+              ...DEFAULT_FOOTER_PRESETS.map((text) => ({ text, isCustom: false })),
+              ...customPresets.map((text) => ({ text, isCustom: true })),
+            ];
+            return (
+              <View style={styles.presetDropdownWrapper}>
+                <TouchableOpacity
+                  style={[
+                    styles.presetDropdownTrigger,
+                    showPresetDropdown && styles.presetDropdownTriggerOpen,
+                  ]}
+                  onPress={() => setShowPresetDropdown((prev) => !prev)}
+                  activeOpacity={0.78}
+                >
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.presetDropdownTriggerLabel} numberOfLines={1}>
+                      {footerMessage.trim() || "Pilih pesan cepat..."}
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons
+                    name={showPresetDropdown ? "chevron-up" : "chevron-down"}
+                    size={22}
+                    color="#64748B"
+                  />
+                </TouchableOpacity>
+
+                {showPresetDropdown && (
+                  <View style={styles.presetDropdownList}>
+                    {allPresets.map((item, idx) => {
+                      const isActive = footerMessage === item.text;
+                      return (
+                        <View
+                          key={`${item.text}-${idx}`}
+                          style={[
+                            styles.presetDropdownItemRow,
+                            idx === allPresets.length - 1 && { borderBottomWidth: 0 },
+                            isActive && styles.presetDropdownItemActive,
+                          ]}
+                        >
+                          <TouchableOpacity
+                            style={styles.presetDropdownSelectArea}
+                            onPress={() => {
+                              setFooterMessage(item.text);
+                              setShowPresetDropdown(false);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <MaterialCommunityIcons
+                              name={isActive ? "radiobox-marked" : "radiobox-blank"}
+                              size={19}
+                              color={isActive ? colors.primary : "#CBD5E1"}
+                            />
+                            <Text
+                              style={[
+                                styles.presetDropdownItemText,
+                                isActive && styles.presetDropdownItemTextActive,
+                              ]}
+                            >
+                              {item.text}
+                            </Text>
+                            {item.isCustom && (
+                              <View style={styles.customPresetBadge}>
+                                <Text style={styles.customPresetBadgeText}>Toko</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+
+                          {item.isCustom && (
+                            <TouchableOpacity
+                              style={styles.deleteCustomPresetBtn}
+                              onPress={() => handleDeleteCustomPreset(item.text)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <MaterialCommunityIcons
+                                name="trash-can-outline"
+                                size={17}
+                                color="#EF4444"
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            );
+          })()}
+
           <View style={styles.infoNoteBox}>
-            <MaterialCommunityIcons
-              name="information-outline"
-              size={16}
-              color="#64748B"
-            />
             <Text style={styles.infoNoteText}>
               Pesan ini akan tercetak otomatis di bagian paling bawah setiap
               struk kasir dan file PDF yang dibagikan.
@@ -321,25 +489,13 @@ const SettingNotaScreen = ({ navigation }) => {
         {/* ── KARTU 3: PRATINJAU STRUK LIVE (TERMAL) ── */}
         <View style={styles.formCard}>
           <View style={styles.cardHeaderRowBetween}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <MaterialCommunityIcons
-                name="receipt-text-outline"
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={styles.cardHeaderTitle}>PRATINJAU STRUK LIVE</Text>
-            </View>
+            <Text style={styles.cardHeaderTitle}>PRATINJAU STRUK LIVE</Text>
 
             <TouchableOpacity
               style={styles.btnTestPrintMini}
               onPress={handleTestPrint}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons
-                name={btPrinterReady ? "bluetooth" : "printer"}
-                size={14}
-                color="#0F172A"
-              />
               <Text style={styles.btnTestPrintMiniText}>Tes Cetak</Text>
             </TouchableOpacity>
           </View>
@@ -439,11 +595,6 @@ const SettingNotaScreen = ({ navigation }) => {
           onPress={handleTestPrint}
           activeOpacity={0.8}
         >
-          <MaterialCommunityIcons
-            name={btPrinterReady ? "bluetooth" : "printer"}
-            size={18}
-            color="#0F172A"
-          />
           <Text style={styles.dockedTestBtnText}>Tes Cetak</Text>
         </TouchableOpacity>
 
@@ -457,11 +608,6 @@ const SettingNotaScreen = ({ navigation }) => {
           disabled={saving}
           activeOpacity={0.88}
         >
-          <MaterialCommunityIcons
-            name={saved ? "check-circle-outline" : "content-save-check-outline"}
-            size={20}
-            color="#FFFFFF"
-          />
           <Text style={styles.dockedSaveBtnText}>
             {saved ? "TERSIMPAN!" : saving ? "MENYIMPAN..." : "SIMPAN PENGATURAN"}
           </Text>
@@ -595,41 +741,140 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
 
-  // ── Presets ──
-  presetLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 10,
-    color: "#64748B",
-    letterSpacing: 0.5,
-    marginBottom: 6,
+  // ── Presets Dropdown & Custom Per-Store ──
+  presetHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
     marginTop: 4,
   },
-  presetWrap: {
+  presetLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+    color: "#64748B",
+    letterSpacing: 0.5,
+  },
+  addPresetBtnMini: {
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  addPresetBtnMiniText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.primary,
+  },
+  addPresetBox: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  addPresetInput: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: "#0F172A",
+  },
+  addPresetSaveBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  addPresetSaveBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#FFFFFF",
+  },
+  presetDropdownWrapper: {
     marginBottom: 12,
   },
-  presetChip: {
+  presetDropdownTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
-  presetChipActive: {
-    backgroundColor: "#0F172A",
-    borderColor: "#0F172A",
+  presetDropdownTriggerOpen: {
+    borderColor: colors.primary,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    backgroundColor: "#FFFFFF",
   },
-  presetChipText: {
+  presetDropdownTriggerLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 13.5,
+    color: "#0F172A",
+  },
+  presetDropdownList: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: colors.primary,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    overflow: "hidden",
+  },
+  presetDropdownItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    paddingRight: 10,
+  },
+  presetDropdownItemActive: {
+    backgroundColor: "#FFF7ED",
+  },
+  presetDropdownSelectArea: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  presetDropdownItemText: {
+    flex: 1,
     fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#475569",
+    fontSize: 13,
+    color: "#334155",
   },
-  presetChipTextActive: {
-    color: "#FFFFFF",
+  presetDropdownItemTextActive: {
     fontFamily: fonts.bold,
+    color: colors.primary,
+  },
+  customPresetBadge: {
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 5,
+  },
+  customPresetBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 9.5,
+    color: colors.primary,
+  },
+  deleteCustomPresetBtn: {
+    padding: 6,
   },
 
   // ── Info Note ──
@@ -783,11 +1028,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     borderRadius: 14,
     paddingVertical: 13,
     elevation: 4,
-    shadowColor: "#0F172A",
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,

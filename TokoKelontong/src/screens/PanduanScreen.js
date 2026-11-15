@@ -10,7 +10,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fonts } from '../theme/colors';
 
-const GuideSection = ({ title, badge, icon, iconBg, iconColor, content }) => {
+const GuideSection = ({ title, badge, content }) => {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -20,9 +20,6 @@ const GuideSection = ({ title, badge, icon, iconBg, iconColor, content }) => {
         style={styles.cardHeader}
         onPress={() => setExpanded(!expanded)}
       >
-        <View style={[styles.iconWrapper, { backgroundColor: iconBg }]}>
-          <MaterialCommunityIcons name={icon} size={22} color={iconColor} />
-        </View>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.cardTitle}>{title}</Text>
           {badge && (
@@ -66,9 +63,6 @@ const PanduanScreen = () => {
         
         {/* Header Title Card */}
         <View style={styles.headerCard}>
-          <View style={styles.headerIconCircle}>
-            <MaterialCommunityIcons name="book-open-page-variant" size={28} color={colors.primary} />
-          </View>
           <View style={styles.headerTextWrap}>
             <Text style={styles.headerTitle}>Buku Panduan Kasir</Text>
             <Text style={styles.headerSubtitle}>
@@ -248,9 +242,8 @@ const PanduanScreen = () => {
 
         {/* Footer Info */}
         <View style={styles.footerWrap}>
-          <MaterialCommunityIcons name="shield-check" size={18} color={colors.primary} />
           <Text style={styles.footerText}>
-            MarketPos - Kasir Android yang tetap jalan tanpa internet
+            MarketPos — Kasir Android yang tetap jalan tanpa internet
           </Text>
         </View>
 

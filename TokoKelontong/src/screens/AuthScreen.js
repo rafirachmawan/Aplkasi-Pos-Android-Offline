@@ -111,7 +111,7 @@ export default function AuthScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* ─── Hero Header Elegan ─── */}
+        {/* ─── Hero Header Modern ─── */}
         <View style={styles.heroSection}>
           <View style={styles.heroBadge}>
             <Image
@@ -122,11 +122,11 @@ export default function AuthScreen() {
           </View>
           <Text style={styles.heroTitle}>MarketPos</Text>
           <Text style={styles.heroTagline}>
-            Point of Sale cerdas & offline-ready untuk usaha Anda
+            Sistem kasir toko & F&B yang cepat dan siap offline
           </Text>
         </View>
 
-        {/* ─── Card Form Terpusat & Responsif ─── */}
+        {/* ─── Card Form Terpusat & Bersih ─── */}
         <View style={styles.cardWrap}>
           <View style={styles.card}>
             {/* Tab Masuk / Daftar */}
@@ -137,13 +137,8 @@ export default function AuthScreen() {
                   setMode("login");
                   setError("");
                 }}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
-                <MaterialCommunityIcons
-                  name="login"
-                  size={16}
-                  color={mode === "login" ? "#FFFFFF" : colors.textSecondary}
-                />
                 <Text style={[styles.tabText, mode === "login" && styles.tabTextActive]}>
                   Masuk
                 </Text>
@@ -155,13 +150,8 @@ export default function AuthScreen() {
                   setMode("register");
                   setError("");
                 }}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
-                <MaterialCommunityIcons
-                  name="store-plus-outline"
-                  size={16}
-                  color={mode === "register" ? "#FFFFFF" : colors.textSecondary}
-                />
                 <Text style={[styles.tabText, mode === "register" && styles.tabTextActive]}>
                   Daftar Toko
                 </Text>
@@ -174,18 +164,12 @@ export default function AuthScreen() {
               style={styles.inputWrap}
               onPress={() => usernameRef.current?.focus()}
             >
-              <MaterialCommunityIcons
-                name="account-outline"
-                size={20}
-                color="#64748B"
-                style={styles.inputIcon}
-              />
               <TextInput
                 ref={usernameRef}
                 style={styles.input}
                 value={username}
                 onChangeText={setUsername}
-                placeholder="misal: rafi_rachmawan"
+                placeholder="Masukkan username toko"
                 placeholderTextColor="#94A3B8"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -204,23 +188,17 @@ export default function AuthScreen() {
             {/* Input Nama Toko (Khusus Mode Daftar) */}
             {mode === "register" && (
               <>
-                <Text style={styles.fieldLabel}>Nama Toko</Text>
+                <Text style={styles.fieldLabel}>Nama Toko / Usaha</Text>
                 <Pressable
                   style={styles.inputWrap}
                   onPress={() => storeNameRef.current?.focus()}
                 >
-                  <MaterialCommunityIcons
-                    name="storefront-outline"
-                    size={20}
-                    color="#64748B"
-                    style={styles.inputIcon}
-                  />
                   <TextInput
                     ref={storeNameRef}
                     style={styles.input}
                     value={storeName}
                     onChangeText={setStoreName}
-                    placeholder="misal: Toko Berkah Jaya"
+                    placeholder="Contoh: Kedai Kopi Nusantara"
                     placeholderTextColor="#94A3B8"
                     editable={!loading}
                     returnKeyType="next"
@@ -236,18 +214,12 @@ export default function AuthScreen() {
               style={styles.inputWrap}
               onPress={() => passwordRef.current?.focus()}
             >
-              <MaterialCommunityIcons
-                name="lock-outline"
-                size={20}
-                color="#64748B"
-                style={styles.inputIcon}
-              />
               <TextInput
                 ref={passwordRef}
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
-                placeholder={mode === "register" ? "Minimal 6 karakter" : "Password akun"}
+                placeholder={mode === "register" ? "Minimal 6 karakter" : "Masukkan password"}
                 placeholderTextColor="#94A3B8"
                 secureTextEntry={!showPassword}
                 editable={!loading}
@@ -270,11 +242,6 @@ export default function AuthScreen() {
             {/* Pesan Error */}
             {error !== "" && (
               <View style={styles.errorBox}>
-                <MaterialCommunityIcons
-                  name="alert-circle-outline"
-                  size={18}
-                  color={colors.error}
-                />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
@@ -289,43 +256,20 @@ export default function AuthScreen() {
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <>
-                  <MaterialCommunityIcons
-                    name={mode === "login" ? "login" : "store-plus-outline"}
-                    size={19}
-                    color="#FFFFFF"
-                  />
-                  <Text style={styles.submitText}>
-                    {mode === "login" ? "Masuk ke Kasir" : "Daftar & Buat Toko"}
-                  </Text>
-                </>
+                <Text style={styles.submitText}>
+                  {mode === "login" ? "Masuk ke Kasir" : "Buat Akun Toko"}
+                </Text>
               )}
             </TouchableOpacity>
 
             <Text style={styles.hint}>
               {mode === "login"
-                ? "1 akun dipakai bersama di seluruh HP kasir toko ini."
-                : "Pendaftaran & masuk pertama kali membutuhkan internet; setelahnya kasir tetap jalan saat offline."}
+                ? "Satu akun toko dapat digunakan bersama di seluruh perangkat kasir Anda."
+                : "Pendaftaran awal memerlukan koneksi internet. Transaksi kasir tetap berjalan penuh saat offline."}
             </Text>
           </View>
 
-          {/* Fitur Highlights Mini */}
-          <View style={styles.miniFeaturesRow}>
-            <View style={styles.miniFeaturePill}>
-              <MaterialCommunityIcons name="cloud-check-outline" size={14} color="#0284C7" />
-              <Text style={styles.miniFeatureText}>Cloud Sync</Text>
-            </View>
-            <View style={styles.miniFeaturePill}>
-              <MaterialCommunityIcons name="wifi-off" size={14} color="#059669" />
-              <Text style={styles.miniFeatureText}>Offline Ready</Text>
-            </View>
-            <View style={styles.miniFeaturePill}>
-              <MaterialCommunityIcons name="printer-outline" size={14} color="#D97706" />
-              <Text style={styles.miniFeatureText}>Bluetooth Thermal</Text>
-            </View>
-          </View>
-
-          <Text style={styles.footer}>MarketPos • Solusi Kasir Modern</Text>
+          <Text style={styles.footer}>MarketPos — Point of Sale</Text>
         </View>
       </ScrollView>
     </ContainerComponent>
@@ -337,34 +281,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  // Background dekorasi atas independen tanpa merusak hit-testing form
   topBackdrop: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: 280,
+    height: 270,
     backgroundColor: colors.primary,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
     overflow: "hidden",
   },
   backdropCircleA: {
     position: "absolute",
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    top: -60,
-    right: -50,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    top: -80,
+    right: -60,
   },
   backdropCircleB: {
     position: "absolute",
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    bottom: -40,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(194,65,12,0.35)",
+    bottom: -50,
     left: -40,
   },
 
@@ -374,7 +317,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingTop:
-      Platform.OS === "android" ? (StatusBar.currentHeight || 0) + 16 : 48,
+      Platform.OS === "android" ? (StatusBar.currentHeight || 0) + 24 : 56,
     paddingBottom: 36,
   },
 
@@ -382,118 +325,119 @@ const styles = StyleSheet.create({
   heroSection: {
     alignItems: "center",
     paddingHorizontal: 24,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   heroBadge: {
-    width: 72,
-    height: 72,
+    width: 76,
+    height: 76,
     borderRadius: 22,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 8,
-    elevation: 4,
+    marginBottom: 12,
+    shadowColor: "#7C2D12",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 5,
   },
   heroLogo: {
-    width: 52,
-    height: 46,
+    width: 54,
+    height: 48,
   },
   heroTitle: {
     fontFamily: fonts.extraBold,
     fontSize: 26,
     color: "#FFFFFF",
-    letterSpacing: 0.4,
+    letterSpacing: -0.3,
   },
   heroTagline: {
     fontFamily: fonts.medium,
-    fontSize: 12,
-    color: "rgba(255,255,255,0.72)",
+    fontSize: 13,
+    color: "rgba(255,255,255,0.88)",
     marginTop: 4,
     textAlign: "center",
-    lineHeight: 18,
-    maxWidth: 320,
+    lineHeight: 19,
+    maxWidth: 300,
   },
 
   // ── Card Form ──
   cardWrap: {
     width: "100%",
-    maxWidth: 440,
+    maxWidth: 420,
     alignSelf: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 22,
-    padding: 20,
+    borderRadius: 24,
+    padding: 22,
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.07)",
+    borderColor: "#F1F5F9",
     shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
     elevation: 4,
   },
   tabRow: {
     flexDirection: "row",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 12,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 14,
     padding: 4,
     gap: 4,
-    marginBottom: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
   },
   tab: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 9,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
   tabActive: {
     backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 2,
   },
   tabText: {
     fontFamily: fonts.semiBold,
     fontSize: 13,
-    color: colors.textSecondary,
+    color: "#9A3412",
   },
   tabTextActive: {
     color: "#FFFFFF",
+    fontFamily: fonts.bold,
   },
 
   fieldLabel: {
     fontFamily: fonts.semiBold,
-    fontSize: 11,
-    textTransform: "uppercase",
-    color: colors.textSecondary,
-    letterSpacing: 0.7,
+    fontSize: 12,
+    color: colors.secondary,
     marginBottom: 6,
   },
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F8FAFC",
-    borderWidth: 1.2,
-    borderColor: "#CBD5E1",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
     borderRadius: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     minHeight: 50,
-    marginBottom: 14,
-  },
-  inputIcon: {
-    marginRight: 8,
+    marginBottom: 16,
   },
   input: {
     flex: 1,
     fontFamily: fonts.medium,
     fontSize: 14,
     color: colors.text,
-    paddingVertical: 10,
+    paddingVertical: 11,
   },
   eyeBtn: {
     padding: 6,
@@ -501,18 +445,15 @@ const styles = StyleSheet.create({
   },
 
   errorBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(239,68,68,0.08)",
+    backgroundColor: "#FEF2F2",
     borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.3)",
+    borderColor: "#FECACA",
     borderRadius: 12,
-    padding: 10,
-    marginBottom: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 16,
   },
   errorText: {
-    flex: 1,
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.error,
@@ -522,64 +463,36 @@ const styles = StyleSheet.create({
   submitBtn: {
     backgroundColor: colors.primary,
     borderRadius: 14,
-    height: 48,
-    flexDirection: "row",
+    height: 50,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: 2,
-    shadowColor: "#0F172A",
+    marginTop: 4,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 3,
   },
   submitText: {
     fontFamily: fonts.bold,
-    fontSize: 14,
+    fontSize: 15,
     color: "#FFFFFF",
     letterSpacing: 0.2,
   },
   hint: {
     fontFamily: fonts.regular,
-    fontSize: 11,
+    fontSize: 12,
     color: colors.textSecondary,
-    textAlign: "center",
-    marginTop: 12,
-    lineHeight: 16,
-  },
-
-  // ── Footer & Fitur Mini ──
-  miniFeaturesRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 18,
-    flexWrap: "wrap",
-    paddingHorizontal: 8,
-  },
-  miniFeaturePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  miniFeatureText: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  footer: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#94A3B8",
     textAlign: "center",
     marginTop: 14,
-    letterSpacing: 0.3,
+    lineHeight: 17,
+  },
+
+  footer: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: "#94A3B8",
+    textAlign: "center",
+    marginTop: 22,
   },
 });

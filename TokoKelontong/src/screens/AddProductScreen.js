@@ -12,6 +12,7 @@ import {
   TextInput as RNTextInput,
   StatusBar,
   Linking,
+  Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -120,6 +121,7 @@ const AddProductScreen = ({ navigation, route }) => {
   const [productName, setProductName] = useState("");
   const [capitalPrice, setCapitalPrice] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
+  const [useStockManagement, setUseStockManagement] = useState(true);
   const [stockQuantity, setStockQuantity] = useState("");
   const [minStock, setMinStock] = useState("5");
   const [imageUri, setImageUri] = useState(null);
@@ -129,6 +131,10 @@ const AddProductScreen = ({ navigation, route }) => {
   const [wsMinQtyInput, setWsMinQtyInput] = useState("");
   const [wsPriceInput, setWsPriceInput] = useState("");
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+
+  // Dropdown Modal states
+  const [showCategoryDropdownModal, setShowCategoryDropdownModal] = useState(false);
+  const [showUnitDropdownModal, setShowUnitDropdownModal] = useState(false);
 
   // Unit CRUD state
   const [units, setUnits] = useState(DEFAULT_UNITS);
@@ -330,11 +336,23 @@ const AddProductScreen = ({ navigation, route }) => {
       setProductName(existingProduct.product_name);
       setCapitalPrice(existingProduct.capital_price.toLocaleString("id-ID"));
       setSellingPrice(existingProduct.selling_price.toLocaleString("id-ID"));
-      setStockQuantity(existingProduct.stock_quantity.toString());
-      setMinStock(existingProduct.min_stock_threshold.toString());
+      const isUnlimited = Number(existingProduct.min_stock_threshold) < 0;
+      setUseStockManagement(!isUnlimited);
+      setStockQuantity(
+        isUnlimited ? "" : existingProduct.stock_quantity.toString(),
+      );
+      setMinStock(
+        isUnlimited ? "5" : existingProduct.min_stock_threshold.toString(),
+      );
       setImageUri(existingProduct.image_uri || null);
-      setUnit(existingProduct.unit || "pcs");
-      setCategory(existingProduct.category || "makanan");
+      const prodUnit = existingProduct.unit || "pcs";
+      const prodCat = existingProduct.category || "makanan";
+      setUnit(prodUnit);
+      setCategory(prodCat);
+      setUnits((prev) => (prev.includes(prodUnit) ? prev : [...prev, prodUnit]));
+      setCategories((prev) =>
+        prev.includes(prodCat) ? prev : [...prev, prodCat],
+      );
       setWholesaleRules(existingProduct.wholesale_rules || []);
     }
   }, [existingProduct]);
@@ -576,14 +594,19 @@ const AddProductScreen = ({ navigation, route }) => {
 
   // ── Save ──
   const handleSave = async () => {
-    if (!productName || !capitalPrice || !sellingPrice || !stockQuantity) {
+    if (
+      !productName ||
+      !capitalPrice ||
+      !sellingPrice ||
+      (useStockManagement && stockQuantity === "")
+    ) {
       Alert.alert("Error", "Harap isi semua kolom wajib (*)!");
       return;
     }
     const capPrice = parseRp(capitalPrice);
     const sellPrice = parseRp(sellingPrice);
-    const stock = parseInt(stockQuantity, 10);
-    const minStockVal = parseInt(minStock, 10);
+    const stock = useStockManagement ? parseInt(stockQuantity, 10) : 999999;
+    const minStockVal = useStockManagement ? parseInt(minStock, 10) : -1;
 
     if (isNaN(capPrice) || capPrice < 0) {
       Alert.alert("Error", "Harga modal tidak valid.");
@@ -593,7 +616,10 @@ const AddProductScreen = ({ navigation, route }) => {
       Alert.alert("Error", "Harga jual tidak valid.");
       return;
     }
-    if (isNaN(stock) || (!existingProduct && stock < 0)) {
+    if (
+      useStockManagement &&
+      (isNaN(stock) || (!existingProduct && stock < 0))
+    ) {
       Alert.alert(
         "Error",
         existingProduct ? "Stok tidak valid." : "Stok tidak boleh negatif.",
@@ -653,7 +679,11 @@ const AddProductScreen = ({ navigation, route }) => {
       capital_price: capPrice,
       selling_price: sellPrice,
       stock_quantity: stock,
-      min_stock_threshold: isNaN(minStockVal) ? 5 : Math.max(0, minStockVal),
+      min_stock_threshold: useStockManagement
+        ? isNaN(minStockVal)
+          ? 5
+          : Math.max(0, minStockVal)
+        : -1,
       image_uri: finalImageUri,
       unit,
       category,
@@ -662,16 +692,25 @@ const AddProductScreen = ({ navigation, route }) => {
 
     try {
       if (existingProduct) {
-        // Terapkan SELISIH stok yang diketik user terhadap stok terbaru
-        // di server, agar penjualan dari perangkat lain selama form
-        // terbuka tidak tertimpa angka absolut yang sudah lama.
-        const latest = await ProductRepository.getProductById(
-          existingProduct.id,
-        );
-        const stockDelta = stock - (existingProduct.stock_quantity || 0);
-        // Stok minus diizinkan (K-03), jadi hasilnya tidak dipaksa >= 0.
-        data.stock_quantity =
-          (latest ? latest.stock_quantity : stock) + stockDelta;
+        const wasUnlimited = Number(existingProduct.min_stock_threshold) < 0;
+        if (!useStockManagement) {
+          data.stock_quantity = 999999;
+          data.min_stock_threshold = -1;
+        } else if (wasUnlimited) {
+          // Beralih dari stok tak terbatas ke stok terkelola: pakai nilai baru langsung
+          data.stock_quantity = stock;
+        } else {
+          // Terapkan SELISIH stok yang diketik user terhadap stok terbaru
+          // di server, agar penjualan dari perangkat lain selama form
+          // terbuka tidak tertimpa angka absolut yang sudah lama.
+          const latest = await ProductRepository.getProductById(
+            existingProduct.id,
+          );
+          const stockDelta = stock - (existingProduct.stock_quantity || 0);
+          // Stok minus diizinkan (K-03), jadi hasilnya tidak dipaksa >= 0.
+          data.stock_quantity =
+            (latest ? latest.stock_quantity : stock) + stockDelta;
+        }
         await ProductRepository.updateProduct(existingProduct.id, data);
         syncNow({ forceCatalog: true }).catch(() => {});
         Alert.alert("✅ Sukses", "Produk berhasil diperbarui.", [
@@ -706,11 +745,6 @@ const AddProductScreen = ({ navigation, route }) => {
         {/* ── KARTU 1: FOTO PRODUK ── */}
         <View style={styles.formCard}>
           <View style={styles.cardHeaderRow}>
-            <MaterialCommunityIcons
-              name="camera-outline"
-              size={18}
-              color={colors.primary}
-            />
             <Text style={styles.cardHeaderTitle}>FOTO PRODUK</Text>
           </View>
 
@@ -723,11 +757,6 @@ const AddProductScreen = ({ navigation, route }) => {
                   onPress={handlePickImage}
                   activeOpacity={0.8}
                 >
-                  <MaterialCommunityIcons
-                    name="camera-retake-outline"
-                    size={16}
-                    color="#0F172A"
-                  />
                   <Text style={styles.photoChangeBtnText}>Ganti Foto</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -735,11 +764,6 @@ const AddProductScreen = ({ navigation, route }) => {
                   onPress={() => setImageUri(null)}
                   activeOpacity={0.8}
                 >
-                  <MaterialCommunityIcons
-                    name="trash-can-outline"
-                    size={16}
-                    color="#EF4444"
-                  />
                   <Text style={styles.photoDeleteBtnText}>Hapus</Text>
                 </TouchableOpacity>
               </View>
@@ -768,11 +792,6 @@ const AddProductScreen = ({ navigation, route }) => {
         {/* ── KARTU 2: INFORMASI PRODUK & BARCODE ── */}
         <View style={styles.formCard}>
           <View style={styles.cardHeaderRow}>
-            <MaterialCommunityIcons
-              name="tag-text-outline"
-              size={18}
-              color={colors.primary}
-            />
             <Text style={styles.cardHeaderTitle}>INFORMASI PRODUK</Text>
           </View>
 
@@ -851,7 +870,7 @@ const AddProductScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* Kategori Produk */}
+          {/* Kategori Produk (Dropdown) */}
           <View style={styles.formGroup}>
             <View style={styles.fieldHeaderBetween}>
               <Text style={styles.fieldLabel}>KATEGORI PRODUK</Text>
@@ -871,39 +890,21 @@ const AddProductScreen = ({ navigation, route }) => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.pillListWrap}>
-              {categories.map((c, index) => (
-                <TouchableOpacity
-                  key={c + index}
-                  style={[
-                    styles.unitPill,
-                    category === c && styles.unitPillActive,
-                  ]}
-                  onPress={() => setCategory(c)}
-                  onLongPress={() => {
-                    setEditingCategory({ index, value: c });
-                    setEditCategoryInput(c);
-                    setShowEditCategoryModal(true);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text
-                    style={[
-                      styles.unitPillText,
-                      category === c && styles.unitPillTextActive,
-                    ]}
-                  >
-                    {c}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.fieldHint}>
-              💡 Ketuk untuk memilih. Tekan tahan (long-press) untuk ubah/hapus.
-            </Text>
+            <TouchableOpacity
+              style={styles.dropdownTrigger}
+              onPress={() => setShowCategoryDropdownModal(true)}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.dropdownTriggerText}>{category}</Text>
+              <MaterialCommunityIcons
+                name="chevron-down"
+                size={20}
+                color="#64748B"
+              />
+            </TouchableOpacity>
           </View>
 
-          {/* Satuan Produk */}
+          {/* Satuan Produk (Dropdown) */}
           <View style={[styles.formGroup, { marginBottom: 0 }]}>
             <View style={styles.fieldHeaderBetween}>
               <Text style={styles.fieldLabel}>SATUAN PRODUK</Text>
@@ -923,47 +924,24 @@ const AddProductScreen = ({ navigation, route }) => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.pillListWrap}>
-              {units.map((u, index) => (
-                <TouchableOpacity
-                  key={u + index}
-                  style={[
-                    styles.unitPill,
-                    unit === u && styles.unitPillActive,
-                  ]}
-                  onPress={() => setUnit(u)}
-                  onLongPress={() => {
-                    setEditingUnit({ index, value: u });
-                    setEditUnitInput(u);
-                    setShowEditUnitModal(true);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text
-                    style={[
-                      styles.unitPillText,
-                      unit === u && styles.unitPillTextActive,
-                    ]}
-                  >
-                    {u}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.fieldHint}>
-              💡 Ketuk untuk memilih. Tekan tahan (long-press) untuk ubah/hapus.
-            </Text>
+            <TouchableOpacity
+              style={styles.dropdownTrigger}
+              onPress={() => setShowUnitDropdownModal(true)}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.dropdownTriggerText}>{unit}</Text>
+              <MaterialCommunityIcons
+                name="chevron-down"
+                size={20}
+                color="#64748B"
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* ── KARTU 3: HARGA & KEUNTUNGAN ── */}
         <View style={styles.formCard}>
           <View style={styles.cardHeaderRow}>
-            <MaterialCommunityIcons
-              name="cash-multiple"
-              size={18}
-              color={colors.primary}
-            />
             <Text style={styles.cardHeaderTitle}>HARGA & KEUNTUNGAN</Text>
           </View>
 
@@ -1038,16 +1016,9 @@ const AddProductScreen = ({ navigation, route }) => {
           {/* Aturan Harga Grosir / Bertingkat */}
           <View style={styles.wholesaleSubCard}>
             <View style={styles.wholesaleHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <MaterialCommunityIcons
-                  name="layers-outline"
-                  size={16}
-                  color="#0F172A"
-                />
-                <Text style={styles.wholesaleTitle}>
-                  Harga Grosir / Bertingkat
-                </Text>
-              </View>
+              <Text style={styles.wholesaleTitle}>
+                Harga Grosir / Bertingkat
+              </Text>
               <TouchableOpacity
                 style={styles.btnAddWholesale}
                 onPress={() => {
@@ -1056,8 +1027,7 @@ const AddProductScreen = ({ navigation, route }) => {
                   setShowAddWholesaleModal(true);
                 }}
               >
-                <MaterialCommunityIcons name="plus" size={14} color="#0F172A" />
-                <Text style={styles.btnAddWholesaleText}>Tambah</Text>
+                <Text style={styles.btnAddWholesaleText}>+ Tambah</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.wholesaleSubtitle}>
@@ -1108,52 +1078,68 @@ const AddProductScreen = ({ navigation, route }) => {
 
         {/* ── KARTU 4: MANAJEMEN STOK ── */}
         <View style={styles.formCard}>
-          <View style={styles.cardHeaderRow}>
-            <MaterialCommunityIcons
-              name="package-variant-closed"
-              size={18}
-              color={colors.primary}
-            />
-            <Text style={styles.cardHeaderTitle}>MANAJEMEN STOK</Text>
-          </View>
-
-          <View style={styles.formRow}>
-            <View style={{ flex: 1, marginRight: 8 }}>
-              <Text style={styles.fieldLabel}>
-                {existingProduct ? "STOK SAAT INI *" : "STOK AWAL *"}
+          <View style={styles.cardHeaderRowBetween}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.cardHeaderTitle}>MANAJEMEN STOK</Text>
+              <Text style={styles.stockToggleSubtitle}>
+                {useStockManagement
+                  ? "Aktif — stok dihitung & dikurangi otomatis"
+                  : "Nonaktif — stok tak terbatas (selalu tersedia)"}
               </Text>
-              <RNTextInput
-                style={styles.textInputClean}
-                value={stockQuantity}
-                onChangeText={setStockQuantity}
-                placeholder="0"
-                placeholderTextColor="#94A3B8"
-                keyboardType="numeric"
-              />
             </View>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <Text style={styles.fieldLabel}>BATAS MIN STOK</Text>
-              <RNTextInput
-                style={styles.textInputClean}
-                value={minStock}
-                onChangeText={setMinStock}
-                placeholder="5"
-                placeholderTextColor="#94A3B8"
-                keyboardType="numeric"
-              />
-            </View>
+            <Switch
+              value={useStockManagement}
+              onValueChange={setUseStockManagement}
+              trackColor={{ false: "#CBD5E1", true: "#FDBA74" }}
+              thumbColor={useStockManagement ? colors.primary : "#F8FAFC"}
+            />
           </View>
 
-          <View style={styles.stockNoteBox}>
-            <MaterialCommunityIcons
-              name="information-outline"
-              size={16}
-              color="#64748B"
-            />
-            <Text style={styles.stockNoteText}>
-              Peringatan stok menipis otomatis muncul saat jumlah stok ≤ batas minimum.
-            </Text>
-          </View>
+          {useStockManagement ? (
+            <>
+              <View style={styles.formRow}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.fieldLabel}>
+                    {existingProduct ? "STOK SAAT INI *" : "STOK AWAL *"}
+                  </Text>
+                  <RNTextInput
+                    style={styles.textInputClean}
+                    value={stockQuantity}
+                    onChangeText={setStockQuantity}
+                    placeholder="0"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={styles.fieldLabel}>BATAS MIN STOK</Text>
+                  <RNTextInput
+                    style={styles.textInputClean}
+                    value={minStock}
+                    onChangeText={setMinStock}
+                    placeholder="5"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.stockNoteBox}>
+                <Text style={styles.stockNoteText}>
+                  Peringatan stok menipis otomatis muncul saat jumlah stok ≤ batas minimum.
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.unlimitedStockBox}>
+              <Text style={styles.unlimitedStockTitle}>
+                Stok Tak Terbatas
+              </Text>
+              <Text style={styles.unlimitedStockDesc}>
+                Produk ini dapat terus dijual di kasir tanpa batasan jumlah stok dan tidak akan memunculkan peringatan stok habis.
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -1186,11 +1172,6 @@ const AddProductScreen = ({ navigation, route }) => {
           onPress={handleSave}
           activeOpacity={0.88}
         >
-          <MaterialCommunityIcons
-            name={existingProduct ? "content-save-check-outline" : "plus-circle-outline"}
-            size={20}
-            color="#FFFFFF"
-          />
           <Text style={styles.dockedSaveBtnText}>
             {existingProduct ? "SIMPAN PERUBAHAN" : "TAMBAH BARANG"}
           </Text>
@@ -1607,6 +1588,226 @@ const AddProductScreen = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Modal Dropdown Kategori Produk ── */}
+      <Modal
+        visible={showCategoryDropdownModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCategoryDropdownModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlayCenter}
+          activeOpacity={1}
+          onPress={() => setShowCategoryDropdownModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.dropdownModalCard}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.dropdownModalHeader}>
+              <Text style={styles.dropdownModalTitle}>Pilih Kategori Produk</Text>
+              <TouchableOpacity
+                onPress={() => setShowCategoryDropdownModal(false)}
+                style={styles.dropdownModalCloseBtn}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={20}
+                  color="#64748B"
+                />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.dropdownModalList}
+              showsVerticalScrollIndicator={false}
+            >
+              {categories.map((c, index) => {
+                const isSelected = category === c;
+                return (
+                  <View
+                    key={c + index}
+                    style={[
+                      styles.dropdownOptionRow,
+                      isSelected && styles.dropdownOptionRowSelected,
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={styles.dropdownOptionMain}
+                      onPress={() => {
+                        setCategory(c);
+                        setShowCategoryDropdownModal(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View
+                        style={[
+                          styles.dropdownRadioOuter,
+                          isSelected && styles.dropdownRadioOuterActive,
+                        ]}
+                      >
+                        {isSelected && <View style={styles.dropdownRadioInner} />}
+                      </View>
+                      <Text
+                        style={[
+                          styles.dropdownOptionText,
+                          isSelected && styles.dropdownOptionTextSelected,
+                        ]}
+                      >
+                        {c}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.dropdownEditBtn}
+                      onPress={() => {
+                        setShowCategoryDropdownModal(false);
+                        setEditingCategory({ index, value: c });
+                        setEditCategoryInput(c);
+                        setShowEditCategoryModal(true);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <MaterialCommunityIcons
+                        name="pencil-outline"
+                        size={16}
+                        color="#64748B"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.dropdownAddFooterBtn}
+              onPress={() => {
+                setShowCategoryDropdownModal(false);
+                setNewCategoryInput("");
+                setShowAddCategoryModal(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownAddFooterBtnText}>
+                + Tambah Kategori Baru
+              </Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Modal Dropdown Satuan Produk ── */}
+      <Modal
+        visible={showUnitDropdownModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowUnitDropdownModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlayCenter}
+          activeOpacity={1}
+          onPress={() => setShowUnitDropdownModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.dropdownModalCard}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.dropdownModalHeader}>
+              <Text style={styles.dropdownModalTitle}>Pilih Satuan Produk</Text>
+              <TouchableOpacity
+                onPress={() => setShowUnitDropdownModal(false)}
+                style={styles.dropdownModalCloseBtn}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={20}
+                  color="#64748B"
+                />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.dropdownModalList}
+              showsVerticalScrollIndicator={false}
+            >
+              {units.map((u, index) => {
+                const isSelected = unit === u;
+                return (
+                  <View
+                    key={u + index}
+                    style={[
+                      styles.dropdownOptionRow,
+                      isSelected && styles.dropdownOptionRowSelected,
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={styles.dropdownOptionMain}
+                      onPress={() => {
+                        setUnit(u);
+                        setShowUnitDropdownModal(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View
+                        style={[
+                          styles.dropdownRadioOuter,
+                          isSelected && styles.dropdownRadioOuterActive,
+                        ]}
+                      >
+                        {isSelected && <View style={styles.dropdownRadioInner} />}
+                      </View>
+                      <Text
+                        style={[
+                          styles.dropdownOptionText,
+                          isSelected && styles.dropdownOptionTextSelected,
+                        ]}
+                      >
+                        {u}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.dropdownEditBtn}
+                      onPress={() => {
+                        setShowUnitDropdownModal(false);
+                        setEditingUnit({ index, value: u });
+                        setEditUnitInput(u);
+                        setShowEditUnitModal(true);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <MaterialCommunityIcons
+                        name="pencil-outline"
+                        size={16}
+                        color="#64748B"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.dropdownAddFooterBtn}
+              onPress={() => {
+                setShowUnitDropdownModal(false);
+                setNewUnitInput("");
+                setShowAddUnitModal(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownAddFooterBtnText}>
+                + Tambah Satuan Baru
+              </Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -1637,11 +1838,26 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F1F5F9",
     paddingBottom: 10,
   },
+  cardHeaderRowBetween: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    paddingBottom: 10,
+  },
   cardHeaderTitle: {
     fontFamily: fonts.extraBold,
     fontSize: 12,
     color: "#0F172A",
     letterSpacing: 0.5,
+  },
+  stockToggleSubtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 2,
   },
 
   // Photo Uploader
@@ -1714,7 +1930,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
@@ -1842,32 +2058,157 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
 
-  // Pills
-  pillListWrap: {
+  // Dropdown Trigger & Modal
+  dropdownTrigger: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  unitPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    minHeight: 46,
   },
-  unitPillActive: {
+  dropdownTriggerText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    color: "#0F172A",
+    textTransform: "capitalize",
+  },
+  dropdownModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    width: "88%",
+    maxHeight: "72%",
+    padding: 20,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  dropdownModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    marginBottom: 10,
+  },
+  dropdownModalTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: "#0F172A",
+  },
+  dropdownModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dropdownModalList: {
+    maxHeight: 280,
+  },
+  dropdownOptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 6,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  dropdownOptionRowSelected: {
+    backgroundColor: "#FFF7ED",
     borderColor: colors.primary,
+  },
+  dropdownOptionMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  dropdownRadioOuter: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#CBD5E1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dropdownRadioOuterActive: {
+    borderColor: colors.primary,
+  },
+  dropdownRadioInner: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
     backgroundColor: colors.primary,
   },
-  unitPillText: {
-    fontSize: 12,
+  dropdownOptionText: {
     fontFamily: fonts.semiBold,
-    color: "#475569",
+    fontSize: 14,
+    color: "#334155",
+    textTransform: "capitalize",
   },
-  unitPillTextActive: {
-    color: "#FFFFFF",
+  dropdownOptionTextSelected: {
     fontFamily: fonts.bold,
+    color: colors.primary,
+  },
+  dropdownEditBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  dropdownAddFooterBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dropdownAddFooterBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.primary,
+  },
+  unlimitedStockBox: {
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  unlimitedStockTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#9A3412",
+    marginBottom: 3,
+  },
+  unlimitedStockDesc: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: "#C2410C",
+    lineHeight: 16,
   },
 
   // Margin preview
@@ -2121,7 +2462,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     alignItems: "center",
   },
   wsSaveText: {

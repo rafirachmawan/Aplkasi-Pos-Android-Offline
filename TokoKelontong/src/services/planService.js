@@ -16,10 +16,11 @@ import { getAuthSnapshot, getLastStoreId } from "./sessionStore";
 const PLAN_KEY = "@TokoKelontong:StorePlan";
 
 // Interval minimum antar penarikan plan dari server (cegah query berlebihan).
-const MIN_REFRESH_MS = 5 * 60 * 1000;
+const MIN_REFRESH_MS = 15 * 1000;
 const REQUEST_TIMEOUT_MS = 10000;
 
 const state = {
+  storeId: null,
   plan: "free",
   startedAt: null,
   expiresAt: null,
@@ -36,10 +37,10 @@ function snapshot() {
 
 function emit(patch) {
   Object.assign(state, patch);
-  const snap = snapshot();
+  const status = getPlanStatus();
   listeners.forEach((fn) => {
     try {
-      fn(snap);
+      fn(status);
     } catch {
       // abaikan error listener
     }
@@ -89,9 +90,10 @@ export function getPlanStatus() {
   };
 }
 
-function normalizePlan(row) {
+function normalizePlan(row, storeId) {
   if (!row) return null;
   return {
+    storeId: storeId || row.store_id || state.storeId || null,
     plan: row.plan === "pro" ? "pro" : "free",
     startedAt: row.plan_started_at || null,
     expiresAt: row.plan_expires_at || null,
@@ -107,7 +109,22 @@ export async function loadPlanFromCache() {
     const saved = JSON.parse(raw);
     if (!saved || typeof saved !== "object") return;
 
+    const snap = await getAuthSnapshot();
+    const activeStoreId = snap?.store_id || (await getLastStoreId());
+    if (activeStoreId && saved.storeId && saved.storeId !== activeStoreId) {
+      // Jangan pernah memakai cache langganan milik toko lain
+      emit({
+        storeId: activeStoreId,
+        plan: "free",
+        startedAt: null,
+        expiresAt: null,
+        syncedAt: 0,
+      });
+      return;
+    }
+
     emit({
+      storeId: saved.storeId || null,
       plan: saved.plan === "pro" ? "pro" : "free",
       startedAt: saved.startedAt || null,
       expiresAt: saved.expiresAt || null,
@@ -123,6 +140,7 @@ async function savePlanToCache() {
     await AsyncStorage.setItem(
       PLAN_KEY,
       JSON.stringify({
+        storeId: state.storeId,
         plan: state.plan,
         startedAt: state.startedAt,
         expiresAt: state.expiresAt,
@@ -163,92 +181,126 @@ function isNetworkLike(err) {
   );
 }
 
+let activeRefreshPromise = null;
+
 /**
  * Tarik plan dari server lalu simpan ke cache.
  * Gagal (offline / tabel belum ada) TIDAK mengubah plan tersimpan.
  */
-export async function refreshPlan({ force = false } = {}) {
-  if (state.syncing) return getPlanStatus();
+export async function refreshPlan({ force = false, storeId: explicitStoreId = null } = {}) {
+  if (activeRefreshPromise) {
+    if (!force) return activeRefreshPromise;
+    try {
+      await activeRefreshPromise;
+    } catch {
+      // lanjut refresh paksa setelah yang sedang jalan selesai
+    }
+  }
+
+  const snapCheck = await getAuthSnapshot();
+  const currentStoreId =
+    explicitStoreId || snapCheck?.store_id || (await getLastStoreId());
 
   const now = Date.now();
-  if (!force && state.syncedAt && now - state.syncedAt < MIN_REFRESH_MS) {
+  const sameStore = currentStoreId && state.storeId === currentStoreId;
+  if (currentStoreId && state.storeId && state.storeId !== currentStoreId) {
+    // Ganti akun toko: langsung reset state memori ke free sebelum tarik dari server
+    emit({
+      storeId: currentStoreId,
+      plan: "free",
+      startedAt: null,
+      expiresAt: null,
+      syncedAt: 0,
+    });
+  }
+  if (!force && sameStore && state.syncedAt && now - state.syncedAt < MIN_REFRESH_MS) {
     return getPlanStatus();
   }
 
   emit({ syncing: true });
 
-  try {
-    const snap = await getAuthSnapshot();
-    let storeId = snap?.store_id;
+  activeRefreshPromise = (async () => {
+    try {
+      let storeId = currentStoreId;
 
-    if (!storeId) {
-      storeId = await getLastStoreId();
-    }
-
-    if (!storeId) {
-      try {
-        const { data: sessData } = await supabase.auth.getSession();
-        const userId = sessData?.session?.user?.id;
-        if (userId) {
-          const { data: prof } = await supabase
-            .from("profiles")
-            .select("store_id")
-            .eq("id", userId)
-            .maybeSingle();
-          if (prof?.store_id) {
-            storeId = prof.store_id;
+      if (!storeId) {
+        try {
+          const { data: sessData } = await supabase.auth.getSession();
+          const userId = sessData?.session?.user?.id;
+          if (userId) {
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("store_id")
+              .eq("id", userId)
+              .maybeSingle();
+            if (prof?.store_id) {
+              storeId = prof.store_id;
+            }
           }
+        } catch (sessErr) {
+          console.warn("Gagal mendapatkan sesi toko:", sessErr);
         }
-      } catch (sessErr) {
-        console.warn("Gagal mendapatkan sesi toko:", sessErr);
       }
-    }
 
-    let query = supabase
-      .from("store_subscriptions")
-      .select("plan, plan_started_at, plan_expires_at");
+      if (!storeId) {
+        emit({ syncing: false });
+        return getPlanStatus();
+      }
 
-    if (storeId) {
-      query = query.eq("store_id", storeId);
-    }
+      const { data, error } = await withTimeout(
+        supabase
+          .from("store_subscriptions")
+          .select("store_id, plan, plan_started_at, plan_expires_at")
+          .eq("store_id", storeId)
+          .maybeSingle(),
+        REQUEST_TIMEOUT_MS,
+      );
 
-    const { data, error } = await withTimeout(
-      query.maybeSingle(),
-      REQUEST_TIMEOUT_MS,
-    );
+      if (error) {
+        const msg = String(error.message || "");
+        const migrationMissing =
+          msg.includes("store_subscriptions") || error.code === "PGRST202";
+        emit({
+          syncing: false,
+          lastError: migrationMissing ? null : isNetworkLike(error) ? null : msg,
+        });
+        return getPlanStatus();
+      }
 
-    if (error) {
-      // Tabel belum ada (migrasi v9 belum jalan) atau jaringan bermasalah:
-      // biarkan plan tersimpan apa adanya, jangan dianggap gagal fatal.
-      const msg = String(error.message || "");
-      const migrationMissing =
-        msg.includes("store_subscriptions") || error.code === "PGRST202";
+      const normalized = normalizePlan(data, storeId);
+      if (normalized) {
+        emit({ ...normalized, syncing: false, lastError: null });
+        await savePlanToCache();
+      } else {
+        // Jika baris tidak dikembalikan (misal sesi JWT sedang di-refresh),
+        // jangan mengunci syncedAt agar pemanggilan berikutnya tetap menarik ulang.
+        emit({ storeId, syncing: false, lastError: null });
+      }
+    } catch (err) {
       emit({
         syncing: false,
-        lastError: migrationMissing ? null : isNetworkLike(error) ? null : msg,
+        lastError: isNetworkLike(err) ? null : String(err?.message || err),
       });
-      return getPlanStatus();
+    } finally {
+      activeRefreshPromise = null;
     }
 
-    const normalized = normalizePlan(data);
-    if (normalized) {
-      emit({ ...normalized, syncing: false, lastError: null });
-      await savePlanToCache();
-    } else {
-      // Toko punya baris: tidak ada yang perlu diubah.
-      emit({ syncing: false, syncedAt: Date.now(), lastError: null });
-    }
-  } catch (err) {
-    // Offline/timeout: plan lama tetap dipakai. Jangan tampilkan error.
-    emit({ syncing: false, lastError: isNetworkLike(err) ? null : String(err?.message || err) });
-  }
+    return getPlanStatus();
+  })();
 
-  return getPlanStatus();
+  return activeRefreshPromise;
 }
 
 /** Hapus plan saat logout eksplisit. TIDAK menyentuh outbox atau katalog. */
 export async function clearPlan() {
-  emit({ plan: "free", startedAt: null, expiresAt: null, syncedAt: 0, lastError: null });
+  emit({
+    storeId: null,
+    plan: "free",
+    startedAt: null,
+    expiresAt: null,
+    syncedAt: 0,
+    lastError: null,
+  });
   try {
     await AsyncStorage.removeItem(PLAN_KEY);
   } catch {

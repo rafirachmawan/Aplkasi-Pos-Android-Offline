@@ -463,15 +463,6 @@ const LaporanScreen = ({ navigation, route }) => {
         onPress={() => openTransactionDetails(item)}
         activeOpacity={0.78}
       >
-        {/* Ikon Metode Bayar */}
-        <View style={[styles.txMethodIconCircle, { backgroundColor: badge.badgeBg }]}>
-          <MaterialCommunityIcons
-            name={badge.icon}
-            size={18}
-            color={badge.iconClr}
-          />
-        </View>
-
         {/* Info Transaksi Kiri */}
         <View style={styles.txLeft}>
           <View
@@ -519,11 +510,6 @@ const LaporanScreen = ({ navigation, route }) => {
 
           {item.discount_amount > 0 && (
             <View style={styles.discountPill}>
-              <MaterialCommunityIcons
-                name="tag-outline"
-                size={11}
-                color="#DC2626"
-              />
               <Text style={styles.discountPillText}>
                 Diskon: {formatRupiah(item.discount_amount)}
               </Text>
@@ -564,14 +550,9 @@ const LaporanScreen = ({ navigation, route }) => {
             setShowLockModal(true);
           }}
         >
-          <MaterialCommunityIcons
-            name="crown-outline"
-            size={15}
-            color="#92400E"
-          />
           <Text style={styles.readOnlyBannerText}>
-            Paket Gratis: hanya menampilkan laporan hari ini. Laporan bulanan,
-            riwayat, dan ekspor CSV tersedia di paket Pro.
+            Paket Starter: menampilkan laporan hari ini. Laporan bulanan,
+            riwayat lengkap & ekspor CSV tersedia di paket Pro.
           </Text>
           <Text style={styles.readOnlyBannerAction}>Upgrade</Text>
         </TouchableOpacity>
@@ -699,7 +680,7 @@ const LaporanScreen = ({ navigation, route }) => {
         </View>
       )}
 
-      {/* ── Ringkasan Finansial Utama (Unified Financial Hero Card) ── */}
+      {/* ── Ringkasan Finansial Utama (Warm Orange Hero Card) ── */}
       <View style={styles.heroSummaryCard}>
         {/* Atas: Total Omzet & Badge Transaksi */}
         <View style={styles.summaryTopRow}>
@@ -710,11 +691,6 @@ const LaporanScreen = ({ navigation, route }) => {
             </Text>
           </View>
           <View style={styles.summaryTxBadge}>
-            <MaterialCommunityIcons
-              name="receipt-text-check-outline"
-              size={18}
-              color="#F8FAFC"
-            />
             <Text style={styles.summaryTxBadgeText}>
               {summary.count} Transaksi
             </Text>
@@ -724,11 +700,6 @@ const LaporanScreen = ({ navigation, route }) => {
         {/* Tengah: Estimasi Laba Bersih */}
         <View style={styles.profitBannerRow}>
           <View style={styles.profitPill}>
-            <MaterialCommunityIcons
-              name="trending-up"
-              size={15}
-              color="#10B981"
-            />
             <Text style={styles.profitLabel}>Estimasi Laba Bersih:</Text>
             <Text style={styles.profitValue}>
               {formatRupiah(summary.laba)}
@@ -741,14 +712,7 @@ const LaporanScreen = ({ navigation, route }) => {
         {/* Bawah: Rincian Tunai di Laci vs Non-Tunai */}
         <View style={styles.splitRow}>
           <View style={styles.splitCol}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <MaterialCommunityIcons
-                name="cash-multiple"
-                size={15}
-                color="#34D399"
-              />
-              <Text style={styles.splitColLabel}>Tunai (Laci Kasir)</Text>
-            </View>
+            <Text style={styles.splitColLabel}>Tunai (Laci Kasir)</Text>
             <Text style={styles.splitColValue}>
               {formatRupiah(summary.omzet_tunai || 0)}
             </Text>
@@ -757,14 +721,7 @@ const LaporanScreen = ({ navigation, route }) => {
           <View style={styles.splitVerticalLine} />
 
           <View style={styles.splitCol}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <MaterialCommunityIcons
-                name="cellphone-check"
-                size={15}
-                color="#38BDF8"
-              />
-              <Text style={styles.splitColLabel}>Non-Tunai (QRIS/TF)</Text>
-            </View>
+            <Text style={styles.splitColLabel}>Non-Tunai (QRIS/TF)</Text>
             <Text style={styles.splitColValue}>
               {formatRupiah(summary.omzet_non_tunai || 0)}
             </Text>
@@ -1114,7 +1071,7 @@ const LaporanScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.background,
   },
 
   // ── Banner Mode Gratis (read-only) ──
@@ -1125,38 +1082,37 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 4,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: "#FED7AA",
     borderRadius: 12,
   },
   readOnlyBannerText: {
     flex: 1,
     fontFamily: fonts.medium,
     fontSize: 11.5,
-    color: "#92400E",
+    color: "#9A3412",
     lineHeight: 16,
   },
   readOnlyBannerAction: {
     fontFamily: fonts.bold,
     fontSize: 11.5,
-    color: "#92400E",
-    textDecorationLine: "underline",
+    color: colors.primary,
   },
 
   // ── Segmented Control Tab Bar ──
   segmentedContainer: {
     flexDirection: "row",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#FFF7ED",
     borderRadius: 12,
     padding: 4,
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#FFEDD5",
   },
   segmentBtn: {
     flex: 1,
@@ -1166,21 +1122,21 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   segmentBtnActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.primary,
     elevation: 2,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   segmentText: {
     fontFamily: fonts.semiBold,
     fontSize: 13,
-    color: "#64748B",
+    color: "#9A3412",
   },
   segmentTextActive: {
     fontFamily: fonts.bold,
-    color: "#0F172A",
+    color: "#FFFFFF",
   },
 
   // ── Date Navigator ──
@@ -1195,7 +1151,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#F1F5F9",
     shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
@@ -1206,9 +1162,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#FFEDD5",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1227,7 +1183,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     paddingHorizontal: 8,
     paddingVertical: 1,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#FFF7ED",
     borderRadius: 8,
   },
   badgeJumpTodayText: {
@@ -1236,19 +1192,17 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
 
-  // ── Unified Financial Hero Card ──
+  // ── Unified Financial Hero Card (Warm Orange) ──
   heroSummaryCard: {
     marginHorizontal: 16,
     marginBottom: 12,
-    borderRadius: 20,
-    backgroundColor: "#0F172A",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    padding: 16,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    padding: 18,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
     elevation: 4,
   },
   summaryTopRow: {
@@ -1259,23 +1213,20 @@ const styles = StyleSheet.create({
   summaryOmzetLabel: {
     fontFamily: fonts.bold,
     fontSize: 10,
-    color: "#94A3B8",
-    letterSpacing: 0.5,
+    color: "rgba(255,255,255,0.82)",
+    letterSpacing: 0.6,
     marginBottom: 4,
   },
   summaryOmzetValue: {
     fontFamily: fonts.extraBold,
-    fontSize: 24,
+    fontSize: 26,
     color: "#FFFFFF",
     letterSpacing: -0.5,
   },
   summaryTxBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
@@ -1283,7 +1234,7 @@ const styles = StyleSheet.create({
   summaryTxBadgeText: {
     fontFamily: fonts.bold,
     fontSize: 12,
-    color: "#F8FAFC",
+    color: "#FFFFFF",
   },
   profitBannerRow: {
     marginTop: 10,
@@ -1292,9 +1243,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.25)",
+    backgroundColor: "rgba(15, 23, 42, 0.18)",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
@@ -1303,16 +1252,16 @@ const styles = StyleSheet.create({
   profitLabel: {
     fontFamily: fonts.medium,
     fontSize: 11,
-    color: "#6EE7B7",
+    color: "rgba(255,255,255,0.85)",
   },
   profitValue: {
     fontFamily: fonts.extraBold,
     fontSize: 13,
-    color: "#34D399",
+    color: "#FFFFFF",
   },
   summaryDivider: {
     height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
     marginVertical: 12,
   },
   splitRow: {
@@ -1325,7 +1274,7 @@ const styles = StyleSheet.create({
   splitColLabel: {
     fontFamily: fonts.medium,
     fontSize: 11,
-    color: "#94A3B8",
+    color: "rgba(255,255,255,0.82)",
   },
   splitColValue: {
     fontFamily: fonts.bold,
@@ -1336,7 +1285,7 @@ const styles = StyleSheet.create({
   splitVerticalLine: {
     width: 1,
     height: 26,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
     marginHorizontal: 12,
   },
 

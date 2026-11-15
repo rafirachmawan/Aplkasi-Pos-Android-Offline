@@ -5,31 +5,12 @@ import { formatRupiah } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
 
 const ProductCard = ({ product, onEdit, onDelete, readOnly = false }) => {
-  const isOutOfStock = product.stock_quantity <= 0;
+  const isUnlimitedStock = Number(product.min_stock_threshold) < 0;
+  const isOutOfStock = !isUnlimitedStock && product.stock_quantity <= 0;
   const isLowStock =
+    !isUnlimitedStock &&
     !isOutOfStock &&
-    product.stock_quantity <= (product.min_stock_threshold || 5);
-
-  // Helper: Icon placeholder berdasarkan kategori
-  const getPlaceholderIcon = (category) => {
-    if (!category) return "package-variant";
-    const cat = category.toLowerCase();
-    const categoryIcons = {
-      makanan: "noodles",
-      minuman: "cup-water",
-      kebersihan: "soap",
-      batik: "tshirt-crew",
-      baju: "tshirt-crew-outline",
-      aksesoris: "watch",
-      sepatu: "shoe-formal",
-      tas: "bag-personal",
-      elektronik: "devices",
-      "alat tulis": "pencil-ruler",
-      sembako: "rice",
-      snack: "food-croissant",
-    };
-    return categoryIcons[cat] || "package-variant";
-  };
+    product.stock_quantity <= (product.min_stock_threshold ?? 5);
 
   return (
     <View style={styles.card}>
@@ -43,12 +24,9 @@ const ProductCard = ({ product, onEdit, onDelete, readOnly = false }) => {
             />
           ) : (
             <View style={styles.placeholderBox}>
-              <MaterialCommunityIcons
-                name={getPlaceholderIcon(product.category)}
-                size={30}
-                color={colors.primary}
-                style={{ opacity: 0.35 }}
-              />
+              <Text style={styles.placeholderInitial}>
+                {(product.product_name || "P").slice(0, 2).toUpperCase()}
+              </Text>
             </View>
           )}
           {product.category ? (
@@ -70,14 +48,7 @@ const ProductCard = ({ product, onEdit, onDelete, readOnly = false }) => {
               </Text>
               <View style={styles.metaRow}>
                 {product.barcode ? (
-                  <View style={styles.barcodeWrap}>
-                    <MaterialCommunityIcons
-                      name="barcode-scan"
-                      size={13}
-                      color="#64748B"
-                    />
-                    <Text style={styles.barcodeText}>{product.barcode}</Text>
-                  </View>
+                  <Text style={styles.barcodeText}>#{product.barcode}</Text>
                 ) : (
                   <Text style={styles.barcodeTextMuted}>Tanpa Barcode</Text>
                 )}
@@ -155,23 +126,6 @@ const ProductCard = ({ product, onEdit, onDelete, readOnly = false }) => {
                     : styles.stockPillNormal,
               ]}
             >
-              <MaterialCommunityIcons
-                name={
-                  isOutOfStock
-                    ? "close-circle-outline"
-                    : isLowStock
-                      ? "alert-circle-outline"
-                      : "package-variant-closed"
-                }
-                size={13}
-                color={
-                  isOutOfStock
-                    ? "#DC2626"
-                    : isLowStock
-                      ? "#D97706"
-                      : "#059669"
-                }
-              />
               <Text
                 style={[
                   styles.stockPillText,
@@ -182,7 +136,9 @@ const ProductCard = ({ product, onEdit, onDelete, readOnly = false }) => {
                       : styles.stockPillTextNormal,
                 ]}
               >
-                {product.stock_quantity} {product.unit || "pcs"}
+                {isUnlimitedStock
+                  ? "Stok: Tak Terbatas"
+                  : `Stok: ${product.stock_quantity} ${product.unit || "pcs"}`}
               </Text>
             </View>
           </View>
@@ -197,9 +153,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 5,
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#F1F5F9",
     shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
@@ -215,13 +171,13 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: 72,
     height: 72,
-    borderRadius: 12,
-    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#FED7AA",
     position: "relative",
     marginRight: 12,
   },
@@ -234,7 +190,13 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#FFF7ED",
+  },
+  placeholderInitial: {
+    fontFamily: fonts.extraBold,
+    fontSize: 20,
+    color: "#FDBA74",
+    letterSpacing: 0.5,
   },
   categoryBadge: {
     position: "absolute",

@@ -74,14 +74,16 @@ const appVersion = Constants.expoConfig?.version || "1.0.0";
 const SettingRow = ({
   icon,
   iconColor = colors.primary,
-  iconBg = "#F1F5F9",
+  iconBg = "#FFF7ED",
   label,
   children,
 }) => (
   <View style={styles.settingRow}>
-    <View style={[styles.settingIconWrap, { backgroundColor: iconBg }]}>
-      <MaterialCommunityIcons name={icon} size={20} color={iconColor} />
-    </View>
+    {icon ? (
+      <View style={[styles.settingIconWrap, { backgroundColor: iconBg }]}>
+        <MaterialCommunityIcons name={icon} size={20} color={iconColor} />
+      </View>
+    ) : null}
     <View style={styles.settingContent}>
       <Text style={styles.settingLabel}>{label}</Text>
       {children}
@@ -817,36 +819,6 @@ const PengaturanScreen = ({ navigation }) => {
     }
   };
 
-  const handleLogout = async () => {
-    let unsynced = 0;
-    try {
-      unsynced = await getOfflineQueueCount();
-    } catch {
-      unsynced = 0;
-    }
-    const warning =
-      unsynced > 0
-        ? `Ada ${unsynced} transaksi yang belum terkirim ke cloud. Transaksi tetap tersimpan aman di HP ini dan akan terkirim saat Anda masuk lagi dengan akun yang sama dan ada internet. Tetap keluar?`
-        : "Anda akan keluar dari akun di HP ini. Data toko tetap aman di cloud.";
-    Alert.alert(
-      unsynced > 0 ? "Masih Ada Transaksi Belum Terkirim" : "Keluar Akun",
-      warning,
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Keluar",
-          style: "destructive",
-          onPress: () => {
-            // Kosongkan keranjang agar akun berikutnya tidak mewarisi
-            // isi keranjang akun sebelumnya.
-            dispatch({ type: "CLEAR_CART" });
-            signOut();
-          },
-        },
-      ],
-    );
-  };
-
   const handleOpenPinSettings = () => {
     if (hasPin) {
       Alert.alert(
@@ -899,7 +871,7 @@ const PengaturanScreen = ({ navigation }) => {
               <MaterialCommunityIcons
                 name="storefront-outline"
                 size={32}
-                color="#0F172A"
+                color={colors.primary}
               />
             )}
           </TouchableOpacity>
@@ -948,12 +920,7 @@ const PengaturanScreen = ({ navigation }) => {
       {/* ── Informasi Toko ── */}
       <Text style={styles.sectionTitle}>INFORMASI TOKO</Text>
       <View style={styles.card}>
-        <SettingRow
-          icon="store-edit-outline"
-          iconColor="#0F172A"
-          iconBg="#F1F5F9"
-          label="Nama Toko"
-        >
+        <SettingRow label="Nama Toko">
           <TextInput
             style={styles.input}
             value={storeNameInput}
@@ -979,20 +946,20 @@ const PengaturanScreen = ({ navigation }) => {
             <View
               style={[
                 styles.modeIconWrap,
-                businessMode === "retail" && { backgroundColor: "#DCFCE7" },
+                businessMode === "retail" && { backgroundColor: "#FFF7ED" },
               ]}
             >
               <MaterialCommunityIcons
-                name="storefront"
+                name="storefront-outline"
                 size={22}
-                color={businessMode === "retail" ? "#16A34A" : "#64748B"}
+                color={businessMode === "retail" ? colors.primary : "#64748B"}
               />
             </View>
             <Text
               style={[
                 styles.modeOptionTitle,
                 businessMode === "retail" && {
-                  color: "#16A34A",
+                  color: colors.primary,
                   fontFamily: fonts.bold,
                 },
               ]}
@@ -1004,7 +971,7 @@ const PengaturanScreen = ({ navigation }) => {
             </Text>
             {businessMode === "retail" && (
               <View style={styles.modeActiveBadge}>
-                <Text style={styles.modeActiveBadgeText}>✓ AKTIF</Text>
+                <Text style={styles.modeActiveBadgeText}>AKTIF</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -1020,20 +987,20 @@ const PengaturanScreen = ({ navigation }) => {
             <View
               style={[
                 styles.modeIconWrap,
-                businessMode === "fnb" && { backgroundColor: "#FEF3C7" },
+                businessMode === "fnb" && { backgroundColor: "#FFF7ED" },
               ]}
             >
               <MaterialCommunityIcons
                 name="silverware-fork-knife"
                 size={22}
-                color={businessMode === "fnb" ? "#D97706" : "#64748B"}
+                color={businessMode === "fnb" ? colors.primary : "#64748B"}
               />
             </View>
             <Text
               style={[
                 styles.modeOptionTitle,
                 businessMode === "fnb" && {
-                  color: "#D97706",
+                  color: colors.primary,
                   fontFamily: fonts.bold,
                 },
               ]}
@@ -1049,28 +1016,20 @@ const PengaturanScreen = ({ navigation }) => {
                   position: "absolute",
                   top: 10,
                   right: 10,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 3,
-                  backgroundColor: "#FEF3C7",
+                  backgroundColor: "#FFF7ED",
                   borderWidth: 1,
-                  borderColor: "#FDE68A",
+                  borderColor: "#FED7AA",
                   borderRadius: 6,
                   paddingHorizontal: 6,
                   paddingVertical: 2,
                 }}
               >
-                <MaterialCommunityIcons
-                  name="crown-outline"
-                  size={10}
-                  color="#92400E"
-                />
                 <Text
                   style={{
                     fontFamily: fonts.bold,
                     fontSize: 9,
                     letterSpacing: 0.5,
-                    color: "#92400E",
+                    color: colors.primary,
                   }}
                 >
                   PRO
@@ -1078,17 +1037,8 @@ const PengaturanScreen = ({ navigation }) => {
               </View>
             )}
             {businessMode === "fnb" && (
-              <View
-                style={[
-                  styles.modeActiveBadge,
-                  { backgroundColor: "#FEF3C7" },
-                ]}
-              >
-                <Text
-                  style={[styles.modeActiveBadgeText, { color: "#92400E" }]}
-                >
-                  ✓ AKTIF
-                </Text>
+              <View style={styles.modeActiveBadge}>
+                <Text style={styles.modeActiveBadgeText}>AKTIF</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -1102,10 +1052,7 @@ const PengaturanScreen = ({ navigation }) => {
           <View style={styles.card}>
             {/* 1. Pengaturan QRIS Toko */}
             <View style={styles.fnbSectionBlock}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <MaterialCommunityIcons name="qrcode-scan" size={20} color="#D97706" />
-                <Text style={styles.fnbBlockTitle}>QRIS Pembayaran Pelanggan</Text>
-              </View>
+              <Text style={[styles.fnbBlockTitle, { marginBottom: 4 }]}>QRIS Pembayaran Pelanggan</Text>
               <Text style={styles.fnbBlockDesc}>
                 Pelanggan di meja dapat memindai QRIS toko ini dan mengunggah foto bukti bayar saat checkout.
               </Text>
@@ -1114,16 +1061,15 @@ const PengaturanScreen = ({ navigation }) => {
                 <View style={styles.qrisPreviewContainer}>
                   <Image source={{ uri: qrisImageUrl }} style={styles.qrisPreviewImage} resizeMode="contain" />
                   <View style={{ flex: 1, gap: 8 }}>
-                    <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: "#16A34A" }}>
-                      ✓ Foto QRIS Aktif
+                    <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: "#16A34A" }}>
+                      Foto QRIS Aktif
                     </Text>
                     <TouchableOpacity
-                      style={[styles.btnOutlineSmall, { borderColor: "#D97706" }]}
+                      style={[styles.btnOutlineSmall, { borderColor: colors.primary }]}
                       onPress={handlePickQrisImage}
                       disabled={uploadingQris}
                     >
-                      <MaterialCommunityIcons name="camera-retake-outline" size={16} color="#D97706" />
-                      <Text style={[styles.btnOutlineSmallText, { color: "#D97706" }]}>
+                      <Text style={[styles.btnOutlineSmallText, { color: colors.primary }]}>
                         {uploadingQris ? "Mengunggah..." : "Ganti QRIS"}
                       </Text>
                     </TouchableOpacity>
@@ -1131,7 +1077,6 @@ const PengaturanScreen = ({ navigation }) => {
                       style={[styles.btnOutlineSmall, { borderColor: "#EF4444" }]}
                       onPress={handleDeleteQris}
                     >
-                      <MaterialCommunityIcons name="trash-can-outline" size={16} color="#EF4444" />
                       <Text style={[styles.btnOutlineSmallText, { color: "#EF4444" }]}>Hapus QRIS</Text>
                     </TouchableOpacity>
                   </View>
@@ -1143,7 +1088,7 @@ const PengaturanScreen = ({ navigation }) => {
                   disabled={uploadingQris}
                   activeOpacity={0.7}
                 >
-                  <MaterialCommunityIcons name="cloud-upload-outline" size={28} color="#D97706" />
+                  <MaterialCommunityIcons name="cloud-upload-outline" size={26} color={colors.primary} />
                   <Text style={styles.qrisUploadBoxText}>
                     {uploadingQris ? "Sedang Mengunggah Foto..." : "Ketuk untuk Unggah Foto QRIS Toko"}
                   </Text>
@@ -1156,10 +1101,7 @@ const PengaturanScreen = ({ navigation }) => {
 
             {/* 2. Pengaturan Meja & Cetak QR */}
             <View style={styles.fnbSectionBlock}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <MaterialCommunityIcons name="table-chair" size={20} color="#D97706" />
-                <Text style={styles.fnbBlockTitle}>Generator & Cetak QR Meja</Text>
-              </View>
+              <Text style={[styles.fnbBlockTitle, { marginBottom: 4 }]}>Generator & Cetak QR Meja</Text>
               <Text style={styles.fnbBlockDesc}>
                 Cetak kartu atau stiker QR meja pelanggan agar dapat memesan langsung dari HP mereka tanpa unduh aplikasi.
               </Text>
@@ -1190,7 +1132,6 @@ const PengaturanScreen = ({ navigation }) => {
                 onPress={handlePrintAllTablesPdf}
                 activeOpacity={0.8}
               >
-                <MaterialCommunityIcons name="file-pdf-box" size={20} color="#FFFFFF" />
                 <Text style={styles.fnbActionBtnPrimaryText}>
                   Bagikan / Cetak Lembar QR Meja (PDF A4)
                 </Text>
@@ -1213,7 +1154,6 @@ const PengaturanScreen = ({ navigation }) => {
                   onPress={handlePrintSingleTableBt}
                   activeOpacity={0.8}
                 >
-                  <MaterialCommunityIcons name="printer" size={16} color="#0284C7" />
                   <Text style={styles.btnThermalTableText}>Cetak Thermal Bluetooth</Text>
                 </TouchableOpacity>
               </View>
@@ -1224,7 +1164,6 @@ const PengaturanScreen = ({ navigation }) => {
                 onPress={handleShareTableUrl}
                 activeOpacity={0.8}
               >
-                <MaterialCommunityIcons name="share-variant" size={16} color="#475569" />
                 <Text style={styles.btnShareUrlText}>
                   Bagikan Tautan Meja {singleTableNumber || "1"} (WhatsApp / Browser)
                 </Text>
@@ -1417,11 +1356,6 @@ const PengaturanScreen = ({ navigation }) => {
             style={styles.licenseBtnOutline}
             onPress={() => void handleRefreshPlan()}
           >
-            <MaterialCommunityIcons
-              name="refresh"
-              size={18}
-              color={colors.textSecondary}
-            />
             <Text style={styles.licenseBtnOutlineText}>Cek Ulang</Text>
           </TouchableOpacity>
 
@@ -1432,11 +1366,6 @@ const PengaturanScreen = ({ navigation }) => {
             ]}
             onPress={() => void handleUpgradePlan()}
           >
-            <MaterialCommunityIcons
-              name={plan.isPro ? "whatsapp" : "crown-outline"}
-              size={18}
-              color="#FFFFFF"
-            />
             <Text style={styles.licenseBtnPrimaryText}>
               {plan.isPro ? "Perpanjang Pro" : "Upgrade ke Pro"}
             </Text>
@@ -1447,12 +1376,7 @@ const PengaturanScreen = ({ navigation }) => {
       {/* ── Akun & Keamanan ── */}
       <Text style={styles.sectionTitle}>AKUN & KEAMANAN</Text>
       <View style={styles.card}>
-        <SettingRow
-          icon="account-circle-outline"
-          iconColor="#0F172A"
-          iconBg="#F1F5F9"
-          label="Username Akun"
-        >
+        <SettingRow label="Username Akun">
           <Text style={styles.accountValue}>{profile?.username || "-"}</Text>
         </SettingRow>
 
@@ -1463,15 +1387,6 @@ const PengaturanScreen = ({ navigation }) => {
           onPress={openPasswordModal}
           activeOpacity={0.7}
         >
-          <View
-            style={[styles.settingIconWrap, { backgroundColor: "#FEF3C7" }]}
-          >
-            <MaterialCommunityIcons
-              name="key-change"
-              size={20}
-              color="#D97706"
-            />
-          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.linkText}>Ganti Password</Text>
             <Text style={styles.linkSubText}>Ubah password akun toko Anda</Text>
@@ -1491,24 +1406,12 @@ const PengaturanScreen = ({ navigation }) => {
           onPress={handleOpenPinSettings}
           activeOpacity={0.7}
         >
-          <View
-            style={[
-              styles.settingIconWrap,
-              { backgroundColor: hasPin ? "#DCFCE7" : "#F1F5F9" },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name={hasPin ? "shield-lock" : "shield-lock-outline"}
-              size={20}
-              color={hasPin ? "#16A34A" : colors.primary}
-            />
-          </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Text style={styles.linkText}>PIN Keamanan Pemilik</Text>
               <View
                 style={{
-                  backgroundColor: hasPin ? "#DCFCE7" : "#E2E8F0",
+                  backgroundColor: hasPin ? "#DCFCE7" : "#F1F5F9",
                   paddingHorizontal: 8,
                   paddingVertical: 2,
                   borderRadius: 6,
@@ -1547,28 +1450,6 @@ const PengaturanScreen = ({ navigation }) => {
               onPress={() => setShowLockedMenuConfig(!showLockedMenuConfig)}
               activeOpacity={0.7}
             >
-              <View
-                style={[
-                  styles.settingIconWrap,
-                  {
-                    backgroundColor:
-                      Object.values(lockedMenus).filter(Boolean).length > 0
-                        ? "#FEE2E2"
-                        : "#F1F5F9",
-                  },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="shield-lock-outline"
-                  size={20}
-                  color={
-                    Object.values(lockedMenus).filter(Boolean).length > 0
-                      ? "#DC2626"
-                      : "#475569"
-                  }
-                />
-              </View>
-
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <Text style={styles.linkText}>Menu yang Dikunci PIN</Text>
@@ -1578,7 +1459,7 @@ const PengaturanScreen = ({ navigation }) => {
                       {
                         backgroundColor:
                           Object.values(lockedMenus).filter(Boolean).length > 0
-                            ? "#FEE2E2"
+                            ? "#FFF7ED"
                             : "#F1F5F9",
                       },
                     ]}
@@ -1589,7 +1470,7 @@ const PengaturanScreen = ({ navigation }) => {
                         {
                           color:
                             Object.values(lockedMenus).filter(Boolean).length > 0
-                              ? "#DC2626"
+                              ? colors.primary
                               : "#64748B",
                         },
                       ]}
@@ -1628,8 +1509,7 @@ const PengaturanScreen = ({ navigation }) => {
                       onPress={handleLockAllMenus}
                       activeOpacity={0.7}
                     >
-                      <MaterialCommunityIcons name="lock" size={12} color="#DC2626" />
-                      <Text style={[styles.quickActionPillText, { color: "#DC2626" }]}>
+                      <Text style={[styles.quickActionPillText, { color: colors.primary }]}>
                         Kunci Semua
                       </Text>
                     </TouchableOpacity>
@@ -1638,7 +1518,6 @@ const PengaturanScreen = ({ navigation }) => {
                       onPress={handleUnlockAllMenus}
                       activeOpacity={0.7}
                     >
-                      <MaterialCommunityIcons name="lock-open-variant" size={12} color="#475569" />
                       <Text style={styles.quickActionPillText}>Buka Semua</Text>
                     </TouchableOpacity>
                   </View>
@@ -1657,20 +1536,6 @@ const PengaturanScreen = ({ navigation }) => {
                         onPress={() => handleToggleMenuLock(item.key)}
                         activeOpacity={0.7}
                       >
-                        <View
-                          style={[
-                            styles.pinMenuIconWrap,
-                            {
-                              backgroundColor: isLocked ? "#FEF2F2" : "#F1F5F9",
-                            },
-                          ]}
-                        >
-                          <MaterialCommunityIcons
-                            name={isLocked ? "lock" : item.icon}
-                            size={18}
-                            color={isLocked ? "#EF4444" : "#64748B"}
-                          />
-                        </View>
                         <View style={{ flex: 1, marginRight: 8 }}>
                           <View
                             style={{
@@ -1701,8 +1566,8 @@ const PengaturanScreen = ({ navigation }) => {
                         <Switch
                           value={isLocked}
                           onValueChange={() => handleToggleMenuLock(item.key)}
-                          trackColor={{ false: "#E2E8F0", true: "#DCFCE7" }}
-                          thumbColor={isLocked ? "#16A34A" : "#94A3B8"}
+                          trackColor={{ false: "#E2E8F0", true: "#FED7AA" }}
+                          thumbColor={isLocked ? colors.primary : "#94A3B8"}
                         />
                       </TouchableOpacity>
                     );
@@ -1712,42 +1577,12 @@ const PengaturanScreen = ({ navigation }) => {
             )}
           </>
         )}
-
-        <View style={styles.divider} />
-
-        <TouchableOpacity
-          style={styles.linkRow}
-          onPress={handleLogout}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[styles.settingIconWrap, { backgroundColor: "#FEE2E2" }]}
-          >
-            <MaterialCommunityIcons name="logout" size={20} color="#DC2626" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.linkText, { color: "#DC2626" }]}>
-              Keluar (Logout)
-            </Text>
-            <Text style={styles.linkSubText}>Data tetap aman di cloud</Text>
-          </View>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={20}
-            color="#94A3B8"
-          />
-        </TouchableOpacity>
       </View>
 
       {/* ── Hardware & Printer ── */}
       <Text style={styles.sectionTitle}>PRINTER BLUETOOTH</Text>
       <View style={styles.card}>
-        <SettingRow
-          icon="printer-pos-network-outline"
-          iconColor="#0F172A"
-          iconBg="#F1F5F9"
-          label="Alamat MAC Printer (Opsional)"
-        >
+        <SettingRow label="Alamat MAC Printer (Opsional)">
           <TextInput
             style={styles.input}
             value={printerInput}
@@ -1758,18 +1593,13 @@ const PengaturanScreen = ({ navigation }) => {
           />
         </SettingRow>
 
+        <View style={styles.divider} />
+
         <TouchableOpacity
           style={styles.linkRow}
           onPress={handleOpenPrinterPicker}
           activeOpacity={0.7}
         >
-          <View style={[styles.settingIconWrap, { backgroundColor: "#DBEAFE" }]}>
-            <MaterialCommunityIcons
-              name="printer-pos"
-              size={20}
-              color="#1D4ED8"
-            />
-          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.linkText}>Pilih dari Printer Terpairing</Text>
             <Text style={styles.linkSubText}>
@@ -1800,15 +1630,6 @@ const PengaturanScreen = ({ navigation }) => {
           }}
           activeOpacity={0.7}
         >
-          <View
-            style={[styles.settingIconWrap, { backgroundColor: "#F1F5F9" }]}
-          >
-            <MaterialCommunityIcons
-              name="bluetooth-connect"
-              size={20}
-              color="#0F172A"
-            />
-          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.linkText}>Buka Pengaturan Bluetooth HP</Text>
             <Text style={styles.linkSubText}>
@@ -1831,15 +1652,6 @@ const PengaturanScreen = ({ navigation }) => {
           onPress={() => navigation.navigate("Panduan")}
           activeOpacity={0.7}
         >
-          <View
-            style={[styles.settingIconWrap, { backgroundColor: "#FEF3C7" }]}
-          >
-            <MaterialCommunityIcons
-              name="book-open-page-variant"
-              size={20}
-              color="#D97706"
-            />
-          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.linkText}>Buku Panduan Kasir</Text>
             <Text style={styles.linkSubText}>
@@ -1863,13 +1675,6 @@ const PengaturanScreen = ({ navigation }) => {
           activeOpacity={0.7}
           disabled={checkingUpdate}
         >
-          <View style={[styles.settingIconWrap, { backgroundColor: "#DBEAFE" }]}>
-            <MaterialCommunityIcons
-              name="cloud-download-outline"
-              size={20}
-              color="#1D4ED8"
-            />
-          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.linkText}>
               {checkingUpdate ? "Memeriksa Update..." : "Periksa Update"}
@@ -1879,7 +1684,7 @@ const PengaturanScreen = ({ navigation }) => {
             </Text>
           </View>
           {checkingUpdate ? (
-            <MaterialCommunityIcons name="loading" size={20} color="#1D4ED8" />
+            <MaterialCommunityIcons name="loading" size={20} color={colors.primary} />
           ) : (
             <MaterialCommunityIcons
               name="chevron-right"
@@ -1896,11 +1701,6 @@ const PengaturanScreen = ({ navigation }) => {
         onPress={handleSave}
         activeOpacity={0.85}
       >
-        <MaterialCommunityIcons
-          name={saved ? "check-circle-outline" : "content-save-outline"}
-          size={20}
-          color="#FFFFFF"
-        />
         <Text style={styles.saveBtnText}>
           {saved ? "TERSIMPAN!" : "SIMPAN PENGATURAN"}
         </Text>
@@ -1919,13 +1719,6 @@ const PengaturanScreen = ({ navigation }) => {
           onPress={handleResetData}
           activeOpacity={0.7}
         >
-          <View style={styles.dangerIconWrap}>
-            <MaterialCommunityIcons
-              name="delete-forever-outline"
-              size={20}
-              color="#DC2626"
-            />
-          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.dangerText}>Reset Semua Data Database</Text>
             <Text style={styles.dangerSubText}>
@@ -2152,7 +1945,7 @@ const PengaturanScreen = ({ navigation }) => {
               <TouchableOpacity
                 style={[
                   styles.confirmRestoreBtn,
-                  { backgroundColor: "#0F172A" },
+                  { backgroundColor: colors.primary },
                   pwSaving && { opacity: 0.6 },
                 ]}
                 onPress={handleChangePassword}
@@ -2229,7 +2022,7 @@ const PengaturanScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.background,
   },
   contentContainer: {
     paddingHorizontal: 16,
@@ -2260,11 +2053,11 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 16,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: "#FED7AA",
     overflow: "hidden",
   },
   avatarImg: {
@@ -2275,7 +2068,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: -3,
     right: -3,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     width: 22,
     height: 22,
     borderRadius: 7,
@@ -2344,7 +2137,7 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: "#F1F5F9",
-    marginLeft: 56,
+    marginHorizontal: 14,
   },
 
   // Setting Row
@@ -2403,7 +2196,7 @@ const styles = StyleSheet.create({
 
   // Primary Save Button
   saveBtn: {
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -2412,9 +2205,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 8,
     elevation: 3,
-    shadowColor: "#0F172A",
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.22,
     shadowRadius: 8,
   },
   saveBtnText: {
@@ -2847,8 +2640,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modeCardOptionActive: {
-    borderColor: "#16A34A",
-    backgroundColor: "#F0FDF4",
+    borderColor: colors.primary,
+    backgroundColor: "#FFF7ED",
   },
   modeIconWrap: {
     width: 44,
@@ -2875,7 +2668,7 @@ const styles = StyleSheet.create({
   },
   modeActiveBadge: {
     marginTop: 8,
-    backgroundColor: "#DCFCE7",
+    backgroundColor: "#FED7AA",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -2883,7 +2676,7 @@ const styles = StyleSheet.create({
   modeActiveBadgeText: {
     fontFamily: fonts.bold,
     fontSize: 10,
-    color: "#15803D",
+    color: colors.primary,
   },
 
   // ── Antrean Offline Styles ──
@@ -3013,7 +2806,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     paddingVertical: 10,
     borderRadius: 10,
   },
@@ -3080,8 +2873,8 @@ const styles = StyleSheet.create({
   qrisUploadBox: {
     borderWidth: 2,
     borderStyle: "dashed",
-    borderColor: "#FCD34D",
-    backgroundColor: "#FFFBEB",
+    borderColor: "#FED7AA",
+    backgroundColor: "#FFF7ED",
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
@@ -3090,13 +2883,13 @@ const styles = StyleSheet.create({
   qrisUploadBoxText: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: "#B45309",
+    color: colors.primary,
     marginTop: 6,
   },
   qrisUploadBoxSub: {
     fontFamily: fonts.regular,
     fontSize: 11,
-    color: "#92400E",
+    color: "#64748B",
     marginTop: 2,
   },
   tableConfigRow: {
@@ -3134,7 +2927,7 @@ const styles = StyleSheet.create({
     color: "#0F172A",
   },
   tableSaveBtn: {
-    backgroundColor: "#0284C7",
+    backgroundColor: colors.primary,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -3149,7 +2942,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#0284C7",
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     borderRadius: 12,
     marginBottom: 10,
@@ -3190,16 +2983,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#E0F2FE",
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#BAE6FD",
+    borderColor: "#FED7AA",
     paddingVertical: 8,
     borderRadius: 10,
   },
   btnThermalTableText: {
     fontFamily: fonts.bold,
     fontSize: 11.5,
-    color: "#0284C7",
+    color: colors.primary,
   },
   btnShareUrl: {
     flexDirection: "row",

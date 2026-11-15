@@ -16,6 +16,7 @@ import { useFocusEffect } from "@react-navigation/native";
 
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
+import { signOut } from "../services/authService";
 import TransactionRepository from "../database/transactionRepository";
 import { formatRupiah } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
@@ -34,7 +35,7 @@ const { width } = Dimensions.get("window");
 const isTablet = width >= 600;
 
 const HomeScreen = ({ navigation }) => {
-  const { state } = useContext(AppContext);
+  const { state, dispatch } = useContext(AppContext);
   const { profile } = useAuth();
   const cloudStoreName = profile?.stores?.store_name;
   const storeName = cloudStoreName || state.storeName || "Toko Saya";
@@ -125,6 +126,34 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
+  const handleLogout = async () => {
+    let unsynced = 0;
+    try {
+      unsynced = await getOfflineQueueCount();
+    } catch {
+      unsynced = 0;
+    }
+    const warning =
+      unsynced > 0
+        ? `Ada ${unsynced} transaksi yang belum terkirim ke cloud. Transaksi tetap tersimpan aman di HP ini dan akan terkirim saat Anda masuk lagi dengan akun yang sama dan ada internet. Tetap keluar?`
+        : "Anda akan keluar dari akun di HP ini. Data toko tetap aman di cloud.";
+    Alert.alert(
+      unsynced > 0 ? "Masih Ada Transaksi Belum Terkirim" : "Keluar Akun",
+      warning,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Keluar",
+          style: "destructive",
+          onPress: () => {
+            dispatch({ type: "CLEAR_CART" });
+            signOut();
+          },
+        },
+      ],
+    );
+  };
+
   const now = new Date();
   const dateFormatted = now.toLocaleDateString("id-ID", {
     weekday: "long",
@@ -137,71 +166,54 @@ const HomeScreen = ({ navigation }) => {
   const totalLaba = todaySummary.laba;
   const totalTransaksi = todaySummary.count;
 
-  // Menu Operasional Kasir
+  // Menu Bento Grid Utama
   const operationalMenus = [
     {
       key: "Gudang",
-      title: "Gudang Stok",
-      desc: "Kelola produk & stok",
+      title: "Gudang & Stok",
+      desc: "Kelola katalog produk, harga & stok",
       icon: "package-variant-closed",
-      iconColor: "#0284C7",
-      bgColor: "#F0F9FF",
-    },
-    {
-      key: "BukuKasbon",
-      title: "Buku Kasbon",
-      desc: "Piutang pelanggan & WA",
-      icon: "book-account-outline",
-      iconColor: "#D97706",
-      bgColor: "#FFFBEB",
-      proFeature: "kasbon",
     },
     {
       key: "Laporan",
-      title: "Laporan Kasir",
-      desc: "Riwayat & rekap penjualan",
+      title: "Laporan Penjualan",
+      desc: "Riwayat nota & rekapitulasi kas",
       icon: "file-document-outline",
-      iconColor: "#059669",
-      bgColor: "#ECFDF5",
       proFeature: "laporanLanjutan",
     },
     {
       key: "Dashboard",
       title: "Statistik Toko",
-      desc: "Grafik & analitik omzet",
-      icon: "chart-box-outline",
-      iconColor: "#4F46E5",
-      bgColor: "#EEF2FF",
+      desc: "Grafik performa & produk terlaris",
+      icon: "chart-bar",
       proFeature: "dashboard",
+    },
+    {
+      key: "BukuKasbon",
+      title: "Buku Kasbon",
+      desc: "Catatan piutang & tagihan pelanggan",
+      icon: "book-open-variant",
+      proFeature: "kasbon",
     },
   ];
 
-  // Menu Alat & Konfigurasi
+  // Menu Konfigurasi & Panduan
   const settingsMenus = [
     {
       key: "SettingNota",
-      title: "Format Nota & Struk",
-      desc: "Atur logo toko, header/footer, dan printer Bluetooth",
-      icon: "receipt-text-outline",
-      iconColor: "#475569",
-      bgColor: "#F1F5F9",
+      title: "Format Nota & Printer",
+      desc: "Atur kop struk, catatan kaki & Bluetooth thermal",
       proFeature: "customNota",
     },
     {
       key: "Pengaturan",
       title: "Pengaturan Toko",
-      desc: "Profil usaha, keamanan PIN, dan konfigurasi sistem",
-      icon: "cog-outline",
-      iconColor: "#475569",
-      bgColor: "#F1F5F9",
+      desc: "Profil usaha, meja F&B, PIN & langganan",
     },
     {
       key: "Panduan",
-      title: "Buku Panduan",
-      desc: "Petunjuk pemakaian kasir & fitur offline-online",
-      icon: "book-open-outline",
-      iconColor: "#475569",
-      bgColor: "#F1F5F9",
+      title: "Panduan Penggunaan",
+      desc: "Cara pakai kasir, sinkronisasi & printer",
       directNavigate: true,
     },
   ];
@@ -214,43 +226,102 @@ const HomeScreen = ({ navigation }) => {
         barStyle="dark-content"
       />
 
-      {/* ─── Top Navbar Bersih & Kokoh ─── */}
+      {/* ─── Header Toko Bersih & Status Koneksi ─── */}
       <View style={styles.topNavbar}>
-        <View style={styles.storeHeaderLeft}>
-          <View style={styles.storeNameRow}>
-            <Text style={styles.storeNameText} numberOfLines={1}>
-              {storeName}
-            </Text>
-            {state.businessMode === "fnb" && (
-              <View style={styles.fnbTag}>
-                <Text style={styles.fnbTagText}>KAFE / F&B</Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.statusRow}>
-            <View style={styles.onlineDot} />
-            <Text style={styles.statusDateText}>{dateFormatted}</Text>
-          </View>
-        </View>
-
-        {/* Store Avatar / Setting Shortcut */}
         <TouchableOpacity
-          style={styles.storeAvatarBtn}
-          activeOpacity={0.8}
+          style={styles.brandLeftRow}
+          activeOpacity={0.82}
           onPress={() => navigateWithPin("Pengaturan")}
         >
-          {state.storeLogo ? (
+          <View style={styles.storeAvatarBtn}>
             <Image
-              source={{ uri: state.storeLogo }}
-              style={styles.storeAvatarImage}
+              source={
+                state.storeLogo
+                  ? { uri: state.storeLogo }
+                  : require("../../assets/app-logo.png")
+              }
+              style={
+                state.storeLogo
+                  ? styles.storeAvatarPhoto
+                  : styles.storeAvatarLogoDefault
+              }
+              resizeMode={state.storeLogo ? "cover" : "contain"}
             />
-          ) : (
-            <MaterialCommunityIcons
-              name="storefront-outline"
-              size={24}
-              color={colors.primary}
-            />
-          )}
+          </View>
+
+          <View style={styles.storeHeaderLeft}>
+            <View style={styles.storeNameRow}>
+              <Text style={styles.storeNameText} numberOfLines={1}>
+                {storeName}
+              </Text>
+              <View
+                style={[styles.tierBadge, plan.isPro && styles.tierBadgePro]}
+              >
+                <Text
+                  style={[
+                    styles.tierBadgeText,
+                    plan.isPro && styles.tierBadgeTextPro,
+                  ]}
+                >
+                  {plan.isPro ? "PRO" : "STARTER"}
+                </Text>
+              </View>
+              {state.businessMode === "fnb" && (
+                <View style={styles.fnbTag}>
+                  <Text style={styles.fnbTagText}>F&B</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.statusDateText} numberOfLines={1}>
+              {dateFormatted}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.connStatusPill,
+            syncStatus.offline
+              ? styles.connStatusPillOffline
+              : syncStatus.syncing
+                ? styles.connStatusPillSyncing
+                : styles.connStatusPillOnline,
+          ]}
+          activeOpacity={0.8}
+          onPress={() => {
+            if (offlineCount > 0) {
+              navigation.navigate("TransaksiPending");
+            } else {
+              refreshSyncCounts();
+            }
+          }}
+        >
+          <View
+            style={[
+              styles.connStatusDot,
+              syncStatus.offline
+                ? { backgroundColor: "#F59E0B" }
+                : syncStatus.syncing
+                  ? { backgroundColor: colors.primary }
+                  : { backgroundColor: "#10B981" },
+            ]}
+          />
+          <Text
+            style={[
+              styles.connStatusText,
+              syncStatus.offline
+                ? styles.connStatusTextOffline
+                : syncStatus.syncing
+                  ? styles.connStatusTextSyncing
+                  : styles.connStatusTextOnline,
+            ]}
+          >
+            {syncStatus.offline
+              ? "Offline"
+              : syncStatus.syncing
+                ? "Sinkron..."
+                : "Online"}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -267,23 +338,16 @@ const HomeScreen = ({ navigation }) => {
               onPress={() => navigation.navigate("TransaksiPending")}
               activeOpacity={0.7}
             >
-              <View style={styles.offlineIconBox}>
-                <MaterialCommunityIcons
-                  name="cloud-upload-outline"
-                  size={20}
-                  color="#B45309"
-                />
-              </View>
               <View style={styles.offlineTextWrap}>
                 <Text style={styles.offlineTitle}>
-                  {offlineCount} Transaksi Belum Terkirim
+                  {offlineCount} Transaksi Menunggu Sinkronisasi
                 </Text>
                 <Text style={styles.offlineSub}>
                   {syncStatus.needsReview > 0
-                    ? `${syncStatus.needsReview} perlu ditinjau • ketuk untuk lihat`
+                    ? `${syncStatus.needsReview} perlu ditinjau • ketuk untuk detail`
                     : syncStatus.offline
-                      ? "Tidak ada internet • ketuk untuk lihat"
-                      : "Dikirim otomatis • ketuk untuk lihat"}
+                      ? "Tersimpan aman di perangkat • ketuk untuk detail"
+                      : "Siap diunggah ke cloud • ketuk untuk detail"}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -294,100 +358,53 @@ const HomeScreen = ({ navigation }) => {
               activeOpacity={0.8}
             >
               <Text style={styles.offlineBtnText}>
-                {syncingOffline ? "Sinkron..." : "Kirim Sekarang"}
+                {syncingOffline ? "Mengirim..." : "Sinkronkan"}
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ─── Hero Sales Overview Card (Modern POS Standard) ─── */}
+        {/* ─── Kartu Hero Omzet Warm Orange ─── */}
         <View style={styles.salesHeroCard}>
+          <View style={styles.heroDecorCircle} />
           <View style={styles.salesHeroHeader}>
-            <View style={styles.salesHeroTag}>
-              <MaterialCommunityIcons
-                name="calendar-today"
-                size={13}
-                color={colors.textSecondary}
-              />
-              <Text style={styles.salesHeroTagText}>PENJUALAN HARI INI</Text>
-            </View>
+            <Text style={styles.salesHeroTagText}>OMZET HARI INI</Text>
             <TouchableOpacity
               style={styles.privacyToggle}
               activeOpacity={0.7}
               onPress={() => setHideBalance(!hideBalance)}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <MaterialCommunityIcons
-                name={hideBalance ? "eye-off-outline" : "eye-outline"}
-                size={18}
-                color={colors.textSecondary}
-              />
+              <Text style={styles.privacyToggleText}>
+                {hideBalance ? "Tampilkan" : "Sembunyikan"}
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Hero Omzet Number */}
           <Text style={styles.heroOmzetAmount} numberOfLines={1}>
             {hideBalance ? "Rp ••••••••" : formatRupiah(totalOmzet)}
           </Text>
 
-          {/* Sub-Metrics: Laba Bersih & Transaksi */}
-          <View style={styles.metricsDivider} />
           <View style={styles.metricsRow}>
-            <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>Laba Bersih</Text>
-              <Text style={[styles.metricValue, { color: "#059669" }]} numberOfLines={1}>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>Estimasi Laba Bersih</Text>
+              <Text style={styles.metricValue} numberOfLines={1}>
                 {hideBalance ? "Rp ••••••" : formatRupiah(totalLaba)}
               </Text>
             </View>
 
-            <View style={styles.metricVerticalLine} />
-
-            <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>Total Transaksi</Text>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>Transaksi Selesai</Text>
               <Text style={styles.metricValue} numberOfLines={1}>
-                {hideBalance ? "•• Nota" : `${totalTransaksi} Nota Terbit`}
+                {hideBalance ? "•• Nota" : `${totalTransaksi} Nota`}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* ─── Primary POS Action: Buka Kasir ─── */}
-        <TouchableOpacity
-          style={styles.mainKasirButton}
-          activeOpacity={0.9}
-          onPress={() => navigateWithPin("Kasir")}
-        >
-          <View style={styles.mainKasirLeft}>
-            <View style={styles.mainKasirIconBadge}>
-              <MaterialCommunityIcons
-                name="point-of-sale"
-                size={28}
-                color="#FFFFFF"
-              />
-            </View>
-            <View style={styles.mainKasirTextCol}>
-              <Text style={styles.mainKasirTitle}>Buka Kasir POS</Text>
-              <Text style={styles.mainKasirSubtitle}>
-                Mulai transaksi, scan barcode & cetak struk
-              </Text>
-            </View>
-          </View>
-          <View style={styles.mainKasirArrowWrap}>
-            <MaterialCommunityIcons
-              name={
-                pinProtected && lockedMenus?.["Kasir"]
-                  ? "lock-outline"
-                  : "arrow-right"
-              }
-              size={22}
-              color="#FFFFFF"
-            />
-          </View>
-        </TouchableOpacity>
-
-        {/* ─── Section 1: Operasional Toko ─── */}
+        {/* ─── Bento Grid: Menu Operasional (2 Kolom) ─── */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionHeading}>Operasional Toko</Text>
+          <Text style={styles.sectionHeading}>Manajemen & Operasional</Text>
         </View>
 
         <View style={styles.gridContainer}>
@@ -402,35 +419,21 @@ const HomeScreen = ({ navigation }) => {
                 onPress={() => navigateWithPin(menu.key)}
               >
                 <View style={styles.gridCardTop}>
-                  <View
-                    style={[
-                      styles.gridIconSquircle,
-                      { backgroundColor: menu.bgColor },
-                    ]}
-                  >
+                  <View style={styles.gridIconSquircle}>
                     <MaterialCommunityIcons
                       name={menu.icon}
-                      size={24}
-                      color={menu.iconColor}
+                      size={22}
+                      color={colors.primary}
                     />
                   </View>
                   <View style={styles.gridCardBadges}>
                     {isLocked && (
                       <View style={styles.lockBadge}>
-                        <MaterialCommunityIcons
-                          name="lock"
-                          size={12}
-                          color="#EF4444"
-                        />
+                        <Text style={styles.lockBadgeText}>PIN</Text>
                       </View>
                     )}
                     {needsPro && (
                       <View style={styles.proBadge}>
-                        <MaterialCommunityIcons
-                          name="crown-outline"
-                          size={10}
-                          color="#92400E"
-                        />
                         <Text style={styles.proBadgeText}>PRO</Text>
                       </View>
                     )}
@@ -443,9 +446,9 @@ const HomeScreen = ({ navigation }) => {
           })}
         </View>
 
-        {/* ─── Section 2: Alat & Konfigurasi ─── */}
+        {/* ─── Pengaturan & Konfigurasi (Clean Minimal List) ─── */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionHeading}>Alat & Pengaturan</Text>
+          <Text style={styles.sectionHeading}>Konfigurasi & Bantuan</Text>
         </View>
 
         <View style={styles.settingsGroupCard}>
@@ -465,54 +468,67 @@ const HomeScreen = ({ navigation }) => {
                   }
                 }}
               >
-                <View
-                  style={[
-                    styles.settingsIconBox,
-                    { backgroundColor: item.bgColor },
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name={item.icon}
-                    size={20}
-                    color={item.iconColor}
-                  />
-                </View>
                 <View style={styles.settingsTextCol}>
-                  <Text style={styles.settingsRowTitle}>{item.title}</Text>
+                  <View style={styles.settingsTitleInline}>
+                    <Text style={styles.settingsRowTitle}>{item.title}</Text>
+                    {item.proFeature && !plan.isPro && (
+                      <View style={styles.proBadge}>
+                        <Text style={styles.proBadgeText}>PRO</Text>
+                      </View>
+                    )}
+                    {isLocked && (
+                      <View style={styles.lockBadge}>
+                        <Text style={styles.lockBadgeText}>PIN</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.settingsRowDesc}>{item.desc}</Text>
                 </View>
-                {item.proFeature && !plan.isPro && (
-                  <View style={styles.proBadge}>
-                    <MaterialCommunityIcons
-                      name="crown-outline"
-                      size={10}
-                      color="#92400E"
-                    />
-                    <Text style={styles.proBadgeText}>PRO</Text>
-                  </View>
-                )}
                 <MaterialCommunityIcons
-                  name={isLocked ? "lock" : "chevron-right"}
+                  name="chevron-right"
                   size={20}
-                  color={isLocked ? "#EF4444" : "#94A3B8"}
+                  color="#94A3B8"
                 />
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {/* ─── Footer Brand Ringan ─── */}
-        <View style={styles.footerWrap}>
+        {/* ─── Tombol Keluar (Logout) Paling Bawah ─── */}
+        <TouchableOpacity
+          style={styles.logoutBottomButton}
+          activeOpacity={0.78}
+          onPress={handleLogout}
+        >
           <MaterialCommunityIcons
-            name="shield-check-outline"
-            size={15}
-            color="#64748B"
+            name="logout"
+            size={18}
+            color="#DC2626"
           />
-          <Text style={styles.footerText}>
-            MarketPos • Sistem Kasir Pintar & Andal
-          </Text>
-        </View>
+          <Text style={styles.logoutBottomText}>Keluar Akun (Logout)</Text>
+        </TouchableOpacity>
       </ScrollView>
+
+      {/* ─── Floating Bottom CTA: Buka Kasir POS ─── */}
+      <View style={styles.floatingBottomWrap}>
+        <TouchableOpacity
+          style={styles.mainKasirButton}
+          activeOpacity={0.9}
+          onPress={() => navigateWithPin("Kasir")}
+        >
+          <View style={styles.mainKasirTextCol}>
+            <Text style={styles.mainKasirTitle}>Buka Kasir POS</Text>
+            <Text style={styles.mainKasirSubtitle}>
+              Transaksi penjualan, scan barcode & cetak struk
+            </Text>
+          </View>
+          <View style={styles.mainKasirActionPill}>
+            <Text style={styles.mainKasirActionText}>
+              {pinProtected && lockedMenus?.["Kasir"] ? "Buka PIN" : "Mulai →"}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
 
       {/* ── Modal PIN Keamanan Pemilik Toko ── */}
       <PinModal
@@ -541,82 +557,142 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.background,
   },
 
   // ── Top Navbar ──
   topNavbar: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     paddingTop:
-      Platform.OS === "android" ? (StatusBar.currentHeight || 0) + 16 : 52,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
+      Platform.OS === "android" ? (StatusBar.currentHeight || 0) + 14 : 52,
+    paddingBottom: 14,
+    paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: "#F1F5F9",
+    gap: 10,
+  },
+  brandLeftRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  storeAvatarBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#FFF7ED",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    overflow: "hidden",
+  },
+  storeAvatarPhoto: {
+    width: "100%",
+    height: "100%",
+  },
+  storeAvatarLogoDefault: {
+    width: 28,
+    height: 28,
   },
   storeHeaderLeft: {
     flex: 1,
-    paddingRight: 14,
+    justifyContent: "center",
   },
   storeNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    flexWrap: "wrap",
   },
   storeNameText: {
     fontFamily: fonts.extraBold,
-    fontSize: 22,
-    color: "#0F172A",
-    letterSpacing: 0.2,
+    fontSize: 18,
+    color: colors.text,
+    letterSpacing: -0.3,
+    flexShrink: 1,
   },
-  fnbTag: {
-    backgroundColor: "#FEF3C7",
+  tierBadge: {
+    backgroundColor: "#F1F5F9",
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
+  },
+  tierBadgePro: {
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: "#FED7AA",
+  },
+  tierBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 9.5,
+    color: "#64748B",
+    letterSpacing: 0.5,
+  },
+  tierBadgeTextPro: {
+    color: colors.primary,
+  },
+  fnbTag: {
+    backgroundColor: "#0F172A",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   fnbTagText: {
     fontFamily: fonts.bold,
     fontSize: 9,
-    color: "#B45309",
+    color: "#FFFFFF",
     letterSpacing: 0.5,
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 3,
-    gap: 6,
-  },
-  onlineDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: "#10B981",
   },
   statusDateText: {
     fontFamily: fonts.medium,
-    fontSize: 12,
-    color: "#64748B",
+    fontSize: 11.5,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
-  storeAvatarBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#F1F5F9",
+  connStatusPill: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    overflow: "hidden",
   },
-  storeAvatarImage: {
-    width: "100%",
-    height: "100%",
+  connStatusPillOnline: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#A7F3D0",
+  },
+  connStatusPillOffline: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+  },
+  connStatusPillSyncing: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+  },
+  connStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  connStatusText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 0.2,
+  },
+  connStatusTextOnline: {
+    color: "#047857",
+  },
+  connStatusTextOffline: {
+    color: "#B45309",
+  },
+  connStatusTextSyncing: {
+    color: colors.primary,
   },
 
   // ── Scroll Content ──
@@ -624,9 +700,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 120,
     maxWidth: 680,
     width: "100%",
     alignSelf: "center",
@@ -637,195 +713,132 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#FFFBEB",
-    borderRadius: 14,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#FDE68A",
-    padding: 12,
+    borderColor: "#FED7AA",
+    padding: 14,
     marginBottom: 16,
   },
   offlineAlertLeft: {
-    flexDirection: "row",
-    alignItems: "center",
     flex: 1,
-    gap: 10,
-  },
-  offlineIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: "#FEF3C7",
-    alignItems: "center",
-    justifyContent: "center",
+    paddingRight: 10,
   },
   offlineTextWrap: {
     flex: 1,
   },
   offlineTitle: {
     fontFamily: fonts.bold,
-    fontSize: 12,
-    color: "#92400E",
+    fontSize: 13,
+    color: "#9A3412",
   },
   offlineSub: {
     fontFamily: fonts.medium,
     fontSize: 11,
-    color: "#B45309",
-    marginTop: 1,
+    color: "#C2410C",
+    marginTop: 2,
   },
   offlineBtn: {
-    backgroundColor: "#D97706",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    marginLeft: 10,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   offlineBtnText: {
     fontFamily: fonts.bold,
-    fontSize: 11,
+    fontSize: 12,
     color: "#FFFFFF",
   },
 
-  // ── Sales Hero Card (Square / Moka Style) ──
+  // ── Sales Hero Card (Warm Orange) ──
   salesHeroCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
-    marginBottom: 16,
+    backgroundColor: colors.primary,
+    borderRadius: 24,
+    padding: 22,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    elevation: 5,
+    marginBottom: 24,
+    overflow: "hidden",
+    position: "relative",
+  },
+  heroDecorCircle: {
+    position: "absolute",
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    top: -60,
+    right: -50,
   },
   salesHeroHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  salesHeroTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+    marginBottom: 6,
   },
   salesHeroTagText: {
     fontFamily: fonts.bold,
     fontSize: 11,
-    color: "#64748B",
-    letterSpacing: 0.6,
+    color: "rgba(255,255,255,0.86)",
+    letterSpacing: 0.8,
   },
   privacyToggle: {
-    padding: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+  privacyToggleText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+    color: "#FFFFFF",
   },
   heroOmzetAmount: {
     fontFamily: fonts.extraBold,
-    fontSize: 28,
-    color: "#0F172A",
-    letterSpacing: -0.5,
-    marginBottom: 16,
-  },
-  metricsDivider: {
-    height: 1,
-    backgroundColor: "#F1F5F9",
-    marginBottom: 14,
+    fontSize: 32,
+    color: "#FFFFFF",
+    letterSpacing: -0.6,
+    marginBottom: 18,
   },
   metricsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    gap: 10,
   },
-  metricItem: {
+  metricBox: {
     flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.16)",
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
   },
   metricLabel: {
     fontFamily: fonts.medium,
     fontSize: 11,
-    color: "#64748B",
-    marginBottom: 2,
+    color: "rgba(255,255,255,0.8)",
+    marginBottom: 3,
   },
   metricValue: {
     fontFamily: fonts.bold,
-    fontSize: 14,
-    color: "#0F172A",
-  },
-  metricVerticalLine: {
-    width: 1,
-    height: 28,
-    backgroundColor: "#E2E8F0",
-    marginHorizontal: 12,
-  },
-
-  // ── Primary Action: Buka Kasir ──
-  mainKasirButton: {
-    backgroundColor: "#0F172A",
-    borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
-    marginBottom: 24,
-  },
-  mainKasirLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    flex: 1,
-  },
-  mainKasirIconBadge: {
-    width: 50,
-    height: 50,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mainKasirTextCol: {
-    flex: 1,
-  },
-  mainKasirTitle: {
-    fontFamily: fonts.extraBold,
-    fontSize: 17,
+    fontSize: 15,
     color: "#FFFFFF",
-    letterSpacing: 0.2,
-    marginBottom: 2,
-  },
-  mainKasirSubtitle: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: "rgba(255,255,255,0.72)",
-  },
-  mainKasirArrowWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 10,
   },
 
   // ── Section Headings ──
   sectionHeaderRow: {
     marginBottom: 12,
-    marginLeft: 2,
+    paddingHorizontal: 2,
   },
   sectionHeading: {
     fontFamily: fonts.bold,
-    fontSize: 14,
-    color: "#334155",
-    letterSpacing: 0.2,
+    fontSize: 15,
+    color: colors.text,
+    letterSpacing: -0.2,
   },
 
-  // ── Grid Operasional (2 Kolom) ──
+  // ── Bento Grid Operasional (2 Kolom) ──
   gridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -834,37 +847,32 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   gridCard: {
-    width: (width - 32 - 12) / 2 > 320 ? 320 : (width - 32 - 12) / 2,
+    width: (width - 36 - 12) / 2 > 320 ? 320 : (width - 36 - 12) / 2,
     flexGrow: isTablet ? 0 : 1,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: 18,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#F1F5F9",
     shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.03,
-    shadowRadius: 6,
+    shadowRadius: 10,
     elevation: 1,
   },
   gridCardTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 14,
   },
   gridIconSquircle: {
     width: 42,
     height: 42,
     borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  lockBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -873,98 +881,168 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  // Badge penanda fitur Pro. Bukan gembok: menu tetap bisa dibuka agar
-  // data yang sudah ada tetap terlihat (K-11).
-  proBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "#FEF3C7",
-    borderWidth: 1,
-    borderColor: "#FDE68A",
+  lockBadge: {
+    backgroundColor: "#F1F5F9",
     borderRadius: 6,
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 2,
+  },
+  lockBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    color: "#64748B",
+    letterSpacing: 0.4,
+  },
+  proBadge: {
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   proBadgeText: {
     fontFamily: fonts.bold,
     fontSize: 9,
     letterSpacing: 0.5,
-    color: "#92400E",
+    color: colors.primary,
   },
   gridCardTitle: {
     fontFamily: fonts.bold,
-    fontSize: 14,
-    color: "#0F172A",
+    fontSize: 15,
+    color: colors.text,
     marginBottom: 4,
+    letterSpacing: -0.2,
   },
   gridCardDesc: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#64748B",
-    lineHeight: 15,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 17,
   },
 
   // ── Section 2: Group Card Pengaturan ──
   settingsGroupCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#F1F5F9",
     shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.03,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 1,
-    marginBottom: 24,
+    marginBottom: 16,
     overflow: "hidden",
   },
   settingsRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 15,
+    paddingHorizontal: 18,
   },
   settingsRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
   },
-  settingsIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
-  },
   settingsTextCol: {
     flex: 1,
+    paddingRight: 10,
+  },
+  settingsTitleInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 3,
   },
   settingsRowTitle: {
     fontFamily: fonts.bold,
-    fontSize: 13,
-    color: "#0F172A",
-    marginBottom: 2,
+    fontSize: 14,
+    color: colors.text,
   },
   settingsRowDesc: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#64748B",
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
 
-  // ── Footer ──
-  footerWrap: {
+  // ── Tombol Logout Paling Bawah ──
+  logoutBottomButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingTop: 4,
-    paddingBottom: 16,
+    gap: 8,
+    backgroundColor: "#FFF1F2",
+    borderWidth: 1,
+    borderColor: "#FECDD3",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginTop: 4,
+    marginBottom: 24,
   },
-  footerText: {
+  logoutBottomText: {
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+    color: "#DC2626",
+  },
+
+  // ── Floating Bottom CTA: Buka Kasir POS ──
+  floatingBottomWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === "ios" ? 28 : 16,
+    backgroundColor: "rgba(255, 253, 251, 0.94)",
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  mainKasirButton: {
+    maxWidth: 680,
+    width: "100%",
+    alignSelf: "center",
+    backgroundColor: "#0F172A",
+    borderRadius: 18,
+    paddingVertical: 15,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  mainKasirTextCol: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  mainKasirTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 16,
+    color: "#FFFFFF",
+    letterSpacing: -0.2,
+    marginBottom: 2,
+  },
+  mainKasirSubtitle: {
     fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#94A3B8",
+    fontSize: 12,
+    color: "rgba(255,255,255,0.72)",
+  },
+  mainKasirActionPill: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+  },
+  mainKasirActionText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#FFFFFF",
   },
 });
 

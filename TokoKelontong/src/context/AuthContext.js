@@ -85,16 +85,19 @@ export function AuthProvider({ children }) {
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
         const p = await withTimeout(getProfile(), 10000);
-        setProfile(p);
-        await saveAuthSnapshot(p);
-        // Ganti toko di HP yang sama: bersihkan pengaturan toko sebelumnya.
+        // Ganti toko di HP yang sama: bersihkan pengaturan toko sebelumnya
+        // SEBELUM setProfile agar tidak menghapus plan yang baru di-refresh.
         const lastStore = await getLastStoreId();
         if (lastStore && p?.store_id && lastStore !== p.store_id) {
           await clearStoreLocalSession({ full: true });
-          // Cache langganan milik toko lama tidak boleh dipakai toko baru.
           await clearPlan();
         }
+        await saveAuthSnapshot(p);
         if (p?.store_id) await setLastStoreId(p.store_id);
+        setProfile(p);
+        if (p?.store_id) {
+          void refreshPlan({ force: true, storeId: p.store_id });
+        }
         return;
       } catch (e) {
         if (isNetworkFailure(e)) break; // offline: jangan menunggu retry
@@ -187,7 +190,7 @@ export function AuthProvider({ children }) {
       startSyncEngine();
       startPlanEngine();
       // Segarkan plan begitu toko diketahui (bisa jadi baru diaktifkan Pro).
-      void refreshPlan({ force: true });
+      void refreshPlan({ force: true, storeId });
       return () => {
         stopSyncEngine();
         stopPlanEngine();

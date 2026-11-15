@@ -242,7 +242,11 @@ class ProductRepository {
   async getLowStockProducts() {
     const all = await this.getAllProducts();
     return all
-      .filter((p) => p.stock_quantity <= (p.min_stock_threshold || 5))
+      .filter(
+        (p) =>
+          Number(p.min_stock_threshold) >= 0 &&
+          p.stock_quantity <= (p.min_stock_threshold ?? 5),
+      )
       .sort((a, b) => a.stock_quantity - b.stock_quantity);
   }
 

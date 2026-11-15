@@ -353,7 +353,7 @@ const DashboardScreen = ({ navigation }) => {
         </View>
       )}
 
-      {/* ── Unified Hero Financial Card (Dark Slate Theme) ── */}
+      {/* ── Unified Hero Financial Card (Warm Orange) ── */}
       <TouchableOpacity
         style={styles.heroSummaryCard}
         onPress={navigateToTransactions}
@@ -361,22 +361,14 @@ const DashboardScreen = ({ navigation }) => {
       >
         <View style={styles.summaryTopRow}>
           <View style={{ flex: 1 }}>
-            <View style={styles.summaryBadgePill}>
-              <View style={styles.summaryDotLive} />
-              <Text style={styles.summaryBadgePillText}>
-                TOTAL OMZET PENJUALAN
-              </Text>
-            </View>
+            <Text style={styles.summaryBadgePillText}>
+              TOTAL OMZET PENJUALAN
+            </Text>
             <Text style={styles.summaryOmzetValue}>
               {formatRupiah(summary.omzet)}
             </Text>
           </View>
           <View style={styles.summaryTxBadge}>
-            <MaterialCommunityIcons
-              name="receipt-text-check-outline"
-              size={18}
-              color="#F8FAFC"
-            />
             <Text style={styles.summaryTxBadgeText}>
               {summary.count} Transaksi
             </Text>
@@ -386,11 +378,6 @@ const DashboardScreen = ({ navigation }) => {
         {/* Indikator Laba Bersih & Margin */}
         <View style={styles.profitBannerRow}>
           <View style={styles.profitPill}>
-            <MaterialCommunityIcons
-              name="trending-up"
-              size={15}
-              color="#10B981"
-            />
             <Text style={styles.profitLabel}>Laba Bersih:</Text>
             <Text style={styles.profitValue}>
               {formatRupiah(summary.laba)}
@@ -406,14 +393,7 @@ const DashboardScreen = ({ navigation }) => {
         {/* Pemisahan Tunai Laci vs Non-Tunai */}
         <View style={styles.splitRow}>
           <View style={styles.splitCol}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <MaterialCommunityIcons
-                name="cash-multiple"
-                size={15}
-                color="#34D399"
-              />
-              <Text style={styles.splitColLabel}>Tunai (Laci Kasir)</Text>
-            </View>
+            <Text style={styles.splitColLabel}>Tunai (Laci Kasir)</Text>
             <Text style={styles.splitColValue}>
               {formatRupiah(summary.omzet_tunai || 0)}
             </Text>
@@ -422,14 +402,7 @@ const DashboardScreen = ({ navigation }) => {
           <View style={styles.splitVerticalLine} />
 
           <View style={styles.splitCol}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <MaterialCommunityIcons
-                name="cellphone-check"
-                size={15}
-                color="#38BDF8"
-              />
-              <Text style={styles.splitColLabel}>Non-Tunai (QRIS/TF)</Text>
-            </View>
+            <Text style={styles.splitColLabel}>Non-Tunai (QRIS/TF)</Text>
             <Text style={styles.splitColValue}>
               {formatRupiah(summary.omzet_non_tunai || 0)}
             </Text>
@@ -437,12 +410,7 @@ const DashboardScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.tapToDetailRow}>
-          <Text style={styles.tapToDetailText}>Lihat Detail Transaksi Lengkap</Text>
-          <MaterialCommunityIcons
-            name="arrow-right"
-            size={14}
-            color="#94A3B8"
-          />
+          <Text style={styles.tapToDetailText}>Lihat Detail Transaksi Lengkap →</Text>
         </View>
       </TouchableOpacity>
 
@@ -453,25 +421,11 @@ const DashboardScreen = ({ navigation }) => {
           onPress={navigateToTransactions}
           activeOpacity={0.8}
         >
-          <View style={styles.subStatHeader}>
-            <View style={[styles.subStatIconWrap, { backgroundColor: "#EFF6FF" }]}>
-              <MaterialCommunityIcons
-                name="calculator-variant-outline"
-                size={20}
-                color={colors.primary}
-              />
-            </View>
-            <MaterialCommunityIcons
-              name="arrow-up-right"
-              size={16}
-              color="#94A3B8"
-            />
-          </View>
           <Text style={styles.subStatLabel}>RATA-RATA STRUK</Text>
           <Text style={styles.subStatValue} numberOfLines={1}>
             {formatRupiah(averageBasket)}
           </Text>
-          <Text style={styles.subStatSub}>Nilai rata-rata belanja</Text>
+          <Text style={styles.subStatSub}>Nilai rata-rata per transaksi</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -479,41 +433,18 @@ const DashboardScreen = ({ navigation }) => {
           onPress={() => navigation.navigate("Gudang")}
           activeOpacity={0.8}
         >
-          <View style={styles.subStatHeader}>
-            <View style={[styles.subStatIconWrap, { backgroundColor: "#F0FDF4" }]}>
-              <MaterialCommunityIcons
-                name="package-variant-closed"
-                size={20}
-                color="#059669"
-              />
-            </View>
-            <MaterialCommunityIcons
-              name="arrow-up-right"
-              size={16}
-              color="#94A3B8"
-            />
-          </View>
           <Text style={styles.subStatLabel}>TOTAL PRODUK</Text>
           <Text style={styles.subStatValue} numberOfLines={1}>
             {totalProducts} Barang
           </Text>
-          <Text style={styles.subStatSub}>Tersimpan di gudang</Text>
+          <Text style={styles.subStatSub}>Tersimpan di katalog gudang</Text>
         </TouchableOpacity>
       </View>
 
       {/* ── Section Produk Terlaris (Top 5 Best Sellers) ── */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View style={styles.sectionIconSquircle}>
-              <MaterialCommunityIcons
-                name="fire"
-                size={18}
-                color="#EA580C"
-              />
-            </View>
-            <Text style={styles.sectionTitle}>Produk Terlaris</Text>
-          </View>
+          <Text style={styles.sectionTitle}>Produk Terlaris</Text>
           {summary.top_products.length > 0 && (
             <View style={styles.topBadgeCount}>
               <Text style={styles.topBadgeCountText}>Top 5</Text>
@@ -523,11 +454,6 @@ const DashboardScreen = ({ navigation }) => {
 
         {summary.top_products.length === 0 ? (
           <View style={styles.emptyTopBox}>
-            <MaterialCommunityIcons
-              name="shopping-outline"
-              size={28}
-              color="#94A3B8"
-            />
             <Text style={styles.emptyTopText}>
               Belum ada data produk terjual pada periode ini.
             </Text>
@@ -588,34 +514,16 @@ const DashboardScreen = ({ navigation }) => {
       {/* ── Section Status Stok Gudang ── */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View
-              style={[
-                styles.sectionIconSquircle,
-                lowStockProducts.length > 0 && { backgroundColor: "#FEF2F2" },
-              ]}
-            >
-              <MaterialCommunityIcons
-                name={
-                  lowStockProducts.length > 0
-                    ? "alert-circle-outline"
-                    : "shield-check-outline"
-                }
-                size={18}
-                color={lowStockProducts.length > 0 ? "#DC2626" : "#059669"}
-              />
-            </View>
-            <Text
-              style={[
-                styles.sectionTitle,
-                lowStockProducts.length > 0 && { color: "#DC2626" },
-              ]}
-            >
-              {lowStockProducts.length > 0
-                ? `Perlu Restok (${lowStockProducts.length})`
-                : "Status Stok Gudang"}
-            </Text>
-          </View>
+          <Text
+            style={[
+              styles.sectionTitle,
+              lowStockProducts.length > 0 && { color: "#DC2626" },
+            ]}
+          >
+            {lowStockProducts.length > 0
+              ? `Perlu Restok (${lowStockProducts.length})`
+              : "Status Stok Gudang"}
+          </Text>
 
           <TouchableOpacity
             style={styles.btnBukaGudang}
@@ -628,13 +536,6 @@ const DashboardScreen = ({ navigation }) => {
 
         {lowStockProducts.length === 0 ? (
           <View style={styles.emptyStockContainer}>
-            <View style={styles.emptyStockIconCircle}>
-              <MaterialCommunityIcons
-                name="check-decagram"
-                size={32}
-                color="#059669"
-              />
-            </View>
             <Text style={styles.emptyStockTitle}>Semua Stok Aman</Text>
             <Text style={styles.emptyStockSub}>
               Tidak ada produk yang habis atau di bawah batas minimum.
@@ -923,7 +824,7 @@ const DashboardScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.background,
   },
   scrollContent: {
     paddingTop: 8,
@@ -937,38 +838,37 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 8,
     marginBottom: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: "#FED7AA",
     borderRadius: 12,
   },
   readOnlyBannerText: {
     flex: 1,
     fontFamily: fonts.medium,
     fontSize: 11.5,
-    color: "#92400E",
+    color: "#9A3412",
     lineHeight: 16,
   },
   readOnlyBannerAction: {
     fontFamily: fonts.bold,
     fontSize: 11.5,
-    color: "#92400E",
-    textDecorationLine: "underline",
+    color: colors.primary,
   },
 
   // ── Segmented Control Pill ──
   segmentedContainer: {
     flexDirection: "row",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#FFF7ED",
     borderRadius: 12,
     padding: 4,
     marginHorizontal: 16,
     marginTop: 8,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#FFEDD5",
   },
   segmentBtn: {
     flex: 1,
@@ -978,21 +878,21 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   segmentBtnActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.primary,
     elevation: 2,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   segmentText: {
     fontFamily: fonts.semiBold,
     fontSize: 13,
-    color: "#64748B",
+    color: "#9A3412",
   },
   segmentTextActive: {
     fontFamily: fonts.bold,
-    color: "#0F172A",
+    color: "#FFFFFF",
   },
 
   // ── Date Navigator Bar ──
@@ -1007,7 +907,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#F1F5F9",
     shadowColor: "#0F172A",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
@@ -1018,9 +918,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#FFEDD5",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1039,7 +939,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     paddingHorizontal: 8,
     paddingVertical: 1,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#FFF7ED",
     borderRadius: 8,
   },
   badgeJumpTodayText: {
@@ -1052,9 +952,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#BFDBFE",
+    borderColor: "#FED7AA",
     marginHorizontal: 16,
     marginBottom: 12,
     paddingVertical: 9,
@@ -1066,19 +966,17 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
 
-  // ── Unified Hero Financial Card ──
+  // ── Unified Hero Financial Card (Warm Orange) ──
   heroSummaryCard: {
     marginHorizontal: 16,
     marginBottom: 12,
-    borderRadius: 20,
-    backgroundColor: "#0F172A",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    padding: 16,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    padding: 18,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
     elevation: 4,
   },
   summaryTopRow: {
@@ -1086,37 +984,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
   },
-  summaryBadgePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 4,
-  },
-  summaryDotLive: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#10B981",
-  },
   summaryBadgePillText: {
     fontFamily: fonts.bold,
     fontSize: 10,
-    color: "#94A3B8",
-    letterSpacing: 0.5,
+    color: "rgba(255,255,255,0.82)",
+    letterSpacing: 0.6,
+    marginBottom: 4,
   },
   summaryOmzetValue: {
     fontFamily: fonts.extraBold,
-    fontSize: 24,
+    fontSize: 26,
     color: "#FFFFFF",
     letterSpacing: -0.5,
   },
   summaryTxBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
@@ -1124,7 +1008,7 @@ const styles = StyleSheet.create({
   summaryTxBadgeText: {
     fontFamily: fonts.bold,
     fontSize: 12,
-    color: "#F8FAFC",
+    color: "#FFFFFF",
   },
   profitBannerRow: {
     marginTop: 10,
@@ -1133,9 +1017,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.25)",
+    backgroundColor: "rgba(15, 23, 42, 0.18)",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
@@ -1144,21 +1026,21 @@ const styles = StyleSheet.create({
   profitLabel: {
     fontFamily: fonts.medium,
     fontSize: 11,
-    color: "#6EE7B7",
+    color: "rgba(255,255,255,0.85)",
   },
   profitValue: {
     fontFamily: fonts.extraBold,
     fontSize: 13,
-    color: "#34D399",
+    color: "#FFFFFF",
   },
   profitPct: {
     fontFamily: fonts.bold,
     fontSize: 11,
-    color: "#A7F3D0",
+    color: "rgba(255,255,255,0.85)",
   },
   summaryDivider: {
     height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
     marginVertical: 12,
   },
   splitRow: {
@@ -1171,7 +1053,7 @@ const styles = StyleSheet.create({
   splitColLabel: {
     fontFamily: fonts.medium,
     fontSize: 11,
-    color: "#94A3B8",
+    color: "rgba(255,255,255,0.82)",
   },
   splitColValue: {
     fontFamily: fonts.bold,
@@ -1182,7 +1064,7 @@ const styles = StyleSheet.create({
   splitVerticalLine: {
     width: 1,
     height: 26,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
     marginHorizontal: 12,
   },
   tapToDetailRow: {
@@ -1192,12 +1074,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.06)",
+    borderTopColor: "rgba(255, 255, 255, 0.15)",
   },
   tapToDetailText: {
-    fontFamily: fonts.medium,
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    color: "#94A3B8",
+    color: "rgba(255,255,255,0.9)",
   },
 
   // ── Secondary Analytics Cards ──
@@ -1348,21 +1230,21 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: 5,
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#FB923C",
     borderRadius: 3,
   },
   topProductQtyBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFF7ED",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#FED7AA",
   },
   topProductQtyText: {
     fontFamily: fonts.bold,
     fontSize: 11,
-    color: "#0F172A",
+    color: colors.primary,
   },
 
   // Status Stok Gudang
@@ -1468,7 +1350,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#FFF7ED",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1516,7 +1398,7 @@ const styles = StyleSheet.create({
   },
   modeTabTextActive: {
     fontFamily: fonts.bold,
-    color: "#0F172A",
+    color: colors.primary,
   },
   pickerSectionLabel: {
     fontFamily: fonts.bold,
@@ -1539,8 +1421,8 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   pickerItemActive: {
-    backgroundColor: "#0F172A",
-    borderColor: "#0F172A",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   pickerItemText: {
     fontFamily: fonts.bold,
@@ -1565,8 +1447,8 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   monthGridItemActive: {
-    backgroundColor: "#0F172A",
-    borderColor: "#0F172A",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   monthGridText: {
     fontFamily: fonts.bold,
@@ -1587,8 +1469,8 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   dayItemActive: {
-    backgroundColor: "#0F172A",
-    borderColor: "#0F172A",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   dayItemText: {
     fontFamily: fonts.bold,
@@ -1601,7 +1483,7 @@ const styles = StyleSheet.create({
   allInfoBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#FFF7ED",
     padding: 14,
     borderRadius: 12,
     gap: 10,
@@ -1637,7 +1519,7 @@ const styles = StyleSheet.create({
   },
   modalApplyBtn: {
     flex: 1,
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.primary,
     paddingVertical: 11,
     borderRadius: 10,
     alignItems: "center",

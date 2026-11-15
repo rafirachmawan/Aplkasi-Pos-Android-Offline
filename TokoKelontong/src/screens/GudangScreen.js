@@ -107,6 +107,8 @@ const GudangScreen = ({ navigation }) => {
   );
 
   // Filter berdasarkan kategori + search + status stok
+  const isUnlimitedStock = (p) => Number(p.min_stock_threshold) < 0;
+
   const displayedProducts = products.filter((p) => {
     const matchCat =
       selectedCategory === "Semua" || p.category === selectedCategory;
@@ -117,10 +119,11 @@ const GudangScreen = ({ navigation }) => {
     let matchStock = true;
     if (stockFilter === "low") {
       matchStock =
+        !isUnlimitedStock(p) &&
         p.stock_quantity > 0 &&
-        p.stock_quantity <= (p.min_stock_threshold || 5);
+        p.stock_quantity <= (p.min_stock_threshold ?? 5);
     } else if (stockFilter === "out") {
-      matchStock = p.stock_quantity <= 0;
+      matchStock = !isUnlimitedStock(p) && p.stock_quantity <= 0;
     }
     return matchCat && matchSearch && matchStock;
   });
@@ -180,9 +183,13 @@ const GudangScreen = ({ navigation }) => {
   // Hitung stok menipis untuk badge
   const lowStockCount = products.filter(
     (p) =>
-      p.stock_quantity > 0 && p.stock_quantity <= (p.min_stock_threshold || 5),
+      !isUnlimitedStock(p) &&
+      p.stock_quantity > 0 &&
+      p.stock_quantity <= (p.min_stock_threshold ?? 5),
   ).length;
-  const outOfStockCount = products.filter((p) => p.stock_quantity <= 0).length;
+  const outOfStockCount = products.filter(
+    (p) => !isUnlimitedStock(p) && p.stock_quantity <= 0,
+  ).length;
 
   return (
     <View style={styles.container}>
@@ -226,20 +233,6 @@ const GudangScreen = ({ navigation }) => {
           onPress={() => setStockFilter("all")}
           activeOpacity={0.7}
         >
-          <View
-            style={[
-              styles.infoIconWrap,
-              stockFilter === "all"
-                ? styles.infoIconAllActive
-                : styles.infoIconAll,
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="package-variant"
-              size={16}
-              color={stockFilter === "all" ? "#FFFFFF" : colors.primary}
-            />
-          </View>
           <Text
             style={[
               styles.infoValue,
@@ -254,7 +247,7 @@ const GudangScreen = ({ navigation }) => {
               stockFilter === "all" && styles.infoLabelActiveAll,
             ]}
           >
-            Total Item
+            Total Produk
           </Text>
         </TouchableOpacity>
 
@@ -276,20 +269,6 @@ const GudangScreen = ({ navigation }) => {
           }}
           activeOpacity={0.7}
         >
-          <View
-            style={[
-              styles.infoIconWrap,
-              stockFilter === "low"
-                ? styles.infoIconLowActive
-                : styles.infoIconLow,
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="alert-circle-outline"
-              size={16}
-              color={stockFilter === "low" ? "#B45309" : "#D97706"}
-            />
-          </View>
           <Text
             style={[
               styles.infoValue,
@@ -327,20 +306,6 @@ const GudangScreen = ({ navigation }) => {
           }}
           activeOpacity={0.7}
         >
-          <View
-            style={[
-              styles.infoIconWrap,
-              stockFilter === "out"
-                ? styles.infoIconOutActive
-                : styles.infoIconOut,
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="close-circle-outline"
-              size={16}
-              color={stockFilter === "out" ? "#DC2626" : colors.error}
-            />
-          </View>
           <Text
             style={[
               styles.infoValue,
@@ -356,7 +321,7 @@ const GudangScreen = ({ navigation }) => {
               stockFilter === "out" && styles.infoLabelActiveOut,
             ]}
           >
-            Habis
+            Stok Habis
           </Text>
         </TouchableOpacity>
       </View>
@@ -679,31 +644,16 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   infoItemActiveAll: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFF7ED",
     borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
   infoItemActiveLow: {
     backgroundColor: "#FFFBEB",
     borderColor: "#F59E0B",
-    shadowColor: "#F59E0B",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
   infoItemActiveOut: {
     backgroundColor: "#FEF2F2",
     borderColor: "#EF4444",
-    shadowColor: "#EF4444",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
   infoIconWrap: {
     width: 28,

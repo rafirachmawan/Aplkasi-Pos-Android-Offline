@@ -248,6 +248,12 @@ function rowToProduct(row, pendingMap) {
   } catch {
     p = { id: row.id, product_name: row.product_name, barcode: row.barcode };
   }
+  if (Number(p.min_stock_threshold) < 0) {
+    return {
+      ...p,
+      stock_quantity: 999999,
+    };
+  }
   // Stok efektif = stok server terakhir - penjualan yang belum terkirim
   return {
     ...p,
