@@ -23,15 +23,30 @@ export function isNetworkLikeError(err) {
 }
 
 // Ambil seluruh produk per halaman (batas default Supabase 1000 baris).
-async function fetchAllProductRows() {
+async function fetchAllProductRows(storeId) {
+  let targetStoreId = storeId;
+  if (!targetStoreId) {
+    try {
+      targetStoreId = (await getActiveStoreId()) || (await getStoreId());
+    } catch {
+      targetStoreId = null;
+    }
+  }
+
   const rows = [];
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("products")
       .select("*")
       .order("product_name", { ascending: true })
       .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
+
+    if (targetStoreId) {
+      query = query.eq("store_id", targetStoreId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     rows.push(...(data || []));
     if (!data || data.length < PAGE_SIZE) break;
@@ -106,8 +121,16 @@ class ProductRepository {
   /**
    * Ambil katalog langsung dari server (tanpa cadangan lokal).
    */
-  async fetchProductsFromServer() {
-    const rows = await fetchAllProductRows();
+  async fetchProductsFromServer(storeId) {
+    let targetStoreId = storeId;
+    if (!targetStoreId) {
+      try {
+        targetStoreId = (await getActiveStoreId()) || (await getStoreId());
+      } catch {
+        targetStoreId = null;
+      }
+    }
+    const rows = await fetchAllProductRows(targetStoreId);
     const localMap = await getLocalWholesaleMap();
     return rows.map((p) => ({
       ...p,
@@ -138,19 +161,27 @@ class ProductRepository {
    */
   async getProductByBarcode(barcode) {
     let res;
+    let targetStoreId = null;
     try {
-      res = await supabase
+      targetStoreId = (await getActiveStoreId()) || (await getStoreId());
+    } catch (_) {}
+
+    try {
+      let query = supabase
         .from("products")
         .select("*")
-        .eq("barcode", barcode)
-        .maybeSingle();
+        .eq("barcode", barcode);
+      if (targetStoreId) {
+        query = query.eq("store_id", targetStoreId);
+      }
+      res = await query.maybeSingle();
     } catch (err) {
       res = { error: err };
     }
     if (res.error) {
       if (isNetworkLikeError(res.error)) {
         try {
-          const storeId = await getActiveStoreId();
+          const storeId = targetStoreId || (await getActiveStoreId());
           const cached = storeId
             ? await getCatalogProductByBarcode(storeId, barcode)
             : null;
@@ -178,11 +209,21 @@ class ProductRepository {
    * Mencari produk berdasarkan nama (sebagian atau penuh)
    */
   async searchProductByName(keyword) {
-    const { data, error } = await supabase
+    let targetStoreId = null;
+    try {
+      targetStoreId = (await getActiveStoreId()) || (await getStoreId());
+    } catch (_) {}
+
+    let query = supabase
       .from("products")
       .select("*")
       .ilike("product_name", `%${keyword}%`)
       .order("product_name", { ascending: true });
+
+    if (targetStoreId) {
+      query = query.eq("store_id", targetStoreId);
+    }
+    const { data, error } = await query;
     if (error) throw error;
 
     const localMap = await getLocalWholesaleMap();

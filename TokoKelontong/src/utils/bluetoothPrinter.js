@@ -343,3 +343,39 @@ export const printBarcodeLabelViaBluetooth = async ({
   await printer.printBarCode(String(barcode), printer.BARCODETYPE.CODE128, 2, 80, 0, 2);
   await printer.printAndFeed(60);
 };
+
+// Cetak Barcode / QR Code Meja langsung ke printer thermal Bluetooth.
+export const printTableQRCodeViaBluetooth = async ({
+  storeName,
+  tableNumber,
+  url,
+}) => {
+  const lib = await connectToPrinter();
+  const printer = lib.BluetoothEscposPrinter;
+  await printer.printerInit();
+  await printer.setWidth(384);
+
+  await printer.printerAlign(printer.ALIGN.CENTER);
+  await printer.setBlob(1);
+  await printer.printText(`${storeName || "MarketPos Resto"}\n`, TEXT_OPTS);
+  await printer.printText(`*** MEJA ${tableNumber} ***\n`, TEXT_OPTS);
+  await printer.setBlob(0);
+  await printer.printText("Scan untuk pesan & bayar\n", TEXT_OPTS);
+  await printer.printText(dash() + "\n", TEXT_OPTS);
+
+  try {
+    // ESC/POS printQRCode(url, size, errorCorrection)
+    await printer.printQRCode(
+      String(url),
+      260,
+      printer.ERROR_CORRECTION ? printer.ERROR_CORRECTION.L : 1
+    );
+  } catch (qrErr) {
+    console.warn("ESC/POS printQRCode failed, fallback to text url:", qrErr);
+    await printer.printText(`${url}\n`, TEXT_OPTS);
+  }
+
+  await printer.printText(dash() + "\n", TEXT_OPTS);
+  await printer.printText("Buka kamera HP & scan QR diatas\n", TEXT_OPTS);
+  await printer.printAndFeed(100);
+};

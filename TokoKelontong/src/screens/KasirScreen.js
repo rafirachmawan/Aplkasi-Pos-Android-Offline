@@ -44,6 +44,12 @@ import useSyncStatus from "../hooks/useSyncStatus";
 import { colors, fonts } from "../theme/colors";
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
+import { useAuth } from "../context/AuthContext";
+import {
+  fetchPendingTableOrders,
+  updateTableOrderStatus,
+  subscribeToTableOrders,
+} from "../services/tableOrderService";
 
 const { width } = Dimensions.get("window");
 const isTablet = width > 600;
@@ -104,6 +110,145 @@ const KasirScreen = ({ navigation }) => {
 
   const [heldOrders, setHeldOrders] = useState([]);
   const [showHeldOrdersModal, setShowHeldOrdersModal] = useState(false);
+
+  // F&B Realtime Table Orders State
+  const { profile } = useAuth();
+  const [pendingTableOrders, setPendingTableOrders] = useState([]);
+  const [showTableOrdersModal, setShowTableOrdersModal] = useState(false);
+  const [selectedProofModal, setSelectedProofModal] = useState(null);
+  const [processingOrderId, setProcessingOrderId] = useState(null);
+
+  const loadPendingOrders = useCallback(async () => {
+    const storeId = profile?.store_id || profile?.stores?.id;
+    if (!storeId || !isFnbMode) return;
+    try {
+      const orders = await fetchPendingTableOrders(storeId);
+      setPendingTableOrders(orders);
+    } catch (err) {
+      console.warn("Gagal memuat pesanan meja:", err);
+    }
+  }, [profile?.store_id, profile?.stores?.id, isFnbMode]);
+
+  useEffect(() => {
+    const storeId = profile?.store_id || profile?.stores?.id;
+    if (!storeId || !isFnbMode) return;
+    loadPendingOrders();
+    const unsub = subscribeToTableOrders(storeId, () => {
+      loadPendingOrders();
+    });
+    const interval = setInterval(loadPendingOrders, 12000);
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
+  }, [profile?.store_id, profile?.stores?.id, isFnbMode, loadPendingOrders]);
+
+  const handleAcceptTableOrder = async (order) => {
+    setProcessingOrderId(order.id);
+    try {
+      const res = await updateTableOrderStatus(order.id, "accepted");
+      if (!res.success) {
+        throw new Error(res.error || "Gagal mengubah status pesanan");
+      }
+
+      // Cetak Struk Dapur Bluetooth jika printer sudah terhubung
+      try {
+        await printKitchenTicketViaBluetooth(
+          {
+            invoice_number: `MEJA-${order.table_number}-${Date.now().toString().slice(-4)}`,
+            created_at: order.created_at,
+            table_number: order.table_number,
+            order_type: "dine_in",
+            payment_notes: `${order.payment_method === "qris" ? "QRIS" : "Bayar di Kasir"} • Pemesan: ${order.customer_name}${order.notes ? " • " + order.notes : ""}`,
+          },
+          (order.items || []).map((it) => ({
+            product_name: it.name || it.product_name,
+            quantity: it.quantity,
+          })),
+          storeProfile
+        );
+      } catch (printErr) {
+        console.warn("Cetak dapur otomatis tidak aktif:", printErr.message);
+      }
+
+      Alert.alert(
+        "Pesanan Diterima",
+        `Pesanan Meja ${order.table_number} berhasil diterima dan dikirim ke dapur.`,
+        [
+          { text: "Tutup", style: "cancel" },
+          {
+            text: "Muat ke Kasir",
+            onPress: () => handleLoadOrderToKasir(order),
+          },
+        ]
+      );
+
+      await loadPendingOrders();
+    } catch (err) {
+      Alert.alert("Gagal Memproses", err.message);
+    } finally {
+      setProcessingOrderId(null);
+    }
+  };
+
+  const handleCancelTableOrder = (order) => {
+    Alert.alert(
+      "Tolak Pesanan",
+      `Apakah Anda yakin ingin membatalkan pesanan dari Meja ${order.table_number}?`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Ya, Batalkan",
+          style: "destructive",
+          onPress: async () => {
+            setProcessingOrderId(order.id);
+            try {
+              await updateTableOrderStatus(order.id, "cancelled");
+              await loadPendingOrders();
+            } catch (err) {
+              Alert.alert("Gagal", err.message);
+            } finally {
+              setProcessingOrderId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLoadOrderToKasir = (order) => {
+    dispatch({ type: "CLEAR_CART" });
+    (order.items || []).forEach((item) => {
+      const prod = allProducts.find((p) => p.id === item.product_id) || {
+        id: item.product_id,
+        name: item.name,
+        selling_price: item.price,
+      };
+      dispatch({
+        type: "ADD_TO_CART",
+        payload: {
+          product_id: prod.id,
+          name: prod.name,
+          price: item.price,
+          quantity: item.quantity,
+        },
+      });
+      if (item.quantity > 1) {
+        dispatch({
+          type: "UPDATE_CART_QTY",
+          payload: { product_id: prod.id, quantity: item.quantity },
+        });
+      }
+    });
+
+    setTableNumber(String(order.table_number || ""));
+    setOrderType("dine_in");
+    setPaymentMethod(order.payment_method === "qris" ? "qris" : "cash");
+    setPaymentNotes(`Pesanan Meja ${order.table_number} (${order.customer_name})`);
+
+    setShowTableOrdersModal(false);
+    setShowCartModal(true);
+  };
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastTx, setLastTx] = useState(null);
   const [lastTxDetails, setLastTxDetails] = useState([]);
@@ -176,10 +321,10 @@ const KasirScreen = ({ navigation }) => {
       console.log("Error loading products", e);
     }
 
-    syncNow({ catalogMaxAgeMs: 60000 })
+    syncNow({ forceCatalog: true })
       .then(async () => {
         const fresh = await ProductRepository.getCachedProducts();
-        if (fresh.length > 0) applyProducts(fresh);
+        applyProducts(fresh);
       })
       .catch(() => {});
   };
@@ -979,6 +1124,48 @@ const KasirScreen = ({ navigation }) => {
         </TouchableOpacity>
       )}
 
+      {/* ── Banner Pesanan Meja Masuk (F&B Realtime Table Orders) ── */}
+      {isFnbMode && pendingTableOrders.length > 0 && (
+        <TouchableOpacity
+          style={styles.tableOrdersBanner}
+          onPress={() => setShowTableOrdersModal(true)}
+          activeOpacity={0.8}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+              flex: 1,
+            }}
+          >
+            <View style={styles.tableBadgeIcon}>
+              <MaterialCommunityIcons
+                name="silverware-fork-knife"
+                size={20}
+                color="#FFFFFF"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.tableBannerTitle}>
+                {pendingTableOrders.length} Pesanan Meja Menunggu Konfirmasi!
+              </Text>
+              <Text style={styles.tableBannerSub}>
+                Ketuk untuk periksa pesanan, bukti bayar & cetak dapur
+              </Text>
+            </View>
+            <View style={styles.tableCountBadge}>
+              <Text style={styles.tableCountBadgeText}>{pendingTableOrders.length}</Text>
+            </View>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={22}
+            color="#D97706"
+          />
+        </TouchableOpacity>
+      )}
+
       {/* ── Search Bar Modern & Barcode Quick Scan ── */}
       <View style={styles.searchContainer}>
         <MaterialCommunityIcons
@@ -1028,6 +1215,62 @@ const KasirScreen = ({ navigation }) => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 8 }}
         >
+          {/* Tombol Cepat Pesanan Meja (Mode F&B) */}
+          {isFnbMode && (
+            <TouchableOpacity
+              style={[
+                styles.categoryPill,
+                {
+                  backgroundColor: pendingTableOrders.length > 0 ? "#FEF3C7" : "#F8FAFC",
+                  borderColor: pendingTableOrders.length > 0 ? "#F59E0B" : "#CBD5E1",
+                  borderWidth: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                },
+              ]}
+              onPress={() => setShowTableOrdersModal(true)}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons
+                name="table-chair"
+                size={16}
+                color={pendingTableOrders.length > 0 ? "#D97706" : "#475569"}
+              />
+              <Text
+                style={[
+                  styles.categoryPillText,
+                  {
+                    color: pendingTableOrders.length > 0 ? "#D97706" : "#475569",
+                    fontFamily: fonts.bold,
+                  },
+                ]}
+              >
+                Pesanan Meja
+              </Text>
+              {pendingTableOrders.length > 0 && (
+                <View
+                  style={{
+                    backgroundColor: "#D97706",
+                    borderRadius: 10,
+                    paddingHorizontal: 6,
+                    paddingVertical: 1,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: fonts.bold,
+                      fontSize: 10,
+                      color: "#FFFFFF",
+                    }}
+                  >
+                    {pendingTableOrders.length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+
           {categories.map((cat, idx) => {
             const count =
               cat === "Semua"
@@ -2278,6 +2521,259 @@ const KasirScreen = ({ navigation }) => {
             </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      {/* ── Modal Pesanan Meja Masuk (Self-Order F&B) ── */}
+      <Modal
+        visible={showTableOrdersModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTableOrdersModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.catModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowTableOrdersModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.catModalCard, { maxHeight: "88%" }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <View style={styles.catModalHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    backgroundColor: "#FEF3C7",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="table-chair"
+                    size={22}
+                    color="#D97706"
+                  />
+                </View>
+                <View>
+                  <Text style={styles.catModalTitle}>Pesanan Meja Masuk</Text>
+                  <Text style={styles.catModalSubtitle}>
+                    {pendingTableOrders.length} pesanan menunggu konfirmasi
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <TouchableOpacity
+                  onPress={loadPendingOrders}
+                  style={styles.catModalCloseBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialCommunityIcons name="refresh" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowTableOrdersModal(false)}
+                  style={styles.catModalCloseBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialCommunityIcons name="close" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* List Pesanan Meja */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingVertical: 10, gap: 12 }}
+            >
+              {pendingTableOrders.length === 0 ? (
+                <View style={{ padding: 36, alignItems: "center" }}>
+                  <MaterialCommunityIcons
+                    name="silverware-fork-knife"
+                    size={48}
+                    color="#CBD5E1"
+                  />
+                  <Text style={{ fontFamily: fonts.bold, color: "#475569", fontSize: 16, marginTop: 12 }}>
+                    Belum Ada Pesanan Masuk
+                  </Text>
+                  <Text style={{ fontFamily: fonts.regular, color: "#94A3B8", fontSize: 12, textAlign: "center", marginTop: 4, paddingHorizontal: 20 }}>
+                    Pesanan yang dikirim pelanggan setelah memindai QR code di meja akan langsung muncul di sini.
+                  </Text>
+                </View>
+              ) : (
+                pendingTableOrders.map((order) => {
+                  const isProcessing = processingOrderId === order.id;
+                  const orderDate = new Date(order.created_at).toLocaleTimeString("id-ID", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+
+                  return (
+                    <View key={order.id} style={styles.tableOrderCard}>
+                      {/* Top Header Card */}
+                      <View style={styles.tableOrderCardHeader}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <View style={styles.tableNumBadge}>
+                            <Text style={styles.tableNumBadgeText}>MEJA {order.table_number}</Text>
+                          </View>
+                          <Text style={styles.orderTimeText}>{orderDate}</Text>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.payMethodBadge,
+                            order.payment_method === "qris" ? styles.payMethodQris : styles.payMethodCash,
+                          ]}
+                        >
+                          <MaterialCommunityIcons
+                            name={order.payment_method === "qris" ? "qrcode-scan" : "cash"}
+                            size={12}
+                            color={order.payment_method === "qris" ? "#1D4ED8" : "#047857"}
+                          />
+                          <Text
+                            style={[
+                              styles.payMethodBadgeText,
+                              { color: order.payment_method === "qris" ? "#1D4ED8" : "#047857" },
+                            ]}
+                          >
+                            {order.payment_method === "qris" ? "QRIS Toko" : "Bayar di Kasir"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Info Pemesan */}
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginVertical: 6 }}>
+                        <MaterialCommunityIcons name="account" size={14} color="#64748B" />
+                        <Text style={styles.customerNameText}>
+                          {order.customer_name} {order.customer_phone ? `(${order.customer_phone})` : ""}
+                        </Text>
+                      </View>
+
+                      {/* Items List */}
+                      <View style={styles.orderItemsContainer}>
+                        {(order.items || []).map((it, iIdx) => (
+                          <View key={iIdx} style={styles.orderItemRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.orderItemName}>
+                                <Text style={{ fontFamily: fonts.bold }}>{it.quantity}x </Text>
+                                {it.name}
+                              </Text>
+                              {!!it.notes && (
+                                <Text style={styles.orderItemNote}>📝 "{it.notes}"</Text>
+                              )}
+                            </View>
+                            <Text style={styles.orderItemSubtotal}>
+                              {formatRupiah((it.price || 0) * it.quantity)}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+
+                      {/* Catatan Keseluruhan */}
+                      {!!order.notes && (
+                        <View style={styles.orderGeneralNoteBox}>
+                          <Text style={styles.orderGeneralNoteText}>
+                            💬 Pesan: {order.notes}
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Foto Bukti Transfer QRIS */}
+                      {order.payment_method === "qris" && (
+                        <View style={styles.proofSection}>
+                          {order.payment_proof_url ? (
+                            <TouchableOpacity
+                              style={styles.proofPreviewBtn}
+                              onPress={() => setSelectedProofModal(order.payment_proof_url)}
+                              activeOpacity={0.8}
+                            >
+                              <Image
+                                source={{ uri: order.payment_proof_url }}
+                                style={styles.proofThumb}
+                                resizeMode="cover"
+                              />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.proofBtnTitle}>Bukti Pembayaran QRIS</Text>
+                                <Text style={styles.proofBtnSub}>Ketuk untuk perbesar & verifikasi</Text>
+                              </View>
+                              <MaterialCommunityIcons name="arrow-expand" size={18} color="#0284C7" />
+                            </TouchableOpacity>
+                          ) : (
+                            <View style={styles.noProofWarning}>
+                              <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#DC2626" />
+                              <Text style={styles.noProofWarningText}>
+                                Pelanggan belum mengunggah foto bukti pembayaran.
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Total Bar */}
+                      <View style={styles.orderTotalRow}>
+                        <Text style={styles.orderTotalLabel}>Total Pesanan:</Text>
+                        <Text style={styles.orderTotalValue}>{formatRupiah(order.total_amount)}</Text>
+                      </View>
+
+                      {/* Action Buttons */}
+                      <View style={styles.orderActionsRow}>
+                        <TouchableOpacity
+                          style={styles.btnCancelOrder}
+                          onPress={() => handleCancelTableOrder(order)}
+                          disabled={isProcessing}
+                        >
+                          <MaterialCommunityIcons name="close-circle-outline" size={16} color="#EF4444" />
+                          <Text style={styles.btnCancelOrderText}>Tolak</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.btnAcceptOrder}
+                          onPress={() => handleAcceptTableOrder(order)}
+                          disabled={isProcessing}
+                        >
+                          <MaterialCommunityIcons name="printer" size={18} color="#FFFFFF" />
+                          <Text style={styles.btnAcceptOrderText}>
+                            {isProcessing ? "Memproses..." : "Terima & Cetak Dapur"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Modal Zoom Bukti Pembayaran ── */}
+      <Modal
+        visible={!!selectedProofModal}
+        transparent
+        statusBarTranslucent={true}
+        animationType="fade"
+        onRequestClose={() => setSelectedProofModal(null)}
+      >
+        <View style={styles.proofModalBackdrop}>
+          <TouchableOpacity
+            style={styles.proofModalCloseBtn}
+            onPress={() => setSelectedProofModal(null)}
+          >
+            <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          {selectedProofModal && (
+            <Image
+              source={{ uri: selectedProofModal }}
+              style={styles.proofModalImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
       </Modal>
 
       {/* ── Panel Kunci Fitur (tier Gratis) ── */}
@@ -3683,6 +4179,283 @@ const styles = StyleSheet.create({
   fnbTypeBtnTextActive: {
     color: "#FFFFFF",
     fontFamily: fonts.bold,
+  },
+
+  // ─── Realtime Table Orders Styles (F&B) ───
+  tableOrdersBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFBEB",
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: -2,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#FCD34D",
+  },
+  tableBadgeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#D97706",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  tableBannerTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#92400E",
+  },
+  tableBannerSub: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#B45309",
+    marginTop: 1,
+  },
+  tableCountBadge: {
+    backgroundColor: "#DC2626",
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tableCountBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#FFFFFF",
+  },
+  tableOrderCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 14,
+    marginBottom: 4,
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  tableOrderCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    paddingBottom: 8,
+    marginBottom: 6,
+  },
+  tableNumBadge: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  tableNumBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#92400E",
+    letterSpacing: 0.5,
+  },
+  orderTimeText: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#94A3B8",
+  },
+  payMethodBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  payMethodQris: {
+    backgroundColor: "#DBEAFE",
+  },
+  payMethodCash: {
+    backgroundColor: "#D1FAE5",
+  },
+  payMethodBadgeText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+  },
+  customerNameText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#1E293B",
+  },
+  orderItemsContainer: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    padding: 10,
+    gap: 6,
+    marginVertical: 6,
+  },
+  orderItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  orderItemName: {
+    fontFamily: fonts.regular,
+    fontSize: 12.5,
+    color: "#1E293B",
+  },
+  orderItemNote: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#D97706",
+    fontStyle: "italic",
+    marginTop: 2,
+  },
+  orderItemSubtotal: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    color: "#334155",
+    marginLeft: 10,
+  },
+  orderGeneralNoteBox: {
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FEF3C7",
+    borderRadius: 8,
+    padding: 8,
+    marginVertical: 4,
+  },
+  orderGeneralNoteText: {
+    fontFamily: fonts.regular,
+    fontSize: 11.5,
+    color: "#92400E",
+  },
+  proofSection: {
+    marginVertical: 8,
+  },
+  proofPreviewBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    borderRadius: 10,
+    padding: 8,
+  },
+  proofThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 6,
+    backgroundColor: "#E2E8F0",
+  },
+  proofBtnTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#0369A1",
+  },
+  proofBtnSub: {
+    fontFamily: fonts.regular,
+    fontSize: 10.5,
+    color: "#0284C7",
+  },
+  noProofWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+  },
+  noProofWarningText: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#DC2626",
+    flex: 1,
+  },
+  orderTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  orderTotalLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: "#64748B",
+  },
+  orderTotalValue: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: "#0F172A",
+  },
+  orderActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  btnCancelOrder: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  btnCancelOrderText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#EF4444",
+  },
+  btnAcceptOrder: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#16A34A",
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  btnAcceptOrderText: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    color: "#FFFFFF",
+  },
+  proofModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  proofModalCloseBtn: {
+    position: "absolute",
+    top: 40,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    padding: 8,
+    borderRadius: 20,
+  },
+  proofModalImage: {
+    width: "100%",
+    height: "80%",
   },
 });
 

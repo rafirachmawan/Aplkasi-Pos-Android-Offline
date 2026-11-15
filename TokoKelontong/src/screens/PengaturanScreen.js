@@ -12,6 +12,7 @@ import {
   Platform,
   Linking,
   Switch,
+  Share,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -40,7 +41,22 @@ import {
   getPairedPrinters,
   isBluetoothPrintingSupported,
 } from "../utils/bluetoothPrinter";
-import { uploadProductImage, isCloudImageUri } from "../utils/imageStorage";
+import {
+  uploadProductImage,
+  uploadImageToBucket,
+  isCloudImageUri,
+} from "../utils/imageStorage";
+import {
+  fetchStoreFnbConfig,
+  updateStoreQrisImage,
+  updateStoreActiveTables,
+} from "../services/tableOrderService";
+import {
+  DEFAULT_ORDER_BASE_URL,
+  getTableOrderUrl,
+  printSingleTableBluetooth,
+  generateAndShareTableQRPdf,
+} from "../utils/tableQrGenerator";
 import { colors, fonts } from "../theme/colors";
 import PinModal from "../components/PinModal";
 import {
@@ -106,6 +122,7 @@ const PengaturanScreen = ({ navigation }) => {
   const [pinFlow, setPinFlow] = useState(null); // 'verify_change' | 'verify_remove' | 'set_new' | 'confirm_new'
   const [newPinCandidate, setNewPinCandidate] = useState("");
   const [lockedMenus, setLockedMenusState] = useState(DEFAULT_LOCKED_MENUS);
+  const [showLockedMenuConfig, setShowLockedMenuConfig] = useState(false);
 
   // Business Mode State (Retail vs F&B)
   const [businessMode, setBusinessModeState] = useState(state.businessMode || "retail");
@@ -122,6 +139,224 @@ const PengaturanScreen = ({ navigation }) => {
   const plan = usePlan();
   const [showLockModal, setShowLockModal] = useState(false);
   const [lockFeature, setLockFeature] = useState("fnb");
+
+  // F&B Table & QRIS States (Tier Pro)
+  const storeId = profile?.store_id || profile?.stores?.id;
+  const [qrisImageUrl, setQrisImageUrl] = useState("");
+  const [activeTablesCount, setActiveTablesCount] = useState("10");
+  const [uploadingQris, setUploadingQris] = useState(false);
+  const [savingTables, setSavingTables] = useState(false);
+  const [singleTableNumber, setSingleTableNumber] = useState("1");
+  const [customWebBaseUrl, setCustomWebBaseUrl] = useState(DEFAULT_ORDER_BASE_URL);
+
+  // Load config F&B dari local storage & cloud saat mode F&B aktif
+  useEffect(() => {
+    if (businessMode === "fnb") {
+      // 1. Baca dari cache lokal dulu
+      AsyncStorage.getItem("@TokoKelontong:FnbActiveTables").then((val) => {
+        if (val) setActiveTablesCount(val);
+      });
+      AsyncStorage.getItem("@TokoKelontong:FnbQrisUrl").then((val) => {
+        if (val) setQrisImageUrl(val);
+      });
+
+      // 2. Jika ada koneksi & storeId, sinkron dari cloud
+      if (storeId) {
+        fetchStoreFnbConfig(storeId)
+          .then((cfg) => {
+            if (cfg.qrisImageUrl) {
+              setQrisImageUrl(cfg.qrisImageUrl);
+              AsyncStorage.setItem("@TokoKelontong:FnbQrisUrl", cfg.qrisImageUrl).catch(() => {});
+            }
+            if (cfg.activeTables) {
+              setActiveTablesCount(String(cfg.activeTables));
+              AsyncStorage.setItem("@TokoKelontong:FnbActiveTables", String(cfg.activeTables)).catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [storeId, businessMode]);
+
+  const handlePickQrisImage = () => {
+    Alert.alert(
+      "Foto QRIS Toko",
+      "Pilih sumber foto QRIS toko Anda untuk pelanggan:",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Galeri Foto",
+          onPress: () => executeQrisPicker("gallery"),
+        },
+        {
+          text: "Kamera HP",
+          onPress: () => executeQrisPicker("camera"),
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const executeQrisPicker = async (source) => {
+    try {
+      if (source === "gallery") {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Izin Akses", "Izin akses galeri diperlukan.");
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: "images",
+          allowsEditing: false,
+          quality: 0.8,
+        });
+        if (result && !result.canceled && result.assets && result.assets.length > 0) {
+          await uploadAndSaveQris(result.assets[0].uri);
+        }
+      } else {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Izin Akses", "Izin akses kamera diperlukan.");
+          return;
+        }
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: "images",
+          allowsEditing: false,
+          quality: 0.8,
+        });
+        if (result && !result.canceled && result.assets && result.assets.length > 0) {
+          await uploadAndSaveQris(result.assets[0].uri);
+        }
+      }
+    } catch (err) {
+      Alert.alert("Gagal Memilih Foto", err.message || "Terjadi kesalahan.");
+    }
+  };
+
+  const uploadAndSaveQris = async (localUri) => {
+    if (!storeId) {
+      Alert.alert("Info", "ID Toko belum termuat. Silakan simpan pengaturan atau login ulang.");
+      return;
+    }
+    setUploadingQris(true);
+    try {
+      const publicUrl = await uploadImageToBucket(localUri, "store_qris", "qris");
+      setQrisImageUrl(publicUrl);
+      await AsyncStorage.setItem("@TokoKelontong:FnbQrisUrl", publicUrl);
+
+      const res = await updateStoreQrisImage(storeId, publicUrl);
+      if (res && !res.success) {
+        if (res.error && res.error.includes("qris_image_url")) {
+          Alert.alert(
+            "Tersimpan di HP (Perlu Migrasi Database)",
+            "Foto QRIS berhasil tersimpan di HP ini.\n\nCatatan: Kolom 'qris_image_url' belum ada di Supabase. Harap jalankan file SQL 'migration_v10_fnb_self_order.sql' di Supabase SQL Editor agar tampil di web menu pelanggan."
+          );
+          return;
+        }
+      }
+      Alert.alert("Sukses", "Foto QRIS toko berhasil disimpan dan siap tampil di web menu pelanggan.");
+    } catch (err) {
+      Alert.alert("Gagal Unggah", err.message || "Pastikan file SQL migration_v10 sudah dijalankan di Supabase.");
+    } finally {
+      setUploadingQris(false);
+    }
+  };
+
+  const handleDeleteQris = () => {
+    Alert.alert(
+      "Hapus QRIS Toko",
+      "Pelanggan tidak akan melihat opsi transfer QRIS di menu meja. Lanjutkan?",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setQrisImageUrl("");
+              await AsyncStorage.removeItem("@TokoKelontong:FnbQrisUrl");
+              if (storeId) {
+                await updateStoreQrisImage(storeId, "");
+              }
+            } catch (err) {
+              console.warn("Delete QRIS err:", err);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSaveActiveTables = async () => {
+    const count = parseInt(activeTablesCount, 10);
+    if (isNaN(count) || count < 1 || count > 100) {
+      Alert.alert("Jumlah Meja", "Masukkan jumlah meja yang valid (1 - 100).");
+      return;
+    }
+    setSavingTables(true);
+    try {
+      // 1. Selalu simpan di cache lokal HP agar langsung aktif
+      await AsyncStorage.setItem("@TokoKelontong:FnbActiveTables", String(count));
+
+      // 2. Simpan ke cloud jika terhubung
+      if (storeId) {
+        const res = await updateStoreActiveTables(storeId, count);
+        if (res && !res.success) {
+          if (res.error && res.error.includes("fnb_active_tables")) {
+            Alert.alert(
+              "Tersimpan di HP (Perlu Migrasi Database)",
+              `Jumlah meja (${count} meja) sudah tersimpan di aplikasi ini.\n\nCatatan: Kolom 'fnb_active_tables' belum ada di database Supabase. Harap jalankan file SQL 'migration_v10_fnb_self_order.sql' di Supabase SQL Editor.`
+            );
+            return;
+          }
+        }
+      }
+      Alert.alert("Tersimpan", `Jumlah meja kafe berhasil diatur (${count} meja).`);
+    } catch (err) {
+      Alert.alert("Info", `Tersimpan di HP (${count} meja).`);
+    } finally {
+      setSavingTables(false);
+    }
+  };
+
+  const handlePrintAllTablesPdf = async () => {
+    const sId = storeId || "demo-store";
+    await generateAndShareTableQRPdf({
+      storeName: storeNameInput.trim() || state.storeName,
+      storeId: sId,
+      totalTables: activeTablesCount,
+      baseUrl: customWebBaseUrl,
+    });
+  };
+
+  const handlePrintSingleTableBt = async () => {
+    const sId = storeId || "demo-store";
+    const tableNum = singleTableNumber.trim() || "1";
+    try {
+      await printSingleTableBluetooth({
+        storeName: storeNameInput.trim() || state.storeName,
+        storeId: sId,
+        tableNumber: tableNum,
+        baseUrl: customWebBaseUrl,
+      });
+    } catch (err) {
+      Alert.alert("Cetak Bluetooth Gagal", err.message || "Pastikan printer menyala & terhubung.");
+    }
+  };
+
+  const handleShareTableUrl = async () => {
+    const sId = storeId || "demo-store";
+    const tableNum = singleTableNumber.trim() || "1";
+    const url = getTableOrderUrl(sId, tableNum, customWebBaseUrl);
+    try {
+      await Share.share({
+        message: `Pesan menu kami langsung dari HP di Meja ${tableNum}:\n${url}`,
+        title: `Menu Meja ${tableNum}`,
+      });
+    } catch (err) {
+      Alert.alert("Gagal Membagikan", err.message);
+    }
+  };
 
   useEffect(() => {
     isPinProtected().then(setHasPin);
@@ -143,6 +378,24 @@ const PengaturanScreen = ({ navigation }) => {
       ...lockedMenus,
       [menuKey]: !lockedMenus[menuKey],
     };
+    setLockedMenusState(nextConfig);
+    await setLockedMenus(nextConfig);
+  };
+
+  const handleLockAllMenus = async () => {
+    const nextConfig = {};
+    LOCKABLE_MENU_OPTIONS.forEach((item) => {
+      nextConfig[item.key] = true;
+    });
+    setLockedMenusState(nextConfig);
+    await setLockedMenus(nextConfig);
+  };
+
+  const handleUnlockAllMenus = async () => {
+    const nextConfig = {};
+    LOCKABLE_MENU_OPTIONS.forEach((item) => {
+      nextConfig[item.key] = false;
+    });
     setLockedMenusState(nextConfig);
     await setLockedMenus(nextConfig);
   };
@@ -440,11 +693,25 @@ const PengaturanScreen = ({ navigation }) => {
   };
 
   const handleSelectBusinessMode = async (mode) => {
-    if (mode === "fnb" && !plan.isPro) {
-      setLockFeature("fnb");
-      setShowLockModal(true);
-      return;
+    if (mode === "fnb") {
+      let isProActive = plan.isPro;
+      if (!isProActive) {
+        // Cek langsung ke server/cache terbaru bila belum terdeteksi Pro
+        try {
+          const fresh = await refreshPlan({ force: true });
+          if (fresh.isPro) {
+            isProActive = true;
+          }
+        } catch (_) {}
+      }
+
+      if (!isProActive) {
+        setLockFeature("fnb");
+        setShowLockModal(true);
+        return;
+      }
     }
+
     setBusinessModeState(mode);
     dispatch({ type: "SET_BUSINESS_MODE", payload: mode });
     await AsyncStorage.setItem("@TokoKelontong:BusinessMode", mode);
@@ -828,6 +1095,145 @@ const PengaturanScreen = ({ navigation }) => {
         </View>
       </View>
 
+      {/* ── Pengaturan Khusus Mode F&B & Self-Order Meja (Pro) ── */}
+      {businessMode === "fnb" && (
+        <>
+          <Text style={styles.sectionTitle}>FITUR F&B & SELF-ORDER MEJA (PRO)</Text>
+          <View style={styles.card}>
+            {/* 1. Pengaturan QRIS Toko */}
+            <View style={styles.fnbSectionBlock}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <MaterialCommunityIcons name="qrcode-scan" size={20} color="#D97706" />
+                <Text style={styles.fnbBlockTitle}>QRIS Pembayaran Pelanggan</Text>
+              </View>
+              <Text style={styles.fnbBlockDesc}>
+                Pelanggan di meja dapat memindai QRIS toko ini dan mengunggah foto bukti bayar saat checkout.
+              </Text>
+
+              {qrisImageUrl ? (
+                <View style={styles.qrisPreviewContainer}>
+                  <Image source={{ uri: qrisImageUrl }} style={styles.qrisPreviewImage} resizeMode="contain" />
+                  <View style={{ flex: 1, gap: 8 }}>
+                    <Text style={{ fontFamily: fonts.medium, fontSize: 12, color: "#16A34A" }}>
+                      ✓ Foto QRIS Aktif
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.btnOutlineSmall, { borderColor: "#D97706" }]}
+                      onPress={handlePickQrisImage}
+                      disabled={uploadingQris}
+                    >
+                      <MaterialCommunityIcons name="camera-retake-outline" size={16} color="#D97706" />
+                      <Text style={[styles.btnOutlineSmallText, { color: "#D97706" }]}>
+                        {uploadingQris ? "Mengunggah..." : "Ganti QRIS"}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.btnOutlineSmall, { borderColor: "#EF4444" }]}
+                      onPress={handleDeleteQris}
+                    >
+                      <MaterialCommunityIcons name="trash-can-outline" size={16} color="#EF4444" />
+                      <Text style={[styles.btnOutlineSmallText, { color: "#EF4444" }]}>Hapus QRIS</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.qrisUploadBox}
+                  onPress={handlePickQrisImage}
+                  disabled={uploadingQris}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons name="cloud-upload-outline" size={28} color="#D97706" />
+                  <Text style={styles.qrisUploadBoxText}>
+                    {uploadingQris ? "Sedang Mengunggah Foto..." : "Ketuk untuk Unggah Foto QRIS Toko"}
+                  </Text>
+                  <Text style={styles.qrisUploadBoxSub}>Mendukung file JPG, PNG dari galeri atau kamera</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.fnbDivider} />
+
+            {/* 2. Pengaturan Meja & Cetak QR */}
+            <View style={styles.fnbSectionBlock}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <MaterialCommunityIcons name="table-chair" size={20} color="#D97706" />
+                <Text style={styles.fnbBlockTitle}>Generator & Cetak QR Meja</Text>
+              </View>
+              <Text style={styles.fnbBlockDesc}>
+                Cetak kartu atau stiker QR meja pelanggan agar dapat memesan langsung dari HP mereka tanpa unduh aplikasi.
+              </Text>
+
+              <View style={styles.tableConfigRow}>
+                <Text style={styles.tableConfigLabel}>Jumlah Meja Kafe:</Text>
+                <View style={styles.tableInputWrap}>
+                  <TextInput
+                    style={styles.tableInputText}
+                    value={String(activeTablesCount)}
+                    onChangeText={(txt) => setActiveTablesCount(txt.replace(/[^0-9]/g, ""))}
+                    keyboardType="number-pad"
+                    maxLength={3}
+                  />
+                  <TouchableOpacity
+                    style={styles.tableSaveBtn}
+                    onPress={handleSaveActiveTables}
+                    disabled={savingTables}
+                  >
+                    <Text style={styles.tableSaveBtnText}>{savingTables ? "..." : "Simpan"}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Action Cetak Semua PDF */}
+              <TouchableOpacity
+                style={styles.fnbActionBtnPrimary}
+                onPress={handlePrintAllTablesPdf}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="file-pdf-box" size={20} color="#FFFFFF" />
+                <Text style={styles.fnbActionBtnPrimaryText}>
+                  Bagikan / Cetak Lembar QR Meja (PDF A4)
+                </Text>
+              </TouchableOpacity>
+
+              {/* Action Cetak Satuan Bluetooth */}
+              <View style={styles.singlePrintWrap}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={styles.singlePrintLabel}>Meja Ke-</Text>
+                  <TextInput
+                    style={styles.singleTableInput}
+                    value={singleTableNumber}
+                    onChangeText={setSingleTableNumber}
+                    keyboardType="number-pad"
+                    maxLength={3}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.btnThermalTable}
+                  onPress={handlePrintSingleTableBt}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons name="printer" size={16} color="#0284C7" />
+                  <Text style={styles.btnThermalTableText}>Cetak Thermal Bluetooth</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Tombol Bagikan Tautan Meja */}
+              <TouchableOpacity
+                style={styles.btnShareUrl}
+                onPress={handleShareTableUrl}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="share-variant" size={16} color="#475569" />
+                <Text style={styles.btnShareUrlText}>
+                  Bagikan Tautan Meja {singleTableNumber || "1"} (WhatsApp / Browser)
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
+      )}
+
       {/* ── Antrean Transaksi Offline ── */}
       <Text style={styles.sectionTitle}>ANTREAN TRANSAKSI OFFLINE</Text>
       <View style={styles.card}>
@@ -1132,79 +1538,179 @@ const PengaturanScreen = ({ navigation }) => {
           />
         </TouchableOpacity>
 
-        {/* Daftar Sakelar Menu yang Dikunci PIN */}
+        {/* Accordion Buka-Tutup: Menu yang Dikunci PIN */}
         {hasPin && (
-          <View style={styles.pinConfigBox}>
-            <View style={styles.pinConfigHeader}>
-              <MaterialCommunityIcons
-                name="shield-check-outline"
-                size={16}
-                color="#0F172A"
-              />
-              <Text style={styles.pinConfigTitle}>PILIH MENU YANG DIKUNCI PIN</Text>
-            </View>
-            <Text style={styles.pinConfigSubtitle}>
-              Pilih menu yang wajib memasukkan PIN pemilik sebelum dapat dibuka:
-            </Text>
+          <>
+            <View style={styles.divider} />
+            <TouchableOpacity
+              style={styles.accordionHeaderRow}
+              onPress={() => setShowLockedMenuConfig(!showLockedMenuConfig)}
+              activeOpacity={0.7}
+            >
+              <View
+                style={[
+                  styles.settingIconWrap,
+                  {
+                    backgroundColor:
+                      Object.values(lockedMenus).filter(Boolean).length > 0
+                        ? "#FEE2E2"
+                        : "#F1F5F9",
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="shield-lock-outline"
+                  size={20}
+                  color={
+                    Object.values(lockedMenus).filter(Boolean).length > 0
+                      ? "#DC2626"
+                      : "#475569"
+                  }
+                />
+              </View>
 
-            <View style={styles.pinMenuList}>
-              {LOCKABLE_MENU_OPTIONS.map((item, idx) => {
-                const isLocked = !!lockedMenus[item.key];
-                return (
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={styles.linkText}>Menu yang Dikunci PIN</Text>
                   <View
-                    key={item.key}
                     style={[
-                      styles.pinMenuItem,
-                      idx > 0 && styles.pinMenuBorder,
+                      styles.accordionBadge,
+                      {
+                        backgroundColor:
+                          Object.values(lockedMenus).filter(Boolean).length > 0
+                            ? "#FEE2E2"
+                            : "#F1F5F9",
+                      },
                     ]}
                   >
-                    <View
+                    <Text
                       style={[
-                        styles.pinMenuIconWrap,
-                        { backgroundColor: isLocked ? "#FEF2F2" : "#F1F5F9" },
+                        styles.accordionBadgeText,
+                        {
+                          color:
+                            Object.values(lockedMenus).filter(Boolean).length > 0
+                              ? "#DC2626"
+                              : "#64748B",
+                        },
                       ]}
                     >
-                      <MaterialCommunityIcons
-                        name={isLocked ? "lock" : item.icon}
-                        size={18}
-                        color={isLocked ? "#EF4444" : "#64748B"}
-                      />
-                    </View>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 6,
-                        }}
+                      {Object.values(lockedMenus).filter(Boolean).length > 0
+                        ? `${Object.values(lockedMenus).filter(Boolean).length} Terkunci`
+                        : "Semua Terbuka"}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.linkSubText}>
+                  {showLockedMenuConfig
+                    ? "Ketuk untuk menutup sakelar menu"
+                    : `${Object.values(lockedMenus).filter(Boolean).length} dari ${LOCKABLE_MENU_OPTIONS.length} menu dilindungi (Ketuk untuk buka)`}
+                </Text>
+              </View>
+
+              <View style={styles.accordionChevronWrap}>
+                <MaterialCommunityIcons
+                  name={showLockedMenuConfig ? "chevron-up" : "chevron-down"}
+                  size={22}
+                  color="#64748B"
+                />
+              </View>
+            </TouchableOpacity>
+
+            {showLockedMenuConfig && (
+              <View style={styles.pinConfigBox}>
+                <View style={styles.pinAccordionActionsRow}>
+                  <Text style={styles.pinConfigSubtitle}>
+                    Pilih menu yang wajib memasukkan PIN pemilik sebelum dapat dibuka:
+                  </Text>
+                  <View style={styles.quickPillsRow}>
+                    <TouchableOpacity
+                      style={styles.quickActionPill}
+                      onPress={handleLockAllMenus}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialCommunityIcons name="lock" size={12} color="#DC2626" />
+                      <Text style={[styles.quickActionPillText, { color: "#DC2626" }]}>
+                        Kunci Semua
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.quickActionPill}
+                      onPress={handleUnlockAllMenus}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialCommunityIcons name="lock-open-variant" size={12} color="#475569" />
+                      <Text style={styles.quickActionPillText}>Buka Semua</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.pinMenuList}>
+                  {LOCKABLE_MENU_OPTIONS.map((item, idx) => {
+                    const isLocked = !!lockedMenus[item.key];
+                    return (
+                      <TouchableOpacity
+                        key={item.key}
+                        style={[
+                          styles.pinMenuItem,
+                          idx > 0 && styles.pinMenuBorder,
+                        ]}
+                        onPress={() => handleToggleMenuLock(item.key)}
+                        activeOpacity={0.7}
                       >
-                        <Text
+                        <View
                           style={[
-                            styles.pinMenuName,
-                            isLocked && { color: "#0F172A", fontFamily: fonts.bold },
+                            styles.pinMenuIconWrap,
+                            {
+                              backgroundColor: isLocked ? "#FEF2F2" : "#F1F5F9",
+                            },
                           ]}
                         >
-                          {item.name}
-                        </Text>
-                        {isLocked && (
-                          <View style={styles.lockedBadge}>
-                            <Text style={styles.lockedBadgeText}>Terkunci</Text>
+                          <MaterialCommunityIcons
+                            name={isLocked ? "lock" : item.icon}
+                            size={18}
+                            color={isLocked ? "#EF4444" : "#64748B"}
+                          />
+                        </View>
+                        <View style={{ flex: 1, marginRight: 8 }}>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.pinMenuName,
+                                isLocked && {
+                                  color: "#0F172A",
+                                  fontFamily: fonts.bold,
+                                },
+                              ]}
+                            >
+                              {item.name}
+                            </Text>
+                            {isLocked && (
+                              <View style={styles.lockedBadge}>
+                                <Text style={styles.lockedBadgeText}>Terkunci</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
-                      </View>
-                      <Text style={styles.pinMenuDesc}>{item.desc}</Text>
-                    </View>
-                    <Switch
-                      value={isLocked}
-                      onValueChange={() => handleToggleMenuLock(item.key)}
-                      trackColor={{ false: "#E2E8F0", true: "#DCFCE7" }}
-                      thumbColor={isLocked ? "#16A34A" : "#94A3B8"}
-                    />
-                  </View>
-                );
-              })}
-            </View>
-          </View>
+                          <Text style={styles.pinMenuDesc}>{item.desc}</Text>
+                        </View>
+                        <Switch
+                          value={isLocked}
+                          onValueChange={() => handleToggleMenuLock(item.key)}
+                          trackColor={{ false: "#E2E8F0", true: "#DCFCE7" }}
+                          thumbColor={isLocked ? "#16A34A" : "#94A3B8"}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </>
         )}
 
         <View style={styles.divider} />
@@ -1984,6 +2490,54 @@ const styles = StyleSheet.create({
   },
 
   // PIN Config Styles
+  accordionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    gap: 12,
+  },
+  accordionBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  accordionBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+  },
+  accordionChevronWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pinAccordionActionsRow: {
+    flexDirection: "column",
+    gap: 8,
+    marginBottom: 10,
+  },
+  quickPillsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  quickActionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  quickActionPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#475569",
+  },
   pinConfigBox: {
     backgroundColor: "#F8FAFC",
     borderTopWidth: 1,
@@ -2467,6 +3021,201 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 12,
     color: "#FFFFFF",
+  },
+
+  // ── Mode F&B & QRIS Meja Styles ──
+  fnbSectionBlock: {
+    padding: 14,
+  },
+  fnbBlockTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: "#0F172A",
+  },
+  fnbBlockDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: "#64748B",
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  fnbDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginHorizontal: 14,
+  },
+  qrisPreviewContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: 12,
+  },
+  qrisPreviewImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  btnOutlineSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "#FFFFFF",
+  },
+  btnOutlineSmallText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+  },
+  qrisUploadBox: {
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: "#FCD34D",
+    backgroundColor: "#FFFBEB",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qrisUploadBoxText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#B45309",
+    marginTop: 6,
+  },
+  qrisUploadBoxSub: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: "#92400E",
+    marginTop: 2,
+  },
+  tableConfigRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  tableConfigLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: "#334155",
+  },
+  tableInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tableInputText: {
+    width: 50,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    textAlign: "center",
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    backgroundColor: "#FFFFFF",
+    color: "#0F172A",
+  },
+  tableSaveBtn: {
+    backgroundColor: "#0284C7",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  tableSaveBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#FFFFFF",
+  },
+  fnbActionBtnPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#0284C7",
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  fnbActionBtnPrimaryText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#FFFFFF",
+  },
+  singlePrintWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 10,
+  },
+  singlePrintLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: "#475569",
+  },
+  singleTableInput: {
+    width: 44,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    textAlign: "center",
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    backgroundColor: "#FFFFFF",
+    color: "#0F172A",
+  },
+  btnThermalTable: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#E0F2FE",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  btnThermalTableText: {
+    fontFamily: fonts.bold,
+    fontSize: 11.5,
+    color: "#0284C7",
+  },
+  btnShareUrl: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  btnShareUrlText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: "#334155",
   },
 });
 

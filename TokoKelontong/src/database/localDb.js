@@ -179,7 +179,10 @@ function newClientTxId() {
 // baris yang ditulis/dihapus sama sekali.
 export function replaceCatalog(storeId, products) {
   return writeTx(async (db) => {
-    const list = (products || []).filter((p) => p && p.id);
+    // Saring hanya produk yang valid dan benar-benar milik toko ini
+    const list = (products || []).filter(
+      (p) => p && p.id && (!p.store_id || p.store_id === storeId),
+    );
 
     // Penjaga: server boleh sukses tapi mengembalikan daftar kosong
     // (RLS/auth bermasalah, dsb). Cache lokal jangan pernah dihapus karenanya —
@@ -259,7 +262,31 @@ export async function getCatalog(storeId) {
     "SELECT id, barcode, product_name, stock_snapshot, data FROM products_cache WHERE store_id = ? ORDER BY product_name COLLATE NOCASE ASC",
     storeId,
   );
-  return rows.map((r) => rowToProduct(r, pendingMap));
+  const result = [];
+  const invalidIds = [];
+  for (const r of rows) {
+    const prod = rowToProduct(r, pendingMap);
+    if (prod.store_id && prod.store_id !== storeId) {
+      invalidIds.push(r.id);
+    } else {
+      result.push(prod);
+    }
+  }
+
+  // Bersihkan produk toko lain yang sempat tersimpan secara otomatis
+  if (invalidIds.length > 0) {
+    writeTx(async (txDb) => {
+      for (const badId of invalidIds) {
+        await txDb.runAsync(
+          "DELETE FROM products_cache WHERE store_id = ? AND id = ?",
+          storeId,
+          badId,
+        );
+      }
+    }).catch(() => {});
+  }
+
+  return result;
 }
 
 export async function getCatalogProductByBarcode(storeId, barcode) {
@@ -271,16 +298,14 @@ export async function getCatalogProductByBarcode(storeId, barcode) {
   );
   if (!row) return null;
   const pendingMap = await getPendingQtyMap(db, storeId);
-  return rowToProduct(row, pendingMap);
+  const prod = rowToProduct(row, pendingMap);
+  if (prod.store_id && prod.store_id !== storeId) return null;
+  return prod;
 }
 
 export async function getCatalogCount(storeId) {
-  const db = await getDb();
-  const row = await db.getFirstAsync(
-    "SELECT COUNT(*) AS n FROM products_cache WHERE store_id = ?",
-    storeId,
-  );
-  return row?.n || 0;
+  const catalog = await getCatalog(storeId);
+  return catalog.length;
 }
 
 export async function getCatalogSyncedAt(storeId) {

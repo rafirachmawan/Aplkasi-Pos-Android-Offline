@@ -40,11 +40,34 @@ const SettingsPage = lazy(() =>
   })),
 )
 
+const CustomerOrderPage = lazy(() =>
+  import('@/features/customerOrder/pages/CustomerOrderPage').then((module) => ({
+    default: module.CustomerOrderPage,
+  })),
+)
+
 const NotFoundPage = lazy(() =>
   import('@/pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })),
 )
 
 export const router = createBrowserRouter([
+  // Public Customer QR Self-Order Routes (Tanpa Auth Admin)
+  {
+    path: '/order/:storeId/:tableNumber',
+    element: <CustomerOrderPage />,
+  },
+  {
+    path: '/order/:storeId',
+    element: <CustomerOrderPage />,
+  },
+  {
+    path: '/m/:storeId/:tableNumber',
+    element: <CustomerOrderPage />,
+  },
+  {
+    path: '/m/:storeId',
+    element: <CustomerOrderPage />,
+  },
   {
     path: '/login',
     element: <LoginPage />,

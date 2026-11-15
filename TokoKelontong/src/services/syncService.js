@@ -246,7 +246,7 @@ async function syncPending(storeId, result) {
 
 async function refreshCatalogLocked(storeId) {
   const products = await withTimeout(
-    ProductRepository.fetchProductsFromServer(),
+    ProductRepository.fetchProductsFromServer(storeId),
     CATALOG_TIMEOUT_MS,
   );
   const refreshed = await localDb.replaceCatalog(storeId, products);
