@@ -10,6 +10,7 @@ const initialState = {
   storeName: 'MarketPos',
   storeLogo: null,
   printerAddress: null,
+  printerName: null,
   businessMode: 'retail', // 'retail' (Toko/Kelontong) atau 'fnb' (Resto/Kafe)
 };
 
@@ -51,6 +52,8 @@ const reducer = (state, action) => {
       return { ...state, storeLogo: action.payload };
     case 'SET_PRINTER_ADDRESS':
       return { ...state, printerAddress: action.payload };
+    case 'SET_PRINTER_NAME':
+      return { ...state, printerName: action.payload };
     case 'SET_BUSINESS_MODE':
       return { ...state, businessMode: action.payload };
     case 'LOAD_SETTINGS':
@@ -70,6 +73,7 @@ export const AppProvider = ({ children }) => {
         const storeName = await AsyncStorage.getItem('storeName');
         const storeLogo = await AsyncStorage.getItem('storeLogo');
         const printerAddress = await AsyncStorage.getItem('printerAddress');
+        const printerName = await AsyncStorage.getItem('printerName');
         const businessMode = await AsyncStorage.getItem(BUSINESS_MODE_KEY);
         dispatch({
           type: 'LOAD_SETTINGS',
@@ -77,6 +81,7 @@ export const AppProvider = ({ children }) => {
             storeName: storeName || 'MarketPos',
             storeLogo: storeLogo || null,
             printerAddress: printerAddress || null,
+            printerName: printerName || null,
             businessMode: businessMode === 'fnb' ? 'fnb' : 'retail',
           }
         });

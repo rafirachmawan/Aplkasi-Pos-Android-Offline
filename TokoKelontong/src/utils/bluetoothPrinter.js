@@ -1,7 +1,6 @@
 // Layanan cetak langsung ke printer thermal Bluetooth (ESC/POS).
-// Dipakai untuk cetak nota transaksi (Kasir), struk dapur (Kitchen), dan label barcode produk.
-// Printer harus sudah dipairing di pengaturan Bluetooth HP, lalu alamat
-// MAC-nya dipilih di layar Pengaturan aplikasi.
+// Dipakai untuk cetak nota transaksi (Kasir), struk dapur (Kitchen), label barcode produk, dan tes printer.
+// Printer dipilih dari daftar perangkat Bluetooth terpairing di menu Pengaturan.
 //
 // CATATAN PENTING: library native dimuat secara LAZY (require di dalam
 // fungsi) supaya aplikasi tetap bisa dibuka di Expo Go. Di Expo Go modul
@@ -11,7 +10,9 @@ import { Platform, PermissionsAndroid, NativeModules } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const PRINTER_ADDRESS_KEY = "printerAddress";
+const PRINTER_NAME_KEY = "printerName";
 const LINE_WIDTH = 32; // lebar kolom printer thermal 58mm
+const DEFAULT_PRINTER_LABEL = "Printer Bluetooth";
 
 // ── Pemuatan library native secara lazy ─────────────────────────────────────
 let cachedLib = null;
@@ -42,7 +43,7 @@ const getLib = () => {
 export const isBluetoothPrintingSupported = () =>
   Platform.OS === "android" && !!getLib();
 
-const rp = (n) => "Rp " + Number(n || 0).toLocaleString("id-ID");
+const rp = (n) => "Rp" + Number(n || 0).toLocaleString("id-ID");
 
 const dash = () => "-".repeat(LINE_WIDTH);
 
@@ -65,27 +66,121 @@ const formatLocalDateTime = (iso) => {
   )}:${p(d.getMinutes())}`;
 };
 
-// Android 12+ butuh izin runtime BLUETOOTH_CONNECT/SCAN
+/**
+ * Menormalkan alamat MAC Bluetooth ke huruf kapital sesuai kebutuhan
+ * BluetoothAdapter.getRemoteDevice di Android.
+ */
+export const normalizeMacAddress = (address) =>
+  String(address || "").trim().toUpperCase();
+
+/**
+ * Mengurai daftar perangkat Bluetooth terpairing dari berbagai bentuk respons
+ * modul native (`enableBluetooth()` mengembalikan array JSON string).
+ */
+export const parsePairedDeviceList = (raw) => {
+  let list = [];
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        list = parsed;
+      } else if (parsed && Array.isArray(parsed.paired)) {
+        list = parsed.paired;
+      } else if (parsed && typeof parsed.paired === "string") {
+        list = JSON.parse(parsed.paired);
+      }
+    } catch {
+      list = [];
+    }
+  } else if (Array.isArray(raw)) {
+    list = raw;
+  } else if (raw && typeof raw === "object") {
+    if (Array.isArray(raw.paired)) {
+      list = raw.paired;
+    } else if (typeof raw.paired === "string") {
+      try {
+        list = JSON.parse(raw.paired);
+      } catch {
+        list = [];
+      }
+    }
+  }
+
+  const seen = new Set();
+  const normalized = [];
+  for (const entry of list) {
+    let device = entry;
+    if (typeof device === "string") {
+      try {
+        device = JSON.parse(device);
+      } catch {
+        device = null;
+      }
+    }
+    if (!device || typeof device !== "object") continue;
+    const address = normalizeMacAddress(device.address);
+    if (!address || seen.has(address)) continue;
+    seen.add(address);
+    const rawName = typeof device.name === "string" ? device.name.trim() : "";
+    normalized.push({
+      name: rawName || DEFAULT_PRINTER_LABEL,
+      address,
+    });
+  }
+  return normalized;
+};
+
+/**
+ * Mengubah pesan error native modul Bluetooth menjadi pesan bahasa Indonesia
+ * yang jelas penyebab dan langkah perbaikannya.
+ */
+export const mapBluetoothError = (err, fallbackMsg) => {
+  const code = String(err?.code || "").toUpperCase();
+  const rawMsg = String(err?.message || err || "").trim();
+  const upperMsg = rawMsg.toUpperCase();
+
+  if (
+    code === "EVENT_BLUETOOTH_NOT_SUPPORT" ||
+    upperMsg.includes("EVENT_BLUETOOTH_NOT_SUPPORT")
+  ) {
+    return "Perangkat ini tidak mendukung koneksi Bluetooth.";
+  }
+  if (
+    upperMsg.includes("BT NOT ENABLED") ||
+    upperMsg.includes("COMMAND_NOT_SEND") ||
+    code === "ERR"
+  ) {
+    return "Bluetooth HP belum aktif atau printer belum siap. Aktifkan Bluetooth lalu coba lagi.";
+  }
+  if (upperMsg.includes("UNABLE TO CONNECT")) {
+    return "Printer tidak merespons. Pastikan printer thermal sudah menyala dan berada dekat HP.";
+  }
+  return rawMsg || fallbackMsg || "Terjadi kesalahan pada koneksi Bluetooth.";
+};
+
+// Android 12+ butuh izin runtime BLUETOOTH_CONNECT & BLUETOOTH_SCAN.
+// Android <= 11 memakai izin install-time BLUETOOTH/BLUETOOTH_ADMIN untuk
+// membaca daftar perangkat terpairing dan terhubung ke printer.
 const ensureBluetoothPermissions = async () => {
   if (Platform.OS !== "android") return false;
   const sdk =
     typeof Platform.Version === "number"
       ? Platform.Version
       : parseInt(String(Platform.Version), 10);
+  if (sdk < 31) return true;
+
+  const connectPerm =
+    PermissionsAndroid.PERMISSIONS?.BLUETOOTH_CONNECT ||
+    "android.permission.BLUETOOTH_CONNECT";
+  const scanPerm =
+    PermissionsAndroid.PERMISSIONS?.BLUETOOTH_SCAN ||
+    "android.permission.BLUETOOTH_SCAN";
   try {
-    if (sdk >= 31) {
-      const result = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-      ]);
-      return Object.values(result).every(
-        (v) => v === PermissionsAndroid.RESULTS.GRANTED,
-      );
-    }
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-    );
-    return granted === PermissionsAndroid.RESULTS.GRANTED;
+    const result = await PermissionsAndroid.requestMultiple([
+      connectPerm,
+      scanPerm,
+    ]);
+    return result?.[connectPerm] === PermissionsAndroid.RESULTS.GRANTED;
   } catch {
     return false;
   }
@@ -94,7 +189,7 @@ const ensureBluetoothPermissions = async () => {
 const NOT_SUPPORTED_MSG =
   "Cetak Bluetooth tidak tersedia di Expo Go. Fitur ini aktif pada build APK / development build.";
 
-// Apakah sudah ada alamat printer tersimpan?
+// Apakah sudah ada printer Bluetooth yang tersimpan?
 export const isPrinterConfigured = async () => {
   try {
     const addr = await AsyncStorage.getItem(PRINTER_ADDRESS_KEY);
@@ -104,72 +199,158 @@ export const isPrinterConfigured = async () => {
   }
 };
 
-// Ambil daftar perangkat Bluetooth yang sudah dipairing di HP.
+/**
+ * Mengambil informasi printer Bluetooth yang sedang terpilih di perangkat.
+ */
+export const getSavedPrinter = async () => {
+  try {
+    const pairs = await AsyncStorage.multiGet([
+      PRINTER_ADDRESS_KEY,
+      PRINTER_NAME_KEY,
+    ]);
+    const map = Object.fromEntries(pairs);
+    const address = normalizeMacAddress(map[PRINTER_ADDRESS_KEY]);
+    if (!address) return null;
+    const name = String(map[PRINTER_NAME_KEY] || "").trim() || null;
+    return { address, name };
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Menyimpan printer Bluetooth terpilih ke penyimpanan lokal perangkat.
+ */
+export const savePrinterSelection = async (device) => {
+  const address = normalizeMacAddress(device?.address);
+  if (!address) {
+    await AsyncStorage.multiRemove([PRINTER_ADDRESS_KEY, PRINTER_NAME_KEY]);
+    return { address: null, name: null };
+  }
+  const name = String(device?.name || "").trim() || DEFAULT_PRINTER_LABEL;
+  await AsyncStorage.multiSet([
+    [PRINTER_ADDRESS_KEY, address],
+    [PRINTER_NAME_KEY, name],
+  ]);
+  return { address, name };
+};
+
+/**
+ * Menghapus pilihan printer Bluetooth tersimpan di perangkat.
+ */
+export const clearPrinterSelection = async () => {
+  await AsyncStorage.multiRemove([PRINTER_ADDRESS_KEY, PRINTER_NAME_KEY]);
+};
+
+// Mengaktifkan Bluetooth bila belum aktif lalu membaca daftar perangkat terpairing.
 export const getPairedPrinters = async () => {
   const lib = getLib();
   if (!lib) throw new Error(NOT_SUPPORTED_MSG);
   const ok = await ensureBluetoothPermissions();
   if (!ok) {
     throw new Error(
-      "Izin Bluetooth belum diberikan. Izinkan akses Bluetooth di Pengaturan aplikasi.",
+      "Izin Bluetooth belum diberikan. Izinkan akses Perangkat di Sekitar di pengaturan aplikasi HP.",
     );
   }
   const mgr = lib.BluetoothManager;
-  const raw = await mgr.getPairedDevices();
-  let list = [];
-  if (typeof raw === "string") {
-    try {
-      list = JSON.parse(raw);
-    } catch {
-      list = [];
+  let raw;
+  try {
+    // RNBluetoothManagerModule tidak mengekspor getPairedDevices(); method resminya
+    // adalah enableBluetooth() yang mengaktifkan BT jika mati & mengembalikan perangkat terpairing.
+    if (typeof mgr.enableBluetooth === "function") {
+      raw = await mgr.enableBluetooth();
+    } else if (typeof mgr.getPairedDevices === "function") {
+      raw = await mgr.getPairedDevices();
+    } else {
+      throw new Error("Modul Bluetooth pada perangkat tidak mendukung daftar perangkat.");
     }
-  } else if (Array.isArray(raw)) {
-    list = raw;
+  } catch (err) {
+    throw new Error(
+      mapBluetoothError(err, "Gagal membaca daftar printer Bluetooth dari HP."),
+    );
   }
-  return list
-    .map((d) => {
-      if (typeof d === "string") {
-        try {
-          return JSON.parse(d);
-        } catch {
-          return null;
-        }
-      }
-      return d;
-    })
-    .filter(Boolean)
-    .map((d) => ({
-      name: d.name || "Perangkat Tanpa Nama",
-      address: d.address,
-    }))
-    .filter((d) => !!d.address);
+  return parsePairedDeviceList(raw);
 };
 
 // Hubungkan ke printer Bluetooth yang tersimpan.
 export const connectToPrinter = async () => {
   const lib = getLib();
   if (!lib) throw new Error(NOT_SUPPORTED_MSG);
-  const addr = await AsyncStorage.getItem(PRINTER_ADDRESS_KEY);
-  if (!addr || !addr.trim()) {
+  const addr = normalizeMacAddress(
+    await AsyncStorage.getItem(PRINTER_ADDRESS_KEY),
+  );
+  if (!addr) {
     throw new Error(
-      "Alamat printer Bluetooth belum diatur. Buka Pengaturan > Printer Bluetooth.",
+      "Printer Bluetooth belum dipilih. Buka Pengaturan > Printer Bluetooth untuk memilih.",
     );
   }
   const ok = await ensureBluetoothPermissions();
   if (!ok) {
-    throw new Error("Izin Bluetooth belum diberikan.");
+    throw new Error(
+      "Izin Bluetooth belum diberikan. Izinkan akses Perangkat di Sekitar di pengaturan aplikasi HP.",
+    );
   }
   const mgr = lib.BluetoothManager;
   try {
-    await mgr.connect(addr.trim());
+    if (typeof mgr.isBluetoothEnabled === "function") {
+      const enabled = await mgr.isBluetoothEnabled();
+      if (!enabled && typeof mgr.enableBluetooth === "function") {
+        await mgr.enableBluetooth();
+      }
+    }
+    await mgr.connect(addr);
   } catch (err) {
     throw new Error(
-      `Gagal terhubung ke printer (${addr}). Pastikan printer menyala dan berada dalam jangkauan: ${
-        err?.message || err
-      }`,
+      mapBluetoothError(
+        err,
+        "Gagal terhubung ke printer. Pastikan printer thermal menyala dan berada dalam jangkauan.",
+      ),
     );
   }
   return lib;
+};
+
+/**
+ * Mencetak struk uji coba singkat untuk memastikan koneksi printer Bluetooth
+ * dan hasil cetak thermal berjalan normal.
+ */
+export const printTestViaBluetooth = async ({
+  storeName = "MarketPos",
+  printerName = DEFAULT_PRINTER_LABEL,
+} = {}) => {
+  const lib = await connectToPrinter();
+  const printer = lib.BluetoothEscposPrinter;
+  await printer.printerInit();
+  await printer.setWidth(384);
+
+  await printer.printerAlign(printer.ALIGN.CENTER);
+  await printer.setBlob(1);
+  await printer.printText("MARKETPOS\n", TEXT_OPTS);
+  await printer.printText("TES PRINTER BLUETOOTH\n", TEXT_OPTS);
+  await printer.setBlob(0);
+  await printer.printText(dash() + "\n", TEXT_OPTS);
+
+  await printer.printerAlign(printer.ALIGN.LEFT);
+  await printer.printText(row("Status", "Terhubung & Siap") + "\n", TEXT_OPTS);
+  await printer.printText(
+    row("Toko", String(storeName || "MarketPos").slice(0, 22)) + "\n",
+    TEXT_OPTS,
+  );
+  await printer.printText(
+    row("Printer", String(printerName || DEFAULT_PRINTER_LABEL).slice(0, 22)) +
+      "\n",
+    TEXT_OPTS,
+  );
+  await printer.printText(
+    row("Waktu", formatLocalDateTime(new Date().toISOString())) + "\n",
+    TEXT_OPTS,
+  );
+  await printer.printText(dash() + "\n", TEXT_OPTS);
+
+  await printer.printerAlign(printer.ALIGN.CENTER);
+  await printer.printText("Printer siap digunakan.\n", TEXT_OPTS);
+  await printer.printerAlign(printer.ALIGN.LEFT);
+  await printer.printAndFeed(100);
 };
 
 const TEXT_OPTS = { encoding: "UTF-8", codepage: 0 };

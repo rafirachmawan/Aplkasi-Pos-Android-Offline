@@ -13,6 +13,7 @@ import {
   Linking,
   Switch,
   Share,
+  ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -39,7 +40,12 @@ import useSyncStatus from "../hooks/useSyncStatus";
 import TransactionRepository from "../database/transactionRepository";
 import {
   getPairedPrinters,
+  getSavedPrinter,
+  savePrinterSelection,
+  clearPrinterSelection,
+  printTestViaBluetooth,
   isBluetoothPrintingSupported,
+  normalizeMacAddress,
 } from "../utils/bluetoothPrinter";
 import {
   uploadProductImage,
@@ -97,6 +103,9 @@ const PengaturanScreen = ({ navigation }) => {
 
   const [storeNameInput, setStoreNameInput] = useState(state.storeName || "");
   const [printerInput, setPrinterInput] = useState(state.printerAddress || "");
+  const [printerNameInput, setPrinterNameInput] = useState(
+    state.printerName || "",
+  );
   const [logoUri, setLogoUri] = useState(state.storeLogo || null);
   const [saved, setSaved] = useState(false);
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
@@ -115,6 +124,9 @@ const PengaturanScreen = ({ navigation }) => {
   const [showPrinterPicker, setShowPrinterPicker] = useState(false);
   const [pairedDevices, setPairedDevices] = useState([]);
   const [loadingPaired, setLoadingPaired] = useState(false);
+  const [printerError, setPrinterError] = useState("");
+  const [printerFeedback, setPrinterFeedback] = useState("");
+  const [testingPrinter, setTestingPrinter] = useState(false);
 
   // Update aplikasi OTA (tanpa install ulang)
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -405,8 +417,9 @@ const PengaturanScreen = ({ navigation }) => {
   useEffect(() => {
     setStoreNameInput(state.storeName || "");
     setPrinterInput(state.printerAddress || "");
+    setPrinterNameInput(state.printerName || "");
     setLogoUri(state.storeLogo || null);
-  }, [state.storeName, state.printerAddress, state.storeLogo]);
+  }, [state.storeName, state.printerAddress, state.printerName, state.storeLogo]);
 
   useEffect(() => {
     if (profile?.stores?.store_name) {
@@ -414,7 +427,74 @@ const PengaturanScreen = ({ navigation }) => {
     }
   }, [profile?.stores?.store_name]);
 
-  // ── Pilih printer dari daftar perangkat yang sudah dipairing ──
+  const syncPrinterProfileStorage = async (saved) => {
+    try {
+      const raw = await AsyncStorage.getItem("@TokoKelontong:StoreProfile");
+      const existing = raw ? JSON.parse(raw) : {};
+      await AsyncStorage.setItem(
+        "@TokoKelontong:StoreProfile",
+        JSON.stringify({
+          ...existing,
+          printerAddress: saved?.address || null,
+          printerName: saved?.name || null,
+        }),
+      );
+    } catch {
+      // Abaikan kegagalan sinkronisasi objek StoreProfile sekunder
+    }
+  };
+
+  const persistPrinterToStateAndStorage = async (device) => {
+    const saved = device
+      ? await savePrinterSelection(device)
+      : (await clearPrinterSelection(), { address: null, name: null });
+    setPrinterInput(saved.address || "");
+    setPrinterNameInput(saved.name || "");
+    dispatch({ type: "SET_PRINTER_ADDRESS", payload: saved.address });
+    dispatch({ type: "SET_PRINTER_NAME", payload: saved.name });
+    await syncPrinterProfileStorage(saved);
+    return saved;
+  };
+
+  const openPhoneBluetoothSettings = () => {
+    if (Platform.OS === "android") {
+      Linking.sendIntent("android.settings.BLUETOOTH_SETTINGS").catch(() => {
+        Linking.openSettings();
+      });
+    } else {
+      Linking.openSettings();
+    }
+  };
+
+  const loadPairedDevices = async () => {
+    setLoadingPaired(true);
+    setPrinterError("");
+    setPairedDevices([]);
+    try {
+      const devices = await getPairedPrinters();
+      setPairedDevices(devices);
+
+      // Lengkapi nama printer tersimpan jika sebelumnya hanya menyimpan alamat MAC
+      const currentSaved = await getSavedPrinter();
+      const activeAddr = normalizeMacAddress(
+        currentSaved?.address || printerInput,
+      );
+      if (activeAddr) {
+        const matched = devices.find(
+          (d) => normalizeMacAddress(d.address) === activeAddr,
+        );
+        if (matched && !currentSaved?.name) {
+          await persistPrinterToStateAndStorage(matched);
+        }
+      }
+    } catch (e) {
+      setPrinterError(e.message || "Gagal membaca daftar perangkat Bluetooth.");
+    } finally {
+      setLoadingPaired(false);
+    }
+  };
+
+  // ── Buka pengaturan Printer Bluetooth (1 menu terpadu) ──
   const handleOpenPrinterPicker = async () => {
     if (!isBluetoothPrintingSupported()) {
       Alert.alert(
@@ -423,17 +503,52 @@ const PengaturanScreen = ({ navigation }) => {
       );
       return;
     }
+    setPrinterFeedback("");
+    setPrinterError("");
     setShowPrinterPicker(true);
-    setLoadingPaired(true);
-    setPairedDevices([]);
+    await loadPairedDevices();
+  };
+
+  const handleSelectPrinter = async (device) => {
     try {
-      const devices = await getPairedPrinters();
-      setPairedDevices(devices);
+      const saved = await persistPrinterToStateAndStorage(device);
+      setPrinterError("");
+      setPrinterFeedback(
+        `Printer "${saved.name}" tersimpan dan siap digunakan.`,
+      );
     } catch (e) {
-      Alert.alert("Bluetooth", e.message || "Gagal membaca daftar perangkat.");
-      setShowPrinterPicker(false);
+      setPrinterError(e.message || "Gagal menyimpan pilihan printer.");
+    }
+  };
+
+  const handleClearPrinter = async () => {
+    try {
+      await persistPrinterToStateAndStorage(null);
+      setPrinterError("");
+      setPrinterFeedback("Pilihan printer dihapus.");
+    } catch (e) {
+      setPrinterError(e.message || "Gagal menghapus pilihan printer.");
+    }
+  };
+
+  const handleTestPrint = async () => {
+    if (testingPrinter) return;
+    setTestingPrinter(true);
+    setPrinterError("");
+    setPrinterFeedback("");
+    try {
+      await printTestViaBluetooth({
+        storeName: storeNameInput.trim() || state.storeName || "MarketPos",
+        printerName: printerNameInput || "Printer Bluetooth",
+      });
+      setPrinterFeedback("Struk tes berhasil dicetak ke printer.");
+    } catch (e) {
+      setPrinterError(
+        e.message ||
+          "Gagal mencetak struk tes. Pastikan printer menyala dan dekat HP.",
+      );
     } finally {
-      setLoadingPaired(false);
+      setTestingPrinter(false);
     }
   };
 
@@ -600,7 +715,13 @@ const PengaturanScreen = ({ navigation }) => {
     }
     try {
       await AsyncStorage.setItem("storeName", storeNameInput.trim());
-      await AsyncStorage.setItem("printerAddress", printerInput.trim());
+      const normalizedAddr = normalizeMacAddress(printerInput);
+      const savedPrinter = normalizedAddr
+        ? await savePrinterSelection({
+            address: normalizedAddr,
+            name: printerNameInput,
+          })
+        : (await clearPrinterSelection(), { address: null, name: null });
       // Logo lokal diunggah dulu ke cloud agar tampil di semua HP toko ini
       // dan tidak hilang saat instal ulang / pembersihan cache.
       let finalLogoUri = logoUri;
@@ -639,7 +760,8 @@ const PengaturanScreen = ({ navigation }) => {
         ...existingProfile,
         storeName: storeNameInput.trim(),
         name: storeNameInput.trim(), // alias format lama, dijaga sementara
-        printerAddress: printerInput.trim() || null,
+        printerAddress: savedPrinter.address,
+        printerName: savedPrinter.name,
         logo: finalLogoUri || null,
       };
       await AsyncStorage.setItem(
@@ -650,7 +772,11 @@ const PengaturanScreen = ({ navigation }) => {
       dispatch({ type: "SET_STORE_NAME", payload: storeNameInput.trim() });
       dispatch({
         type: "SET_PRINTER_ADDRESS",
-        payload: printerInput.trim() || null,
+        payload: savedPrinter.address,
+      });
+      dispatch({
+        type: "SET_PRINTER_NAME",
+        payload: savedPrinter.name,
       });
       dispatch({ type: "SET_STORE_LOGO", payload: finalLogoUri || null });
       dispatch({ type: "SET_BUSINESS_MODE", payload: businessMode });
@@ -1582,60 +1708,44 @@ const PengaturanScreen = ({ navigation }) => {
       {/* ── Hardware & Printer ── */}
       <Text style={styles.sectionTitle}>PRINTER BLUETOOTH</Text>
       <View style={styles.card}>
-        <SettingRow label="Alamat MAC Printer (Opsional)">
-          <TextInput
-            style={styles.input}
-            value={printerInput}
-            onChangeText={setPrinterInput}
-            placeholder="Contoh: 00:11:22:33:44:55"
-            placeholderTextColor="#94A3B8"
-            autoCapitalize="characters"
-          />
-        </SettingRow>
-
-        <View style={styles.divider} />
-
         <TouchableOpacity
-          style={styles.linkRow}
+          style={[styles.linkRow, { minHeight: 62 }]}
           onPress={handleOpenPrinterPicker}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Atur Printer Bluetooth"
         >
+          <View
+            style={[
+              styles.settingIconWrap,
+              {
+                backgroundColor: printerInput
+                  ? colors.primaryContainer
+                  : colors.infoSurfaceActive,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={printerInput ? "printer-check" : "bluetooth"}
+              size={20}
+              color={printerInput ? colors.primaryDark : colors.infoBadgeText}
+            />
+          </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkText}>Pilih dari Printer Terpairing</Text>
-            <Text style={styles.linkSubText}>
-              Isi alamat MAC otomatis dari daftar perangkat HP
+            <Text style={[styles.linkText, { fontSize: 14 }]}>
+              Printer Bluetooth
+            </Text>
+            <Text style={[styles.linkSubText, { fontSize: 12 }]}>
+              {printerInput
+                ? `${printerNameInput || "Printer Bluetooth Terpilih"} — ketuk untuk ganti atau tes cetak`
+                : "Belum dipilih — ketuk untuk pilih printer thermal"}
             </Text>
           </View>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={20}
-            color="#94A3B8"
-          />
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        <TouchableOpacity
-          style={styles.linkRow}
-          onPress={() => {
-            if (Platform.OS === "android") {
-              Linking.sendIntent("android.settings.BLUETOOTH_SETTINGS").catch(
-                () => {
-                  Linking.openSettings();
-                },
-              );
-            } else {
-              Linking.openSettings();
-            }
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.linkText}>Buka Pengaturan Bluetooth HP</Text>
-            <Text style={styles.linkSubText}>
-              Pasangkan printer Bluetooth dari sini
-            </Text>
-          </View>
+          {printerInput ? (
+            <View style={styles.printerActiveBadge}>
+              <Text style={styles.printerActiveBadgeText}>Terpilih</Text>
+            </View>
+          ) : null}
           <MaterialCommunityIcons
             name="chevron-right"
             size={20}
@@ -1804,69 +1914,274 @@ const PengaturanScreen = ({ navigation }) => {
         animationType="fade"
         onRequestClose={() => setShowPrinterPicker(false)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlayCenter}
-          activeOpacity={1}
-          onPress={() => setShowPrinterPicker(false)}
-        >
-          <View style={styles.sourceModalCard}>
-            <Text style={styles.sourceModalTitle}>Pilih Printer Bluetooth</Text>
-            <Text style={styles.sourceModalDesc}>
-              Perangkat yang sudah dipairing dengan HP ini. Ketuk salah satu
-              untuk mengisi alamat MAC otomatis.
-            </Text>
+        <View style={styles.modalOverlayCenter}>
+          <View style={styles.restoreModalCard}>
+            <View style={styles.modalHeaderRow}>
+              <View
+                style={[
+                  styles.settingIconWrap,
+                  { backgroundColor: colors.infoSurfaceActive },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="bluetooth"
+                  size={22}
+                  color={colors.infoBadgeText}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.restoreTitle}>Printer Bluetooth</Text>
+                <Text style={styles.printerModalSubtitle}>
+                  Pilih printer thermal yang terpasang di HP
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.printerModalCloseBtn}
+                onPress={() => setShowPrinterPicker(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Tutup pilihan printer Bluetooth"
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={22}
+                  color="#475569"
+                />
+              </TouchableOpacity>
+            </View>
+
+            {printerError ? (
+              <View style={styles.printerErrorBox}>
+                <Text style={styles.printerErrorText}>{printerError}</Text>
+                <View style={styles.printerInlineActions}>
+                  <TouchableOpacity
+                    style={styles.printerUtilityBtn}
+                    onPress={loadPairedDevices}
+                    disabled={loadingPaired}
+                    accessibilityRole="button"
+                    accessibilityLabel="Coba baca daftar Bluetooth lagi"
+                  >
+                    <MaterialCommunityIcons
+                      name="refresh"
+                      size={16}
+                      color={colors.textDark}
+                    />
+                    <Text style={styles.printerUtilityText}>Coba Lagi</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.printerUtilityBtn}
+                    onPress={openPhoneBluetoothSettings}
+                    accessibilityRole="button"
+                    accessibilityLabel="Buka pengaturan Bluetooth HP"
+                  >
+                    <MaterialCommunityIcons
+                      name="bluetooth-settings"
+                      size={16}
+                      color={colors.textDark}
+                    />
+                    <Text style={styles.printerUtilityText}>Bluetooth HP</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+            {printerFeedback ? (
+              <View style={styles.printerFeedbackBox}>
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={18}
+                  color={colors.successDark}
+                />
+                <Text style={styles.printerFeedbackText}>
+                  {printerFeedback}
+                </Text>
+              </View>
+            ) : null}
 
             {loadingPaired ? (
-              <Text
-                style={[
-                  styles.sourceModalDesc,
-                  { textAlign: "center", marginVertical: 16 },
-                ]}
+              <View style={styles.printerStateBox}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.printerStateText}>
+                  Menyiapkan Bluetooth & memuat perangkat...
+                </Text>
+              </View>
+            ) : !printerError && pairedDevices.length === 0 ? (
+              <View style={styles.printerStateBox}>
+                <MaterialCommunityIcons
+                  name="printer-off-outline"
+                  size={28}
+                  color="#64748B"
+                />
+                <Text style={styles.printerStateText}>
+                  Belum ada printer terpasang di Bluetooth HP. Pasangkan printer
+                  di Bluetooth HP (PIN umum: 0000 atau 1234), lalu ketuk Muat
+                  Ulang.
+                </Text>
+                <View style={styles.printerInlineActions}>
+                  <TouchableOpacity
+                    style={styles.printerUtilityBtn}
+                    onPress={openPhoneBluetoothSettings}
+                    accessibilityRole="button"
+                    accessibilityLabel="Buka pengaturan Bluetooth HP"
+                  >
+                    <MaterialCommunityIcons
+                      name="bluetooth-settings"
+                      size={16}
+                      color={colors.textDark}
+                    />
+                    <Text style={styles.printerUtilityText}>Bluetooth HP</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.printerUtilityBtn}
+                    onPress={loadPairedDevices}
+                    accessibilityRole="button"
+                    accessibilityLabel="Muat ulang daftar printer Bluetooth"
+                  >
+                    <MaterialCommunityIcons
+                      name="refresh"
+                      size={16}
+                      color={colors.textDark}
+                    />
+                    <Text style={styles.printerUtilityText}>Muat Ulang</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : pairedDevices.length > 0 ? (
+              <ScrollView
+                style={styles.printerDeviceScroll}
+                showsVerticalScrollIndicator={true}
               >
-                Membaca perangkat Bluetooth...
-              </Text>
-            ) : pairedDevices.length === 0 ? (
-              <Text
-                style={[
-                  styles.sourceModalDesc,
-                  { textAlign: "center", marginVertical: 16 },
-                ]}
-              >
-                Belum ada perangkat terpairing. Pairing printer lewat menu
-                "Buka Pengaturan Bluetooth HP" terlebih dahulu.
-              </Text>
-            ) : (
-              pairedDevices.map((device) => (
-                <TouchableOpacity
-                  key={device.address}
-                  style={styles.printerDeviceRow}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    setPrinterInput(device.address);
-                    setShowPrinterPicker(false);
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="bluetooth"
-                    size={20}
-                    color="#1D4ED8"
-                  />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.linkText}>{device.name}</Text>
-                    <Text style={styles.linkSubText}>{device.address}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
+                {pairedDevices.map((device, index) => {
+                  const isSelected =
+                    normalizeMacAddress(printerInput) ===
+                    normalizeMacAddress(device.address);
+                  return (
+                    <TouchableOpacity
+                      key={device.address || String(index)}
+                      style={[
+                        styles.printerDeviceRow,
+                        isSelected && styles.printerDeviceRowActive,
+                      ]}
+                      activeOpacity={0.7}
+                      onPress={() => handleSelectPrinter(device)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Pilih printer ${device.name}`}
+                    >
+                      <View
+                        style={[
+                          styles.printerDeviceIconWrap,
+                          isSelected && {
+                            backgroundColor: colors.primaryContainer,
+                          },
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name={isSelected ? "printer-check" : "printer"}
+                          size={20}
+                          color={
+                            isSelected
+                              ? colors.primaryDark
+                              : colors.infoBadgeText
+                          }
+                        />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text
+                          style={[
+                            styles.printerDeviceName,
+                            isSelected && { color: colors.primaryTextDark },
+                          ]}
+                        >
+                          {device.name}
+                        </Text>
+                        <Text style={styles.printerDeviceHint}>
+                          {isSelected
+                            ? "Printer aktif untuk cetak nota"
+                            : "Ketuk untuk pilih printer ini"}
+                        </Text>
+                      </View>
+                      {isSelected ? (
+                        <View style={styles.printerActiveBadge}>
+                          <Text style={styles.printerActiveBadgeText}>
+                            Terpilih
+                          </Text>
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
 
-            <TouchableOpacity
-              style={styles.sourceCancelBtn}
-              onPress={() => setShowPrinterPicker(false)}
-            >
-              <Text style={styles.sourceCancelText}>Batal</Text>
-            </TouchableOpacity>
+            {printerInput ? (
+              <TouchableOpacity
+                style={[
+                  styles.printerTestBtn,
+                  testingPrinter && { opacity: 0.7 },
+                ]}
+                onPress={handleTestPrint}
+                disabled={testingPrinter || loadingPaired}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Tes cetak struk ke printer Bluetooth"
+              >
+                {testingPrinter ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="printer-pos"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                )}
+                <Text style={styles.printerTestBtnText}>
+                  {testingPrinter ? "Mencetak Struk Tes..." : "Tes Cetak Struk"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <View style={styles.printerModalFooterRow}>
+              {pairedDevices.length > 0 ? (
+                <TouchableOpacity
+                  style={styles.printerFooterSmallBtn}
+                  onPress={loadPairedDevices}
+                  disabled={loadingPaired}
+                  accessibilityRole="button"
+                  accessibilityLabel="Muat ulang daftar perangkat Bluetooth"
+                >
+                  <Text style={styles.printerFooterSmallText}>Muat Ulang</Text>
+                </TouchableOpacity>
+              ) : null}
+              {pairedDevices.length > 0 ? (
+                <TouchableOpacity
+                  style={styles.printerFooterSmallBtn}
+                  onPress={openPhoneBluetoothSettings}
+                  accessibilityRole="button"
+                  accessibilityLabel="Buka Bluetooth HP untuk pasangkan printer baru"
+                >
+                  <Text style={styles.printerFooterSmallText}>Bluetooth HP</Text>
+                </TouchableOpacity>
+              ) : null}
+              {printerInput ? (
+                <TouchableOpacity
+                  style={styles.printerFooterDangerBtn}
+                  onPress={handleClearPrinter}
+                  accessibilityRole="button"
+                  accessibilityLabel="Hapus pilihan printer Bluetooth"
+                >
+                  <Text style={styles.printerFooterDangerText}>Hapus</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={styles.printerDoneBtn}
+                onPress={() => setShowPrinterPicker(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Tutup"
+              >
+                <Text style={styles.printerDoneText}>Selesai</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
       {/* ── Modal Ganti Password ── */}
       <Modal
@@ -2618,10 +2933,215 @@ const styles = StyleSheet.create({
   printerDeviceRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    minHeight: 54,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginBottom: 8,
+  },
+  printerDeviceRowActive: {
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primaryContainer,
+  },
+  printerDeviceScroll: {
+    maxHeight: 240,
+    marginBottom: 12,
+  },
+  printerDeviceIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.infoSurfaceActive,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  printerDeviceName: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.text,
+  },
+  printerDeviceHint: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textBodySecondary,
+    marginTop: 2,
+  },
+  printerActiveBadge: {
+    backgroundColor: colors.primaryContainer,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginRight: 6,
+  },
+  printerActiveBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.primaryTextDark,
+  },
+  printerModalSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textBodySecondary,
+    marginTop: 2,
+  },
+  printerModalCloseBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  printerStateBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+    marginBottom: 14,
+    gap: 10,
+  },
+  printerStateText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.textBodySecondary,
+    textAlign: "center",
+    lineHeight: 19,
+  },
+  printerErrorBox: {
+    backgroundColor: colors.errorSoftBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.errorSoftBorder,
+    padding: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  printerErrorText: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    color: colors.errorTextDark,
+    lineHeight: 18,
+  },
+  printerFeedbackBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.successContainer,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  printerFeedbackText: {
+    flex: 1,
+    fontFamily: fonts.semiBold,
+    fontSize: 12.5,
+    color: colors.successDark,
+  },
+  printerInlineActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+  },
+  printerUtilityBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  printerUtilityText: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    color: colors.textDark,
+  },
+  printerTestBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 46,
+    borderRadius: 12,
+    backgroundColor: colors.primaryDark,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    marginBottom: 10,
+  },
+  printerTestBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+    color: colors.onPrimary,
+  },
+  printerModalFooterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 2,
+  },
+  printerFooterSmallBtn: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  printerFooterSmallText: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    color: colors.textDark,
+  },
+  printerFooterDangerBtn: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.errorSoftBorder,
+    backgroundColor: colors.errorSoftBg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  printerFooterDangerText: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    color: colors.errorTextDark,
+  },
+  printerDoneBtn: {
+    flex: 1,
+    minWidth: 88,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  printerDoneText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.text,
   },
 
   // ── Mode Bisnis & Operasional Styles ──
