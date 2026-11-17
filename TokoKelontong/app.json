@@ -13,6 +13,11 @@
     "orientation": "portrait",
     "icon": "./assets/MarketPos.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFDFB"
+    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {

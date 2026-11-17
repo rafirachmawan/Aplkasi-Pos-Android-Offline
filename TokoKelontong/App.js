@@ -14,6 +14,7 @@ import { AppProvider } from "./src/context/AppContext";
 import { AuthProvider } from "./src/context/AuthContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 import CustomAlertHost from "./src/components/CustomAlertHost";
+import StartupSplashView from "./src/components/StartupSplashView";
 import { colors } from "./src/theme/colors";
 
 const theme = {
@@ -30,7 +31,7 @@ const theme = {
 };
 
 export default function App() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -38,8 +39,12 @@ export default function App() {
     Inter_800ExtraBold,
   });
 
-  if (!fontsLoaded) {
-    return null;
+  if (!fontsLoaded && !fontError) {
+    return (
+      <SafeAreaProvider>
+        <StartupSplashView message="Memuat aplikasi..." />
+      </SafeAreaProvider>
+    );
   }
 
   return (

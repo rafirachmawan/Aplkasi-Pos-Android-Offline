@@ -1,6 +1,6 @@
 import React from "react";
-import { View } from "react-native";
 import { createStackNavigator } from "@react-navigation/stack";
+import StartupSplashView from "../components/StartupSplashView";
 
 import HomeScreen from "../screens/HomeScreen";
 import DashboardScreen from "../screens/DashboardScreen";
@@ -44,7 +44,7 @@ export default function AppNavigator() {
   const { session, ready } = useAuth();
 
   if (!ready) {
-    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+    return <StartupSplashView message="Menyiapkan data toko..." />;
   }
 
   return (
