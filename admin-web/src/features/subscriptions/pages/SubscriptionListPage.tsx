@@ -116,17 +116,17 @@ export function SubscriptionListPage() {
             <Search className="size-4" />
           </div>
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Total</p>
+            <p className="text-xs font-medium text-slate-500">Total toko</p>
             <p className="text-lg font-bold text-ink">{formatNumber(counts.total)}</p>
           </div>
         </Card>
 
         <Card className="flex items-center gap-3 p-4">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+          <div className="flex size-9 items-center justify-center rounded-lg border border-brand-border bg-brand-soft text-brand-dark">
             <Crown className="size-4" />
           </div>
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Pro</p>
+            <p className="text-xs font-medium text-slate-500">Paket Pro</p>
             <p className="text-lg font-bold text-ink">{formatNumber(counts.pro)}</p>
           </div>
         </Card>
@@ -136,21 +136,17 @@ export function SubscriptionListPage() {
             <span className="text-sm font-bold">G</span>
           </div>
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Gratis
-            </p>
+            <p className="text-xs font-medium text-slate-500">Gratis</p>
             <p className="text-lg font-bold text-ink">{formatNumber(counts.free)}</p>
           </div>
         </Card>
 
         <Card className="flex items-center gap-3 p-4">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+          <div className="flex size-9 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
             <span className="text-sm font-bold">!</span>
           </div>
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              ≤ 7 hari
-            </p>
+            <p className="text-xs font-medium text-slate-500">Berakhir ≤ 7 hari</p>
             <p className="text-lg font-bold text-ink">{formatNumber(counts.expiringSoon)}</p>
           </div>
         </Card>

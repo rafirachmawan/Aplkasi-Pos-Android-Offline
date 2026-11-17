@@ -85,7 +85,7 @@ export function PlanActionModal({
       <div className="space-y-3">
         <div className="rounded-lg border border-line bg-slate-50/70 px-3 py-2.5">
           <p className="text-sm font-medium text-ink">{row.storeName}</p>
-          <p className="mt-0.5 text-[11px] text-slate-500">
+          <p className="mt-0.5 text-xs text-slate-500">
             {row.username ? `@${row.username}` : 'Tanpa username'}
           </p>
         </div>
@@ -98,9 +98,9 @@ export function PlanActionModal({
               onChange={(event) => setDays(event.target.value)}
               options={DURATION_OPTIONS}
             />
-            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[12px] leading-relaxed text-emerald-800">
+            <p className="rounded-lg border border-brand-border bg-brand-soft px-3 py-2 text-xs leading-relaxed text-brand-dark">
               Berlaku mulai hari ini sampai <strong>{previewExpiry(Number(days))}</strong>.
-              {row.plan === 'pro' ? ' Perpanjangan dihitung dari tanggal berakhir yang masih berjaku.' : ''}
+              {row.plan === 'pro' ? ' Perpanjangan dihitung dari tanggal berakhir yang masih berlaku.' : ''}
             </p>
           </>
         ) : (
@@ -110,7 +110,7 @@ export function PlanActionModal({
               yang sudah ada <strong>tidak dihapus</strong>.
             </p>
             {row.planExpiresAt ? (
-              <p className="text-[11px] text-slate-500">
+              <p className="text-xs text-slate-500">
                 Masa aktif berakhir {formatDate(row.planExpiresAt)}.
               </p>
             ) : null}

@@ -1,4 +1,14 @@
-import { Activity, Crown, ReceiptText, RefreshCw, Store, Wallet } from 'lucide-react'
+import {
+  Activity,
+  ArrowUpRight,
+  BookOpen,
+  Crown,
+  ReceiptText,
+  RefreshCw,
+  Store,
+  UtensilsCrossed,
+  Wallet,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -15,7 +25,7 @@ const QUICK_LINKS = [
     to: '/toko',
     icon: Store,
     title: 'Kelola toko',
-    description: 'Lihat profil, produk, dan aktivitas setiap toko.',
+    description: 'Lihat profil, produk, kasbon, dan seluruh aktivitas toko.',
   },
   {
     to: '/langganan',
@@ -27,7 +37,7 @@ const QUICK_LINKS = [
     to: '/transaksi',
     icon: ReceiptText,
     title: 'Telusuri transaksi',
-    description: 'Filter nota lintas toko berdasarkan tanggal.',
+    description: 'Pantau nota POS, kasbon & cicilan, pesanan meja, dan shift.',
   },
 ] as const
 
@@ -96,6 +106,67 @@ export function DashboardPage() {
             />
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Link
+              to="/transaksi?tab=kasbon"
+              className="focus-ring group flex items-center justify-between gap-3 rounded-xl border border-line bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:border-brand-border hover:bg-brand-soft/30"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
+                  <BookOpen className="size-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500">Piutang kasbon aktif</p>
+                  <p className="text-base font-bold text-ink">
+                    {data ? rupiah(data.unpaidDebtAmount) : '—'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {data ? `${formatNumber(data.unpaidDebtCount)} catatan belum lunas` : ''}
+                  </p>
+                </div>
+              </div>
+              <ArrowUpRight className="size-4 shrink-0 text-slate-400 transition-colors group-hover:text-brand-dark" />
+            </Link>
+
+            <Link
+              to="/transaksi?paymentMethod=kasbon"
+              className="focus-ring group flex items-center justify-between gap-3 rounded-xl border border-line bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:border-brand-border hover:bg-brand-soft/30"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-brand-border bg-brand-soft text-brand-dark">
+                  <ReceiptText className="size-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500">Transaksi kasbon (30 hari)</p>
+                  <p className="text-base font-bold text-ink">
+                    {data ? `${formatNumber(data.kasbonTxCount30d)} nota` : '—'}
+                  </p>
+                  <p className="text-xs text-slate-500">Checkout dengan metode kasbon</p>
+                </div>
+              </div>
+              <ArrowUpRight className="size-4 shrink-0 text-slate-400 transition-colors group-hover:text-brand-dark" />
+            </Link>
+
+            <Link
+              to="/transaksi?tab=meja"
+              className="focus-ring group flex items-center justify-between gap-3 rounded-xl border border-line bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:border-brand-border hover:bg-brand-soft/30"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-700">
+                  <UtensilsCrossed className="size-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500">Pesanan meja menunggu</p>
+                  <p className="text-base font-bold text-ink">
+                    {data ? `${formatNumber(data.pendingTableOrdersCount)} antrean` : '—'}
+                  </p>
+                  <p className="text-xs text-slate-500">Pesanan mandiri QR meja F&B</p>
+                </div>
+              </div>
+              <ArrowUpRight className="size-4 shrink-0 text-slate-400 transition-colors group-hover:text-brand-dark" />
+            </Link>
+          </div>
+
           <div className="grid gap-4 xl:grid-cols-3">
             <div className="xl:col-span-2">
               <RevenueChart series={data?.revenueSeries ?? []} loading={isLoading} />
@@ -108,14 +179,16 @@ export function DashboardPage() {
               <Link
                 key={link.to}
                 to={link.to}
-                className="focus-ring group flex items-start gap-3 rounded-xl border border-line bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:border-slate-300"
+                className="focus-ring group flex items-start gap-3 rounded-xl border border-line bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:border-brand-border hover:bg-brand-soft/30"
               >
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-colors group-hover:bg-emerald-50 group-hover:text-emerald-700">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-colors group-hover:bg-brand-soft group-hover:text-brand-dark">
                   <link.icon className="size-4" />
                 </div>
                 <div>
-                  <p className="text-[13px] font-semibold text-ink">{link.title}</p>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{link.description}</p>
+                  <p className="text-[13px] font-semibold text-ink group-hover:text-brand-dark">
+                    {link.title}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{link.description}</p>
                 </div>
               </Link>
             ))}

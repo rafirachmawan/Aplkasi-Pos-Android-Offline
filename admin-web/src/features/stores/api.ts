@@ -1,4 +1,4 @@
-import { delay, licenses, products, stores, transactions } from '@/mocks'
+import { debts, delay, licenses, products, shifts, stores, tableOrders, transactions } from '@/mocks'
 import { apiRequest } from '@/lib/adminApi'
 import { env } from '@/lib/env'
 import { supabaseNotReady } from '@/lib/notReady'
@@ -57,12 +57,18 @@ export async function fetchStoreDetail(storeId: string): Promise<StoreDetail> {
   const store = stores.find((item) => item.id === storeId)
   if (!store) throw new Error('Toko tidak ditemukan.')
 
+  const storeTransactions = transactions.filter((row) => row.storeId === storeId)
+
   return {
     store,
     products: products
       .filter((product) => product.storeId === storeId)
       .sort((a, b) => a.productName.localeCompare(b.productName)),
-    transactions: transactions.filter((row) => row.storeId === storeId).slice(0, 12),
+    transactions: storeTransactions.slice(0, 100),
+    totalTransactionCount: storeTransactions.length,
+    debts: debts.filter((row) => row.storeId === storeId),
+    tableOrders: tableOrders.filter((row) => row.storeId === storeId),
+    shifts: shifts.filter((row) => row.storeId === storeId),
     licenses: licenses.filter((row) => row.storeId === storeId),
   }
 }

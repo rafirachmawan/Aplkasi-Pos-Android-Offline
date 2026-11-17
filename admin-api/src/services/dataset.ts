@@ -45,7 +45,7 @@ export async function loadDataset(): Promise<Dataset> {
       fetchAll<Transaction30dRow>('transaksi 30 hari', (from, to) =>
         supabaseAdmin
           .from('transactions')
-          .select('store_id, grand_total, created_at')
+          .select('store_id, grand_total, payment_method, created_at')
           .gte('created_at', since)
           .order('created_at', { ascending: true })
           .range(from, to),

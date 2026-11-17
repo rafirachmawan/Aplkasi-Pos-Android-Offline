@@ -1,11 +1,17 @@
 import { jakartaDateKey, startOfJakartaDay } from '../lib/dates'
 import type { KpiSummary, RevenuePoint } from '../types'
 import { buildSummaries, loadDataset } from './dataset'
+import { getGlobalUnpaidDebtStats } from './debts'
+import { getGlobalPendingTableOrdersCount } from './tableOrders'
 
 const SERIES_DAYS = 30
 
 export async function getKpi(): Promise<KpiSummary> {
-  const dataset = await loadDataset()
+  const [dataset, debtStats, pendingTableOrdersCount] = await Promise.all([
+    loadDataset(),
+    getGlobalUnpaidDebtStats(),
+    getGlobalPendingTableOrdersCount(),
+  ])
   const summaries = buildSummaries(dataset)
 
   const series: RevenuePoint[] = Array.from({ length: SERIES_DAYS }, (_, index) => {
@@ -15,7 +21,11 @@ export async function getKpi(): Promise<KpiSummary> {
 
   const pointByDate = new Map(series.map((point) => [jakartaDateKey(point.date), point]))
 
+  let kasbonTxCount30d = 0
   for (const transaction of dataset.transactions30d) {
+    if (transaction.payment_method === 'kasbon') {
+      kasbonTxCount30d += 1
+    }
     const point = pointByDate.get(jakartaDateKey(transaction.created_at))
     if (!point) continue
     point.revenue += transaction.grand_total
@@ -47,6 +57,10 @@ export async function getKpi(): Promise<KpiSummary> {
     transactionsToday: todayPoint?.transactions ?? 0,
     revenueToday,
     revenueTodayDelta,
+    unpaidDebtCount: debtStats.count,
+    unpaidDebtAmount: debtStats.remaining,
+    kasbonTxCount30d,
+    pendingTableOrdersCount,
     revenueSeries: series,
     topStores,
   }

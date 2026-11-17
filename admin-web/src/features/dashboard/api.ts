@@ -1,4 +1,4 @@
-import { delay, stores, transactions } from '@/mocks'
+import { debts, delay, stores, tableOrders, transactions } from '@/mocks'
 import { apiRequest } from '@/lib/adminApi'
 import { env } from '@/lib/env'
 import { supabaseNotReady } from '@/lib/notReady'
@@ -63,12 +63,21 @@ export async function fetchKpi(): Promise<KpiSummary> {
 
   const topStores = [...stores].sort((a, b) => b.revenue30d - a.revenue30d).slice(0, 5)
 
+  const unpaidDebts = debts.filter((row) => row.status !== 'paid')
+  const kasbonTxCount30d = transactions.filter(
+    (row) => row.paymentMethod === 'kasbon' && new Date(row.createdAt).getTime() >= thirtyDaysAgo,
+  ).length
+
   return {
     totalStores: stores.length,
     activeStores,
     transactionsToday: todayPoint?.transactions ?? 0,
     revenueToday,
     revenueTodayDelta,
+    unpaidDebtCount: unpaidDebts.length,
+    unpaidDebtAmount: unpaidDebts.reduce((sum, row) => sum + row.remainingDebt, 0),
+    kasbonTxCount30d,
+    pendingTableOrdersCount: tableOrders.filter((row) => row.status === 'pending').length,
     revenueSeries: series,
     topStores,
   }

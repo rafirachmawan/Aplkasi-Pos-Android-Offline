@@ -34,7 +34,7 @@ export function SubscriptionTable({
       render: (row) => (
         <div className="min-w-44">
           <p className="font-medium text-ink">{row.storeName}</p>
-          <p className="mt-0.5 text-[11px] text-slate-500">
+          <p className="mt-0.5 text-xs text-slate-500">
             {row.username ? `@${row.username}` : '—'}
           </p>
         </div>

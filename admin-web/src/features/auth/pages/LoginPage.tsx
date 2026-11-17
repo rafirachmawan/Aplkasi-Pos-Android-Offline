@@ -46,63 +46,63 @@ export function LoginPage() {
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
       <section className="relative hidden flex-col justify-between overflow-hidden bg-ink p-10 lg:flex xl:p-14">
         <div
-          className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-emerald-500/20 blur-3xl"
+          className="pointer-events-none absolute -right-32 -top-32 size-96 rounded-full bg-brand/25 blur-3xl"
           aria-hidden
         />
         <div
-          className="pointer-events-none absolute -bottom-40 -left-24 size-96 rounded-full bg-sky-500/10 blur-3xl"
+          className="pointer-events-none absolute -bottom-40 -left-24 size-96 rounded-full bg-brand-bright/15 blur-3xl"
           aria-hidden
         />
 
-        <div className="relative flex items-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500 text-white">
+        <div className="relative flex items-center gap-3">
+          <div className="flex size-9 items-center justify-center rounded-xl bg-brand text-white shadow-sm shadow-brand/30">
             <Boxes className="size-5" />
           </div>
           <div>
             <p className="text-sm font-bold leading-tight text-white">MarketPos</p>
-            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+            <p className="text-xs font-medium tracking-wider text-slate-300">
               Admin Console
             </p>
           </div>
         </div>
 
         <div className="relative max-w-md">
-          <span className="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+          <span className="inline-flex items-center rounded-full border border-orange-400/35 bg-brand/20 px-3 py-1 text-xs font-medium text-orange-200">
             Khusus super admin
           </span>
           <h1 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-white xl:text-4xl">
             Kendali penuh atas jaringan toko Anda.
           </h1>
-          <p className="mt-3 text-sm leading-relaxed text-slate-400">
+          <p className="mt-3 text-sm leading-relaxed text-slate-300">
             Satu tempat untuk memantau performa toko, status perangkat, dan aktivitas penjualan.
           </p>
 
           <ul className="mt-8 space-y-3">
             {HIGHLIGHTS.map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-[13px] text-slate-300">
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-400" />
+              <li key={item} className="flex items-start gap-2.5 text-[13px] text-slate-200">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand-bright" />
                 {item}
               </li>
             ))}
           </ul>
         </div>
 
-        <p className="relative text-[11px] text-slate-500">
+        <p className="relative text-xs text-slate-400">
           {env.isApi
             ? 'v0.1.0 · API lokal read-only · Data asli melalui admin-api'
             : 'v0.1.0 · Mode pengembangan lokal · Data contoh, bukan data produksi'}
         </p>
       </section>
 
-      <section className="flex items-center justify-center px-5 py-10 sm:px-8">
+      <section className="flex items-center justify-center bg-canvas px-5 py-10 sm:px-8">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-ink text-white">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-brand text-white">
               <Boxes className="size-5" />
             </div>
             <div>
               <p className="text-sm font-bold leading-tight text-ink">MarketPos</p>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              <p className="text-xs font-medium tracking-wider text-slate-500">
                 Admin Console
               </p>
             </div>
@@ -150,12 +150,12 @@ export function LoginPage() {
           <div className="mt-6 rounded-lg border border-dashed border-line bg-slate-50/70 p-3.5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <p className="text-xs font-semibold text-slate-600">
                   {env.isApi ? 'Akun default' : 'Akun demo'}
                 </p>
                 <p className="mt-1 font-mono text-xs text-slate-700">admin / admin123</p>
                 {env.isApi ? (
-                  <p className="mt-1 text-[10px] text-slate-500">
+                  <p className="mt-1 text-xs text-slate-500">
                     Kecuali diubah di <span className="font-mono">admin-api/.env</span>
                   </p>
                 ) : null}

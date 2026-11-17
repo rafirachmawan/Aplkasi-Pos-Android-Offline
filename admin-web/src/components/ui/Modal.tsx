@@ -50,10 +50,12 @@ export function Modal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
+      <button
+        type="button"
+        tabIndex={-1}
         className="absolute inset-0 animate-fade-in bg-slate-900/50 backdrop-blur-[2px]"
         onClick={onClose}
-        aria-hidden
+        aria-label="Tutup dialog"
       />
 
       <div

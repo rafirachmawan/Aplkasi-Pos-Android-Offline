@@ -39,13 +39,13 @@ export function DataTable<T>({
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-y border-slate-200 bg-slate-100">
+          <tr className="border-y border-line bg-slate-50/90">
             {columns.map((column) => (
               <th
                 key={column.key}
                 scope="col"
                 className={cn(
-                  'whitespace-nowrap px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-700 border-r border-slate-200 last:border-r-0',
+                  'whitespace-nowrap px-4 py-3 text-xs font-semibold tracking-wide text-slate-600',
                   ALIGN[column.align ?? 'left'],
                   column.className,
                 )}
@@ -59,9 +59,9 @@ export function DataTable<T>({
         <tbody>
           {loading
             ? Array.from({ length: skeletonRows }, (_, rowIndex) => (
-                <tr key={`skeleton-${rowIndex}`} className="border-b border-line/70">
+                <tr key={`skeleton-${rowIndex}`} className="border-b border-line/60">
                   {columns.map((column) => (
-                    <td key={column.key} className="px-4 py-3.5 border-r border-slate-200/50 last:border-r-0">
+                    <td key={column.key} className="px-4 py-3.5">
                       <Skeleton className="h-4 w-full max-w-40" />
                     </td>
                   ))}
@@ -83,15 +83,15 @@ export function DataTable<T>({
                   }
                   tabIndex={onRowClick ? 0 : undefined}
                   className={cn(
-                    'border-b border-line/60 transition-colors hover:bg-slate-50/70 last:border-b-0',
-                    onRowClick && 'focus-ring cursor-pointer hover:bg-slate-100/70',
+                    'border-b border-line/60 transition-colors hover:bg-orange-50/35 last:border-b-0',
+                    onRowClick && 'focus-ring cursor-pointer hover:bg-orange-50/60',
                   )}
                 >
                   {columns.map((column) => (
                     <td
                       key={column.key}
                       className={cn(
-                        'px-4 py-3.5 align-middle text-slate-700 border-r border-slate-200/60 last:border-r-0',
+                        'px-4 py-3.5 align-middle text-slate-700',
                         ALIGN[column.align ?? 'left'],
                         column.className,
                       )}

@@ -11,7 +11,10 @@ import type {
   StoreSummary,
 } from '../types'
 import { buildSummaries, loadDataset } from './dataset'
-import { listRecentStoreTransactions } from './transactions'
+import { listStoreDebts } from './debts'
+import { listStoreShifts } from './shifts'
+import { listStoreTableOrders } from './tableOrders'
+import { countStoreTransactions, listRecentStoreTransactions } from './transactions'
 
 export interface StoreListQuery {
   search: string
@@ -109,15 +112,24 @@ export async function getStoreDetail(storeId: string): Promise<StoreDetailDto> {
   }
 
   const storeNameById = buildStoreNameMap(dataset.stores)
-  const [products, transactions] = await Promise.all([
-    Promise.resolve(((productsResult.data ?? []) as ProductRecord[]).map(mapProduct)),
-    listRecentStoreTransactions(storeId, store.storeName),
-  ])
+  const [products, transactions, totalTransactionCount, debts, tableOrders, shifts] =
+    await Promise.all([
+      Promise.resolve(((productsResult.data ?? []) as ProductRecord[]).map(mapProduct)),
+      listRecentStoreTransactions(storeId, store.storeName, 100),
+      countStoreTransactions(storeId),
+      listStoreDebts(storeId, store.storeName),
+      listStoreTableOrders(storeId, store.storeName),
+      listStoreShifts(storeId, store.storeName),
+    ])
 
   return {
     store,
     products,
     transactions,
+    totalTransactionCount,
+    debts,
+    tableOrders,
+    shifts,
     licenses: dataset.licenses
       .filter((license) => license.store_id === storeId)
       .map((license) => mapLicense(license, storeNameById)),

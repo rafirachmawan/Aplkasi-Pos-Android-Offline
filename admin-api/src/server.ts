@@ -4,11 +4,14 @@ import { env } from './env'
 import { HttpError } from './lib/errors'
 import { readOnlyGuard, requireApiToken } from './middleware/auth'
 import { authRouter } from './routes/auth'
+import { debtsRouter } from './routes/debts'
 import { devicesRouter } from './routes/devices'
 import { kpiRouter } from './routes/kpi'
 import { licensesRouter } from './routes/licenses'
+import { shiftsRouter } from './routes/shifts'
 import { storesRouter } from './routes/stores'
 import { subscriptionsRouter } from './routes/subscriptions'
+import { tableOrdersRouter } from './routes/tableOrders'
 import { transactionsRouter } from './routes/transactions'
 
 const app = express()
@@ -62,6 +65,9 @@ app.use('/api', readOnlyGuard)
 app.use('/api', kpiRouter)
 app.use('/api', storesRouter)
 app.use('/api', transactionsRouter)
+app.use('/api', debtsRouter)
+app.use('/api', tableOrdersRouter)
+app.use('/api', shiftsRouter)
 app.use('/api', licensesRouter)
 app.use('/api', devicesRouter)
 // Endpoint tulis langganan: sudah difilter `readOnlyGuard` di atas.

@@ -79,7 +79,7 @@ export function SettingsPage() {
               </div>
               <div>
                 <p className="text-[13px] font-medium text-ink">{session?.username}</p>
-                <p className="text-[11px] text-slate-500">Login {formatDateTime(session?.loggedInAt ?? null)}</p>
+                <p className="text-xs text-slate-500">Login {formatDateTime(session?.loggedInAt ?? null)}</p>
               </div>
             </div>
 
@@ -136,29 +136,29 @@ export function SettingsPage() {
           <CardHeader title="Informasi sistem" description="Status lingkungan pengembangan" />
           <div className="grid gap-4 p-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Mode data</p>
+              <p className="text-xs font-medium text-slate-500">Mode data</p>
               <p className="mt-1 inline-flex items-center gap-1.5 font-medium text-ink">
-                <Database className="size-3.5 text-emerald-600" /> {MODE_LABEL}
+                <Database className="size-3.5 text-brand-dark" /> {MODE_LABEL}
               </p>
             </div>
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Versi console</p>
+              <p className="text-xs font-medium text-slate-500">Versi console</p>
               <p className="mt-1 font-medium text-ink">v0.1.0</p>
             </div>
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Backend</p>
+              <p className="text-xs font-medium text-slate-500">Backend</p>
               <p className="mt-1 font-medium text-ink">{BACKEND_LABEL}</p>
             </div>
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Keamanan</p>
+              <p className="text-xs font-medium text-slate-500">Keamanan</p>
               <p className="mt-1 inline-flex items-center gap-1.5 font-medium text-ink">
-                <ShieldCheck className="size-3.5 text-emerald-600" /> {SECURITY_LABEL}
+                <ShieldCheck className="size-3.5 text-brand-dark" /> {SECURITY_LABEL}
               </p>
             </div>
           </div>
 
-          <div className="mx-5 mb-5 flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-3 text-[12px] leading-relaxed text-sky-900">
-            <Info className="mt-0.5 size-4 shrink-0 text-sky-600" />
+          <div className="mx-5 mb-5 flex items-start gap-2.5 rounded-lg border border-brand-border bg-brand-soft px-3.5 py-3 text-xs leading-relaxed text-brand-dark">
+            <Info className="mt-0.5 size-4 shrink-0 text-brand-dark" />
             <p>{INFO_TEXT}</p>
           </div>
         </Card>

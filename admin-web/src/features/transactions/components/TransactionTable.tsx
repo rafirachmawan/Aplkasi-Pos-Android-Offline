@@ -3,24 +3,42 @@ import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { DataTable, type DataTableColumn } from '@/components/ui/Table'
 import { formatDateTime, rupiah } from '@/lib/format'
-import { orderTypeLabel, paymentLabel } from '@/lib/labels'
+import { orderTypeLabel, paymentLabel, paymentTone } from '@/lib/labels'
 import type { TransactionRow } from '@/types/domain'
 
 interface TransactionTableProps {
   rows: TransactionRow[]
   loading: boolean
   onRowClick: (row: TransactionRow) => void
+  hideStore?: boolean
 }
 
-export function TransactionTable({ rows, loading, onRowClick }: TransactionTableProps) {
+export function TransactionTable({
+  rows,
+  loading,
+  onRowClick,
+  hideStore = false,
+}: TransactionTableProps) {
   const columns: DataTableColumn<TransactionRow>[] = [
     {
       key: 'invoice',
       header: 'Nota',
       render: (row) => (
         <div className="min-w-36">
-          <p className="font-mono text-[11px] font-medium text-ink">{row.invoiceNumber}</p>
-          <p className="mt-0.5 text-[11px] text-slate-500">{row.storeName}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="font-mono text-xs font-medium text-ink">{row.invoiceNumber}</p>
+            {row.isOfflineSync ? (
+              <Badge tone="neutral">
+                Sync offline
+              </Badge>
+            ) : null}
+          </div>
+          {!hideStore ? <p className="mt-0.5 text-xs text-slate-500">{row.storeName}</p> : null}
+          {row.paymentNotes ? (
+            <p className="mt-0.5 max-w-64 truncate text-xs text-slate-500" title={row.paymentNotes}>
+              {row.paymentNotes}
+            </p>
+          ) : null}
         </div>
       ),
     },
@@ -29,8 +47,11 @@ export function TransactionTable({ rows, loading, onRowClick }: TransactionTable
       header: 'Pembayaran',
       render: (row) => (
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge tone="info">{paymentLabel(row.paymentMethod)}</Badge>
-          <span className="text-[11px] text-slate-500">{orderTypeLabel(row.orderType)}</span>
+          <Badge tone={paymentTone(row.paymentMethod)}>{paymentLabel(row.paymentMethod)}</Badge>
+          <span className="text-xs text-slate-500">
+            {orderTypeLabel(row.orderType)}
+            {row.tableNumber ? ` · ${row.tableNumber}` : ''}
+          </span>
         </div>
       ),
     },
@@ -49,7 +70,14 @@ export function TransactionTable({ rows, loading, onRowClick }: TransactionTable
       header: 'Total',
       align: 'right',
       render: (row) => (
-        <span className="font-semibold tabular-nums text-ink">{rupiah(row.grandTotal)}</span>
+        <div className="text-right">
+          <span className="font-semibold tabular-nums text-ink">{rupiah(row.grandTotal)}</span>
+          {row.discountAmount > 0 ? (
+            <p className="mt-0.5 text-xs text-emerald-700">
+              Diskon {rupiah(row.discountAmount)}
+            </p>
+          ) : null}
+        </div>
       ),
     },
     {
@@ -74,7 +102,7 @@ export function TransactionTable({ rows, loading, onRowClick }: TransactionTable
         <EmptyState
           icon={<ReceiptText className="size-5" />}
           title="Transaksi tidak ditemukan"
-          description="Ubah rentang tanggal, toko, atau kata kunci pencarian."
+          description="Ubah rentang tanggal, toko, metode pembayaran, atau kata kunci pencarian."
         />
       }
     />

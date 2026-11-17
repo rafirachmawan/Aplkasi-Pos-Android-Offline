@@ -15,12 +15,26 @@ const optionalDateKey = z.preprocess(
     .optional(),
 )
 
+const optionalUuid = z.preprocess(
+  (value) => (value === '' || value === undefined ? undefined : value),
+  z.string().uuid('ID toko tidak valid.').optional(),
+)
+
+const optionalMethod = z.preprocess(
+  (value) => (value === '' || value === 'all' || value === undefined ? undefined : value),
+  z.enum(['cash', 'qris', 'transfer', 'debit', 'kasbon']).optional(),
+)
+
+const optionalOrderType = z.preprocess(
+  (value) => (value === '' || value === 'all' || value === undefined ? undefined : value),
+  z.enum(['retail', 'dine_in', 'take_away']).optional(),
+)
+
 const listQuerySchema = z.object({
   search: z.string().trim().max(120).default(''),
-  storeId: z.preprocess(
-    (value) => (value === '' || value === undefined ? undefined : value),
-    z.string().uuid('ID toko tidak valid.').optional(),
-  ),
+  storeId: optionalUuid,
+  paymentMethod: optionalMethod,
+  orderType: optionalOrderType,
   from: optionalDateKey,
   to: optionalDateKey,
   page: z.coerce.number().int().min(1).default(1),
@@ -37,6 +51,8 @@ router.get(
       await listTransactions({
         search: query.search,
         storeId: query.storeId,
+        paymentMethod: query.paymentMethod,
+        orderType: query.orderType,
         from: query.from,
         to: query.to,
         page: pagination.page,

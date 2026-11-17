@@ -1,4 +1,13 @@
-import type { DeviceRow, LicenseStatus, LicenseType, Plan, StoreStatus } from '@/types/domain'
+import type {
+  DebtStatus,
+  DeviceRow,
+  LicenseStatus,
+  LicenseType,
+  Plan,
+  ShiftStatus,
+  StoreStatus,
+  TableOrderStatus,
+} from '@/types/domain'
 
 export type LabelTone = 'success' | 'warning' | 'danger' | 'neutral' | 'info' | 'accent'
 
@@ -57,7 +66,19 @@ export const DEVICE_STATUS_TONE: Record<DeviceRow['status'], LabelTone> = {
 const PAYMENT_LABEL: Record<string, string> = {
   cash: 'Tunai',
   qris: 'QRIS',
-  transfer: 'Transfer',
+  transfer: 'Transfer Bank',
+  debit: 'Debit / EDC',
+  kasbon: 'Kasbon',
+  cash_cashier: 'Bayar di Kasir',
+}
+
+const PAYMENT_TONE: Record<string, LabelTone> = {
+  cash: 'success',
+  qris: 'info',
+  transfer: 'info',
+  debit: 'info',
+  kasbon: 'warning',
+  cash_cashier: 'neutral',
 }
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
@@ -66,10 +87,61 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
   take_away: 'Take away',
 }
 
+export const DEBT_STATUS_LABEL: Record<DebtStatus, string> = {
+  unpaid: 'Belum lunas',
+  partially_paid: 'Cicilan',
+  paid: 'Lunas',
+}
+
+export const DEBT_STATUS_TONE: Record<DebtStatus, LabelTone> = {
+  unpaid: 'danger',
+  partially_paid: 'warning',
+  paid: 'success',
+}
+
+export const TABLE_ORDER_STATUS_LABEL: Record<TableOrderStatus, string> = {
+  pending: 'Menunggu',
+  accepted: 'Diproses',
+  completed: 'Selesai',
+  cancelled: 'Dibatalkan',
+}
+
+export const TABLE_ORDER_STATUS_TONE: Record<TableOrderStatus, LabelTone> = {
+  pending: 'warning',
+  accepted: 'info',
+  completed: 'success',
+  cancelled: 'neutral',
+}
+
+export const SHIFT_STATUS_LABEL: Record<ShiftStatus, string> = {
+  open: 'Sedang berjalan',
+  closed: 'Ditutup',
+}
+
+export const SHIFT_STATUS_TONE: Record<ShiftStatus, LabelTone> = {
+  open: 'info',
+  closed: 'neutral',
+}
+
+const EXPENSE_CATEGORY_LABEL: Record<string, string> = {
+  operasional: 'Operasional',
+  belanja: 'Belanja',
+  kebersihan: 'Kebersihan',
+  lainnya: 'Lainnya',
+}
+
 export function paymentLabel(method: string): string {
   return PAYMENT_LABEL[method] ?? method
 }
 
+export function paymentTone(method: string): LabelTone {
+  return PAYMENT_TONE[method] ?? 'neutral'
+}
+
 export function orderTypeLabel(orderType: string): string {
   return ORDER_TYPE_LABEL[orderType] ?? orderType
+}
+
+export function expenseCategoryLabel(category: string): string {
+  return EXPENSE_CATEGORY_LABEL[category] ?? category
 }

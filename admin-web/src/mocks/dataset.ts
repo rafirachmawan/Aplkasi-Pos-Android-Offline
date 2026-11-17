@@ -1,11 +1,14 @@
 import type {
+  DebtRow,
   DeviceRow,
   LicenseRow,
   LicenseStatus,
   LicenseType,
   ProductRow,
+  ShiftRow,
   StoreStatus,
   StoreSummary,
+  TableOrderRow,
   TransactionItem,
   TransactionRow,
 } from '@/types/domain'
@@ -61,14 +64,18 @@ const CATALOG: CatalogItem[] = [
   { name: 'Gas LPG 3kg', category: 'sembako', unit: 'tabung', price: 22_000 },
 ]
 
-const PAYMENT_METHODS = ['cash', 'cash', 'cash', 'qris', 'qris', 'transfer'] as const
-const ORDER_TYPES = ['retail', 'retail', 'retail', 'retail', 'dine_in', 'take_away'] as const
+const PAYMENT_METHODS = ['cash', 'cash', 'qris', 'transfer', 'debit', 'kasbon'] as const
+const ORDER_TYPES = ['retail', 'retail', 'retail', 'dine_in', 'take_away'] as const
+const CUSTOMER_NAMES = ['Pak Budi', 'Bu Siti', 'Mas Agus', 'Mbak Rina', 'Pak Hendra']
 
 const random = createRandom(20261029)
 
 export const stores: StoreSummary[] = []
 export const products: ProductRow[] = []
 export const transactions: TransactionRow[] = []
+export const debts: DebtRow[] = []
+export const tableOrders: TableOrderRow[] = []
+export const shifts: ShiftRow[] = []
 export const licenses: LicenseRow[] = []
 export const devices: DeviceRow[] = []
 
@@ -92,7 +99,7 @@ function buildProducts(storeId: string): ProductRow[] {
 
   return [...picked].map((catalogIndex, index) => {
     const item = CATALOG[catalogIndex]
-    const priceJitter = 1 + (randomInt(-6, 8, random) / 100)
+    const priceJitter = 1 + randomInt(-6, 8, random) / 100
 
     return {
       id: `prd-${storeId}-${index + 1}`,
@@ -117,7 +124,6 @@ function buildTransactions(storeId: string, storeName: string, seed: StoreSeed):
     const dayOffset = isInactive
       ? randomInt(34, 52, random)
       : Math.floor(Math.pow(random(), 1.6) * 30)
-
     const created = new Date(NOW - dayOffset * DAY)
     created.setHours(randomInt(7, 20, random), randomInt(0, 59, random), 0, 0)
 
@@ -137,17 +143,77 @@ function buildTransactions(storeId: string, storeName: string, seed: StoreSeed):
         productName: product.productName,
         quantity: randomInt(1, 3, random),
         priceAtSale: product.sellingPrice,
+        capitalAtSale: Math.round((product.sellingPrice * 0.78) / 100) * 100,
       }
     })
 
+    const totalPrice = items.reduce((sum, item) => sum + item.priceAtSale * item.quantity, 0)
+    const discountAmount = random() > 0.85 ? 2_000 : 0
+    const grandTotal = Math.max(0, totalPrice - discountAmount)
+    const paymentMethod = pick(PAYMENT_METHODS, random)
+    const orderType = pick(ORDER_TYPES, random)
+    const invoiceNumber = `INV/${dateKey(created)}/${String(sequence).padStart(4, '0')}`
+    const txId = `trx-${storeId}-${index + 1}`
+
+    let paymentNotes = ''
+    let cashReceived = grandTotal
+    let cashReturn = 0
+
+    if (paymentMethod === 'cash') {
+      cashReceived = Math.ceil(grandTotal / 10_000) * 10_000
+      cashReturn = Math.max(0, cashReceived - grandTotal)
+    } else if (paymentMethod === 'kasbon') {
+      const custName = pick(CUSTOMER_NAMES, random)
+      const dp = random() > 0.5 ? Math.round((grandTotal * 0.3) / 1000) * 1000 : 0
+      const remaining = Math.max(0, grandTotal - dp)
+      paymentNotes = `Kasbon: ${custName}`
+      cashReceived = dp
+      debts.push({
+        id: `debt-${txId}`,
+        storeId,
+        storeName,
+        customerName: custName,
+        customerPhone: '08123456789',
+        transactionId: txId,
+        invoiceNumber,
+        totalDebt: grandTotal,
+        remainingDebt: remaining,
+        paidAmount: dp,
+        dueDate: null,
+        notes: 'Transaksi Kasir POS',
+        status: remaining === 0 ? 'paid' : dp > 0 ? 'partially_paid' : 'unpaid',
+        createdAt: created.toISOString(),
+        updatedAt: created.toISOString(),
+        payments: dp > 0
+          ? [
+              {
+                id: `pay-${txId}`,
+                debtId: `debt-${txId}`,
+                paymentAmount: dp,
+                paymentMethod: 'cash',
+                notes: 'DP / Uang Muka di Kasir',
+                createdAt: created.toISOString(),
+              },
+            ]
+          : [],
+      })
+    }
+
     rows.push({
-      id: `trx-${storeId}-${index + 1}`,
-      invoiceNumber: `INV/${dateKey(created)}/${String(sequence).padStart(4, '0')}`,
+      id: txId,
+      invoiceNumber,
       storeId,
       storeName,
-      grandTotal: items.reduce((sum, item) => sum + item.priceAtSale * item.quantity, 0),
-      paymentMethod: pick(PAYMENT_METHODS, random),
-      orderType: pick(ORDER_TYPES, random),
+      totalPrice,
+      discountAmount,
+      grandTotal,
+      cashReceived,
+      cashReturn,
+      paymentMethod,
+      paymentNotes,
+      orderType,
+      tableNumber: orderType === 'dine_in' ? `Meja ${randomInt(1, 8, random)}` : '',
+      isOfflineSync: random() > 0.78,
       createdAt: created.toISOString(),
       items,
     })
@@ -186,6 +252,55 @@ STORE_SEEDS.forEach((seed, index) => {
 })
 
 transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+debts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+tableOrders.push({
+  id: 'ord-mock-1',
+  storeId: 'store-6',
+  storeName: 'Warung Kopi Senja',
+  tableNumber: '04',
+  customerName: 'Rafi',
+  customerPhone: '081234567890',
+  totalAmount: 24_000,
+  paymentMethod: 'qris',
+  paymentProofUrl: '',
+  status: 'pending',
+  items: [
+    { productName: 'Kopi Sachet', quantity: 2, price: 6_000, notes: 'Es sedikit' },
+    { productName: 'Roti Manis', quantity: 2, price: 6_000, notes: '' },
+  ],
+  notes: 'Antar ke meja pojok',
+  createdAt: new Date(NOW - 15 * 60_000).toISOString(),
+})
+
+shifts.push({
+  id: 'shift-mock-1',
+  storeId: 'store-1',
+  storeName: 'Toko Berkah Jaya',
+  cashierName: 'Kasir Pagi',
+  startTime: new Date(NOW - 5 * 3_600_000).toISOString(),
+  endTime: null,
+  startingCash: 200_000,
+  expectedCash: 450_000,
+  actualCash: null,
+  difference: 0,
+  totalCashSales: 265_000,
+  totalNonCashSales: 95_000,
+  totalExpenses: 15_000,
+  status: 'open',
+  notes: '',
+  createdAt: new Date(NOW - 5 * 3_600_000).toISOString(),
+  expenses: [
+    {
+      id: 'exp-mock-1',
+      shiftId: 'shift-mock-1',
+      amount: 15_000,
+      category: 'kebersihan',
+      description: 'Kantong plastik tambahan',
+      createdAt: new Date(NOW - 2 * 3_600_000).toISOString(),
+    },
+  ],
+})
 
 interface LicensePlan {
   storeIndex: number

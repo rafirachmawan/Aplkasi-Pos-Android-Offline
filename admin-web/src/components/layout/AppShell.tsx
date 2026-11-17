@@ -1,8 +1,21 @@
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { cn } from '@/lib/cn'
+import { env } from '@/lib/env'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+
+const SIDEBAR_STORAGE_KEY = 'marketpos.admin.sidebarOpen'
+
+function readInitialDesktopSidebar(): boolean {
+  try {
+    const saved = window.localStorage.getItem(SIDEBAR_STORAGE_KEY)
+    return saved === null ? true : saved === 'true'
+  } catch {
+    return true
+  }
+}
 
 function PageFallback() {
   return (
@@ -21,15 +34,45 @@ function PageFallback() {
   )
 }
 
+const FOOTER_MODE_TEXT = env.isApi
+  ? 'MarketPos Admin Console · Terhubung ke API lokal (read-only)'
+  : env.isMock
+    ? 'MarketPos Admin Console · Data mock untuk pengembangan lokal'
+    : 'MarketPos Admin Console · Mode Supabase'
+
 export function AppShell() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [desktopOpen, setDesktopOpen] = useState<boolean>(readInitialDesktopSidebar)
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(desktopOpen))
+    } catch {
+      // Abaikan bila localStorage tidak tersedia
+    }
+  }, [desktopOpen])
 
   return (
     <div className="min-h-screen bg-canvas">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar
+        open={mobileOpen}
+        desktopOpen={desktopOpen}
+        onClose={() => setMobileOpen(false)}
+        onDesktopToggle={() => setDesktopOpen((prev) => !prev)}
+      />
 
-      <div className="flex min-h-screen flex-col lg:pl-64">
-        <Topbar onMenuClick={() => setSidebarOpen(true)} />
+      <div
+        className={cn(
+          'flex min-h-screen flex-col transition-[padding] duration-200',
+          desktopOpen ? 'lg:pl-64' : 'lg:pl-0',
+        )}
+      >
+        <Topbar
+          mobileOpen={mobileOpen}
+          desktopOpen={desktopOpen}
+          onMobileToggle={() => setMobileOpen((prev) => !prev)}
+          onDesktopToggle={() => setDesktopOpen((prev) => !prev)}
+        />
 
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <Suspense fallback={<PageFallback />}>
@@ -37,8 +80,8 @@ export function AppShell() {
           </Suspense>
         </main>
 
-        <footer className="mx-auto w-full max-w-7xl px-4 pb-6 text-[11px] text-slate-400 sm:px-6 lg:px-8">
-          MarketPos Admin Console · Data mock untuk pengembangan lokal
+        <footer className="mx-auto w-full max-w-7xl px-4 pb-6 text-xs text-slate-500 sm:px-6 lg:px-8">
+          {FOOTER_MODE_TEXT}
         </footer>
       </div>
     </div>

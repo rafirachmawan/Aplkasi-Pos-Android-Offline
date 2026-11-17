@@ -16,7 +16,7 @@ export function rupiah(value: number): string {
 }
 
 export function rupiahCompact(value: number): string {
-  return `Rp ${compactNumber.format(Number.isFinite(value) ? value : 0)}`
+  return `Rp${compactNumber.format(Number.isFinite(value) ? value : 0)}`
 }
 
 export function formatNumber(value: number): string {

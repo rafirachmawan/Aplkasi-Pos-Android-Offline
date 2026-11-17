@@ -11,7 +11,7 @@ import {
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
-import { formatDate, formatShortDate, rupiah, rupiahCompact } from '@/lib/format'
+import { formatDate, formatNumber, formatShortDate, rupiah, rupiahCompact } from '@/lib/format'
 import type { RevenuePoint } from '@/types/domain'
 
 const RANGES = [7, 14, 30] as const
@@ -41,10 +41,10 @@ export function RevenueChart({ series, loading }: RevenueChartProps) {
                 type="button"
                 onClick={() => setRange(option)}
                 className={cn(
-                  'focus-ring rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors',
+                  'focus-ring rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                   range === option
-                    ? 'bg-white text-ink shadow-sm'
-                    : 'text-slate-500 hover:text-ink',
+                    ? 'bg-brand-dark text-white shadow-xs'
+                    : 'text-slate-600 hover:text-ink',
                 )}
                 aria-pressed={range === option}
               >
@@ -57,18 +57,18 @@ export function RevenueChart({ series, loading }: RevenueChartProps) {
 
       <div className="flex flex-wrap items-end gap-x-8 gap-y-2 px-5 pt-4">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Omzet {range} hari
-          </p>
-          <p className="mt-1 text-xl font-bold tracking-tight text-ink">{rupiah(total)}</p>
+          <p className="text-xs font-medium text-slate-500">Omzet {range} hari</p>
+          <p className="mt-1 text-xl font-bold tracking-tight text-brand-dark">{rupiah(total)}</p>
         </div>
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Transaksi</p>
-          <p className="mt-1 text-xl font-bold tracking-tight text-ink">{transactions}</p>
+          <p className="text-xs font-medium text-slate-500">Total transaksi</p>
+          <p className="mt-1 text-xl font-bold tracking-tight text-ink">
+            {formatNumber(transactions)}
+          </p>
         </div>
       </div>
 
-      <div className="h-64 w-full px-2 pb-3 pt-4 sm:h-72">
+      <div className="h-72 w-full px-2 pb-4 pt-4">
         {loading ? (
           <div className="flex h-full items-end gap-2 px-3 pb-2">
             {Array.from({ length: range }, (_, index) => (
@@ -81,35 +81,35 @@ export function RevenueChart({ series, loading }: RevenueChartProps) {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <AreaChart data={data} margin={{ top: 10, right: 16, left: 4, bottom: 4 }}>
               <defs>
                 <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10B981" stopOpacity={0.28} />
-                  <stop offset="100%" stopColor="#10B981" stopOpacity={0.02} />
+                  <stop offset="0%" stopColor="var(--color-brand)" stopOpacity={0.28} />
+                  <stop offset="100%" stopColor="var(--color-brand)" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-line)" />
               <XAxis
                 dataKey="date"
                 tickFormatter={(value) => formatShortDate(String(value))}
-                tick={{ fontSize: 11, fill: '#64748B' }}
+                tick={{ fontSize: 12, fill: 'var(--color-ink)' }}
                 axisLine={false}
                 tickLine={false}
-                minTickGap={18}
+                minTickGap={20}
               />
               <YAxis
                 tickFormatter={(value) => rupiahCompact(Number(value))}
-                tick={{ fontSize: 11, fill: '#64748B' }}
+                tick={{ fontSize: 12, fill: 'var(--color-ink)' }}
                 axisLine={false}
                 tickLine={false}
-                width={62}
+                width={78}
               />
               <Tooltip
                 formatter={(value) => [rupiah(Number(value)), 'Omzet']}
                 labelFormatter={(value) => formatDate(String(value))}
                 contentStyle={{
                   borderRadius: 10,
-                  border: '1px solid #E2E8F0',
+                  border: '1px solid var(--color-brand-border)',
                   fontSize: 12,
                   boxShadow: '0 8px 24px rgba(15,23,42,0.08)',
                 }}
@@ -117,10 +117,15 @@ export function RevenueChart({ series, loading }: RevenueChartProps) {
               <Area
                 type="monotone"
                 dataKey="revenue"
-                stroke="#10B981"
-                strokeWidth={2}
+                stroke="var(--color-brand)"
+                strokeWidth={2.5}
                 fill="url(#revenueFill)"
-                activeDot={{ r: 4, strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{
+                  r: 5,
+                  strokeWidth: 2,
+                  stroke: 'var(--color-brand-soft)',
+                  fill: 'var(--color-brand-dark)',
+                }}
               />
             </AreaChart>
           </ResponsiveContainer>
