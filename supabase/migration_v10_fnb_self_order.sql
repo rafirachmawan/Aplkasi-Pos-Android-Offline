@@ -48,6 +48,7 @@ create table if not exists public.table_orders (
 comment on table public.table_orders is
   'Antrean pesanan mandiri pelanggan via scan QR meja (F&B Tier Pro).';
 
+
 -- Index untuk filter kasir & urutan pesanan terbaru
 create index if not exists table_orders_store_status_idx
   on public.table_orders (store_id, status, created_at desc);

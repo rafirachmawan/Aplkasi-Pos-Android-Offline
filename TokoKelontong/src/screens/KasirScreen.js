@@ -42,6 +42,7 @@ import {
 import { refreshSyncCounts, syncNow } from "../services/syncService";
 import useSyncStatus from "../hooks/useSyncStatus";
 import { colors, fonts } from "../theme/colors";
+import ConnectionStatusPill from "../components/ConnectionStatusPill";
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
 import { useAuth } from "../context/AuthContext";
@@ -54,14 +55,14 @@ import {
 const { width } = Dimensions.get("window");
 const isTablet = width > 600;
 
-// ── Helper: Format angka ke tampilan Rp (Rp 50.000) ──
+// ── Helper: Format angka ke tampilan Rp (Rp50.000) ──
 const formatToRpDisplay = (raw) => {
   const num = String(raw).replace(/\D/g, "").replace(/^0+/, "");
   if (!num) return "";
-  return "Rp " + num.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return "Rp" + num.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
-// ── Helper: Ambil angka murni dari string Rp (Rp 50.000 → 50000) ──
+// ── Helper: Ambil angka murni dari string Rp (Rp50.000 → 50000) ──
 const parseRpToNumber = (formatted) => {
   const num = String(formatted).replace(/\D/g, "");
   return parseInt(num) || 0;
@@ -281,12 +282,12 @@ const KasirScreen = ({ navigation }) => {
 
   // Indikator status Online / Offline di header Kasir POS
   useEffect(() => {
-    const isOff = !!syncStatus.offline;
-    const isSync = !!syncStatus.syncing;
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity
-          activeOpacity={0.8}
+        <ConnectionStatusPill
+          offline={!!syncStatus.offline}
+          syncing={!!syncStatus.syncing}
+          style={{ marginRight: 16 }}
           onPress={() => {
             if (offlineQueueCount > 0) {
               navigation.navigate("TransaksiPending");
@@ -294,53 +295,7 @@ const KasirScreen = ({ navigation }) => {
               refreshSyncCounts();
             }
           }}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 6,
-            paddingHorizontal: 10,
-            paddingVertical: 5,
-            borderRadius: 20,
-            borderWidth: 1,
-            marginRight: 16,
-            backgroundColor: isOff
-              ? "#FFFBEB"
-              : isSync
-                ? "#FFF7ED"
-                : "#ECFDF5",
-            borderColor: isOff
-              ? "#FDE68A"
-              : isSync
-                ? "#FED7AA"
-                : "#A7F3D0",
-          }}
-        >
-          <View
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: 3.5,
-              backgroundColor: isOff
-                ? "#F59E0B"
-                : isSync
-                  ? colors.primary
-                  : "#10B981",
-            }}
-          />
-          <Text
-            style={{
-              fontFamily: fonts.bold,
-              fontSize: 11,
-              color: isOff
-                ? "#B45309"
-                : isSync
-                  ? colors.primary
-                  : "#047857",
-            }}
-          >
-            {isOff ? "Offline" : isSync ? "Sinkron..." : "Online"}
-          </Text>
-        </TouchableOpacity>
+        />
       ),
     });
   }, [navigation, syncStatus.offline, syncStatus.syncing, offlineQueueCount]);
@@ -428,19 +383,25 @@ const KasirScreen = ({ navigation }) => {
       return;
     }
     navigation.navigate("BarcodeScanner", {
+      multiScan: true,
       onBarcodeScanned: async (code) => {
         try {
           const product = await ProductRepository.getProductByBarcode(code);
           if (product) {
             addToCart(product);
-          } else {
-            Alert.alert(
-              "Tidak Ditemukan",
-              `Produk dengan barcode ${code} belum terdaftar di gudang.`,
-            );
+            return { status: "added", product };
           }
+          return {
+            status: "not_found",
+            code,
+            message: `Barcode ${code} belum terdaftar di gudang.`,
+          };
         } catch (e) {
-          Alert.alert("Error", "Gagal mencari produk: " + e.message);
+          return {
+            status: "error",
+            code,
+            message: "Gagal mencari produk: " + (e?.message || "Kesalahan tidak diketahui"),
+          };
         }
       },
     });
@@ -936,22 +897,7 @@ const KasirScreen = ({ navigation }) => {
   // Helper: Get color tint based on category
   const getCategoryColor = (category) => {
     if (!category) return colors.textSecondary;
-
-    const categoryColors = {
-      makanan: "#EF4444", // Red
-      minuman: "#3B82F6", // Blue
-      kebersihan: "#10B981", // Green
-      batik: "#F59E0B", // Orange
-      baju: "#EC4899", // Pink
-      aksesoris: "#8B5CF6", // Purple
-      sepatu: "#06B6D4", // Cyan
-      tas: "#84CC16", // Lime
-      elektronik: "#6366F1", // Indigo
-      "alat tulis": "#14B8A6", // Teal
-      lainnya: "#64748B", // Slate
-    };
-
-    return categoryColors[category.toLowerCase()] || colors.textSecondary;
+    return colors.categorySwatches?.[category.toLowerCase()] || colors.textSecondary;
   };
 
   // Helper: Get icon for category card
@@ -976,23 +922,8 @@ const KasirScreen = ({ navigation }) => {
   // Helper: Get color for category card icon
   const getCategoryColorForCard = (category) => {
     if (!category) return colors.textSecondary;
-
-    const colorsMap = {
-      makanan: "#DC2626", // Red-600
-      minuman: "#2563EB", // Blue-600
-      kebersihan: "#059669", // Green-600
-      batik: "#D97706", // Orange-600
-      baju: "#DB2777", // Pink-600
-      aksesoris: "#7C3AED", // Purple-600
-      sepatu: "#0891B2", // Cyan-600
-      tas: "#65A30D", // Lime-600
-      elektronik: "#4F46E5", // Indigo-600
-      "alat tulis": "#0D9488", // Teal-600
-      lainnya: "#475569", // Slate-600
-      Semua: colors.text,
-    };
-
-    return colorsMap[category] || colors.textSecondary;
+    if (category === "Semua") return colors.text;
+    return colors.categoryCardSwatches?.[category.toLowerCase()] || colors.textSecondary;
   };
 
   // Render POS Grid Item
@@ -1082,12 +1013,14 @@ const KasirScreen = ({ navigation }) => {
               style={styles.cardAddBtn}
               onPress={() => addToCart(item)}
               activeOpacity={0.75}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Tambah ${item.product_name} ke keranjang`}
             >
               <MaterialCommunityIcons
                 name="plus"
                 size={18}
-                color="#FFFFFF"
+                color={colors.onPrimary}
               />
             </TouchableOpacity>
           ) : (
@@ -1096,11 +1029,13 @@ const KasirScreen = ({ navigation }) => {
                 style={styles.qtyBtnSmall}
                 onPress={() => updateQty(item.id, qtyInCart - 1)}
                 activeOpacity={0.7}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Kurangi jumlah ${item.product_name}`}
               >
                 <MaterialCommunityIcons
                   name="minus"
-                  size={13}
+                  size={14}
                   color={colors.text}
                 />
               </TouchableOpacity>
@@ -1109,12 +1044,14 @@ const KasirScreen = ({ navigation }) => {
                 style={styles.qtyBtnSmallPlus}
                 onPress={() => updateQty(item.id, qtyInCart + 1)}
                 activeOpacity={0.7}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Tambah jumlah ${item.product_name}`}
               >
                 <MaterialCommunityIcons
                   name="plus"
-                  size={13}
-                  color="#FFFFFF"
+                  size={14}
+                  color={colors.onPrimary}
                 />
               </TouchableOpacity>
             </View>
@@ -1175,7 +1112,7 @@ const KasirScreen = ({ navigation }) => {
           <MaterialCommunityIcons
             name="chevron-right"
             size={20}
-            color="#9A3412"
+            color={colors.primaryTextDark}
           />
         </TouchableOpacity>
       )}
@@ -1210,7 +1147,7 @@ const KasirScreen = ({ navigation }) => {
           <MaterialCommunityIcons
             name="chevron-right"
             size={20}
-            color={colors.primary}
+            color={colors.primaryDark}
           />
         </TouchableOpacity>
       )}
@@ -1220,27 +1157,30 @@ const KasirScreen = ({ navigation }) => {
         <MaterialCommunityIcons
           name="magnify"
           size={20}
-          color="#94A3B8"
+          color={colors.textSecondary}
           style={{ marginRight: 8 }}
         />
         <TextInput
           style={styles.searchInput}
           placeholder="Cari nama produk atau scan barcode..."
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor={colors.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
           returnKeyType="search"
+          accessibilityLabel="Cari nama produk atau scan barcode"
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity
             onPress={() => setSearchQuery("")}
             style={{ marginRight: 8 }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Hapus pencarian"
           >
             <MaterialCommunityIcons
               name="close-circle"
               size={18}
-              color="#94A3B8"
+              color={colors.textSecondary}
             />
           </TouchableOpacity>
         )}
@@ -1248,11 +1188,14 @@ const KasirScreen = ({ navigation }) => {
           style={styles.searchScanBtn}
           onPress={openBarcodeScanner}
           activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Scan barcode produk"
         >
           <MaterialCommunityIcons
             name="barcode-scan"
             size={18}
-            color="#FFFFFF"
+            color={colors.onPrimary}
           />
         </TouchableOpacity>
       </View>
@@ -1270,18 +1213,19 @@ const KasirScreen = ({ navigation }) => {
               style={[
                 styles.categoryPill,
                 {
-                  backgroundColor: pendingTableOrders.length > 0 ? "#FFF7ED" : "#FFFFFF",
-                  borderColor: pendingTableOrders.length > 0 ? colors.primary : "#E2E8F0",
+                  backgroundColor: pendingTableOrders.length > 0 ? colors.primaryContainer : colors.surface,
+                  borderColor: pendingTableOrders.length > 0 ? colors.primary : colors.border,
                 },
               ]}
               onPress={() => setShowTableOrdersModal(true)}
               activeOpacity={0.7}
+              accessibilityRole="button"
             >
               <Text
                 style={[
                   styles.categoryPillText,
                   {
-                    color: pendingTableOrders.length > 0 ? colors.primary : "#475569",
+                    color: pendingTableOrders.length > 0 ? colors.primaryDark : colors.textBodySecondary,
                     fontFamily: fonts.bold,
                   },
                 ]}
@@ -1300,8 +1244,8 @@ const KasirScreen = ({ navigation }) => {
                   <Text
                     style={{
                       fontFamily: fonts.bold,
-                      fontSize: 10,
-                      color: "#FFFFFF",
+                      fontSize: 12,
+                      color: colors.onPrimary,
                     }}
                   >
                     {pendingTableOrders.length}
@@ -1442,7 +1386,7 @@ const KasirScreen = ({ navigation }) => {
                       <MaterialCommunityIcons
                         name={iconName}
                         size={22}
-                        color={isActive ? "#FFFFFF" : colors.iconColor}
+                        color={isActive ? colors.onPrimary : colors.iconColor}
                       />
                     </View>
                     <Text
@@ -1498,7 +1442,7 @@ const KasirScreen = ({ navigation }) => {
               <MaterialCommunityIcons
                 name="package-variant"
                 size={48}
-                color="#94A3B8"
+                color={colors.textSecondary}
               />
             </View>
             <Text style={styles.emptyTitle}>Tidak ada produk ditemukan</Text>
@@ -1516,8 +1460,8 @@ const KasirScreen = ({ navigation }) => {
           {
             paddingBottom:
               Platform.OS === "android"
-                ? Math.max(insets.bottom, 16) + 10
-                : Math.max(insets.bottom, 14),
+                ? Math.max(insets.bottom, 36) + 12
+                : Math.max(insets.bottom, 20),
           },
         ]}
       >
@@ -1529,6 +1473,12 @@ const KasirScreen = ({ navigation }) => {
           onPress={() => cart.length > 0 && setShowCartModal(true)}
           disabled={cart.length === 0}
           activeOpacity={0.88}
+          accessibilityRole={cart.length > 0 ? "button" : "text"}
+          accessibilityLabel={
+            cart.length === 0
+              ? "Keranjang masih kosong. Pilih produk di atas untuk memulai transaksi."
+              : `Total ${formatRupiah(grandTotal || totalHarga)} dari ${cart.length} jenis produk. Ketuk untuk rincian dan bayar`
+          }
         >
           <View style={styles.dockedBarLeft}>
             {cart.length > 0 && (
@@ -1559,27 +1509,19 @@ const KasirScreen = ({ navigation }) => {
                 numberOfLines={1}
               >
                 {cart.length === 0
-                  ? "Pilih produk di atas untuk memulai transaksi"
+                  ? "Ketuk produk di atas untuk mulai transaksi"
                   : `${cart.length} jenis produk • Ketuk untuk rincian & bayar`}
               </Text>
             </View>
           </View>
 
-          <View
-            style={[
-              styles.dockedActionPill,
-              cart.length > 0 ? styles.dockedActionPillActive : styles.dockedActionPillEmpty,
-            ]}
-          >
-            <Text
-              style={[
-                styles.dockedActionText,
-                cart.length > 0 ? styles.dockedActionTextActive : styles.dockedActionTextEmpty,
-              ]}
-            >
-              {cart.length === 0 ? "Pilih Menu" : "Bayar →"}
-            </Text>
-          </View>
+          {cart.length > 0 && (
+            <View style={[styles.dockedActionPill, styles.dockedActionPillActive]}>
+              <Text style={[styles.dockedActionText, styles.dockedActionTextActive]}>
+                Bayar →
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -1607,7 +1549,7 @@ const KasirScreen = ({ navigation }) => {
                     Rincian Pesanan
                   </Text>
                   <Text style={styles.modalSubBottomSheet}>
-                    {cart.length} jenis barang • {cart.reduce((s, i) => s + i.quantity, 0)} unit
+                    {cart.length} produk • {cart.reduce((s, i) => s + i.quantity, 0)} unit
                   </Text>
                 </View>
 
@@ -1615,11 +1557,14 @@ const KasirScreen = ({ navigation }) => {
                   <TouchableOpacity
                     onPress={() => setShowCartModal(false)}
                     style={styles.modalCloseBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Tutup rincian pesanan"
                   >
                     <MaterialCommunityIcons
                       name="close"
                       size={18}
-                      color="#64748B"
+                      color={colors.textSecondary}
                     />
                   </TouchableOpacity>
                 </View>
@@ -1628,12 +1573,19 @@ const KasirScreen = ({ navigation }) => {
               {/* Scrollable Content Body */}
               <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24 }}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 18 }}
               >
                 {/* Daftar Item Keranjang */}
                 <View style={styles.cartItemListContainer}>
-                  {cart.map((item) => (
-                    <View key={item.product_id} style={styles.cartItem}>
+                  {cart.map((item, index) => (
+                    <View
+                      key={item.product_id}
+                      style={[
+                        styles.cartItem,
+                        index === cart.length - 1 && styles.cartItemLast,
+                      ]}
+                    >
                       {item.image_uri ? (
                         <Image
                           source={{ uri: item.image_uri }}
@@ -1643,33 +1595,38 @@ const KasirScreen = ({ navigation }) => {
                         <View style={styles.cartItemImagePlaceholder}>
                           <MaterialCommunityIcons
                             name={getPlaceholderIcon(item.category)}
-                            size={24}
+                            size={22}
                             color={getCategoryColor(item.category)}
-                            style={{ opacity: 0.35 }}
+                            style={{ opacity: 0.4 }}
                           />
                         </View>
                       )}
                       <View style={styles.cartItemInfo}>
-                        <Text style={styles.cartItemName} numberOfLines={1}>
+                        <Text style={styles.cartItemName} numberOfLines={2}>
                           {item.product_name}
                         </Text>
                         {(() => {
                           const { unitPrice, isWholesale, ruleMinQty } =
                             getCartItemPriceInfo(item);
                           return (
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <View style={styles.cartItemMetaRow}>
                               <Text
                                 style={[
                                   styles.cartItemPrice,
-                                  isWholesale && { color: "#059669" },
+                                  isWholesale && { color: colors.successDark },
                                 ]}
                               >
                                 {formatRupiah(unitPrice)}
                               </Text>
+                              {item.quantity > 1 && (
+                                <Text style={styles.cartItemLineTotal}>
+                                  • {formatRupiah(unitPrice * item.quantity)}
+                                </Text>
+                              )}
                               {isWholesale && (
                                 <View style={styles.cartWholesaleBadge}>
                                   <Text style={styles.cartWholesaleBadgeText}>
-                                    GROSIR (≥{ruleMinQty})
+                                    Grosir ≥{ruleMinQty}
                                   </Text>
                                 </View>
                               )}
@@ -1681,6 +1638,9 @@ const KasirScreen = ({ navigation }) => {
                         <TouchableOpacity
                           style={styles.qtyBtnModal}
                           onPress={() => updateQty(item.product_id, item.quantity - 1)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Kurangi ${item.product_name}`}
                         >
                           <MaterialCommunityIcons
                             name="minus"
@@ -1692,49 +1652,19 @@ const KasirScreen = ({ navigation }) => {
                         <TouchableOpacity
                           style={styles.qtyBtnModal}
                           onPress={() => updateQty(item.product_id, item.quantity + 1)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Tambah ${item.product_name}`}
                         >
                           <MaterialCommunityIcons
                             name="plus"
                             size={14}
-                            color={colors.primary}
+                            color={colors.primaryDark}
                           />
                         </TouchableOpacity>
                       </View>
                     </View>
                   ))}
-                </View>
-
-                {/* Baris Aksi Keranjang (Tahan Pesanan & Hapus Semua) — Terpisah Aman dari Tombol Close */}
-                <View style={styles.cartSecondaryActionsRow}>
-                  <TouchableOpacity
-                    onPress={handleHoldOrder}
-                    style={styles.cartSecondaryBtnHold}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialCommunityIcons
-                      name="pause-circle-outline"
-                      size={16}
-                      color="#B45309"
-                    />
-                    <Text style={styles.cartSecondaryTextHold}>
-                      Tahan Pesanan
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={clearCart}
-                    style={styles.cartSecondaryBtnClear}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialCommunityIcons
-                      name="trash-can-outline"
-                      size={16}
-                      color="#DC2626"
-                    />
-                    <Text style={styles.cartSecondaryTextClear}>
-                      Hapus Semua
-                    </Text>
-                  </TouchableOpacity>
                 </View>
 
                 {/* Card Kalkulasi (Subtotal → Diskon → Total Tagihan) */}
@@ -1751,7 +1681,7 @@ const KasirScreen = ({ navigation }) => {
                       <MaterialCommunityIcons
                         name="ticket-percent-outline"
                         size={16}
-                        color="#64748B"
+                        color={colors.textSecondary}
                       />
                       <Text style={styles.calcLabelBreakdown}>Diskon (Rp)</Text>
                     </View>
@@ -1760,8 +1690,9 @@ const KasirScreen = ({ navigation }) => {
                       value={discountInput}
                       onChangeText={(text) => setDiscountInput(formatToRpDisplay(text))}
                       keyboardType="numeric"
-                      placeholder="Rp 0"
-                      placeholderTextColor="#94A3B8"
+                      placeholder="Rp0"
+                      placeholderTextColor={colors.textSecondary}
+                      accessibilityLabel="Nominal diskon dalam Rupiah"
                     />
                   </View>
 
@@ -1769,10 +1700,12 @@ const KasirScreen = ({ navigation }) => {
 
                   <View style={styles.grandTotalHighlightRow}>
                     <View>
-                      <Text style={styles.grandTotalHighlightTitle}>TOTAL TAGIHAN</Text>
-                      <Text style={styles.grandTotalHighlightSub}>
-                        {cart.length} item • Bebas biaya admin
-                      </Text>
+                      <Text style={styles.grandTotalHighlightTitle}>Total Tagihan</Text>
+                      {diskon > 0 && (
+                        <Text style={styles.grandTotalDiscountSub}>
+                          Hemat {formatRupiah(diskon)}
+                        </Text>
+                      )}
                     </View>
                     <Text style={styles.grandTotalHighlightAmount}>
                       {formatRupiah(grandTotal)}
@@ -1787,10 +1720,10 @@ const KasirScreen = ({ navigation }) => {
                       <MaterialCommunityIcons
                         name="silverware-fork-knife"
                         size={16}
-                        color="#B45309"
+                        color={colors.successDark}
                       />
                       <Text style={styles.fnbCardTitle}>
-                        INFORMASI MEJA RESTO / KAFE
+                        Informasi Meja & Pesanan
                       </Text>
                     </View>
 
@@ -1805,7 +1738,7 @@ const KasirScreen = ({ navigation }) => {
                         <MaterialCommunityIcons
                           name="table-chair"
                           size={16}
-                          color={orderType === "dine_in" ? "#FFFFFF" : "#475569"}
+                          color={orderType === "dine_in" ? colors.onPrimary : colors.textBodySecondary}
                         />
                         <Text
                           style={[
@@ -1826,7 +1759,7 @@ const KasirScreen = ({ navigation }) => {
                         <MaterialCommunityIcons
                           name="bag-personal-outline"
                           size={16}
-                          color={orderType === "take_away" ? "#FFFFFF" : "#475569"}
+                          color={orderType === "take_away" ? colors.onPrimary : colors.textBodySecondary}
                         />
                         <Text
                           style={[
@@ -1847,343 +1780,389 @@ const KasirScreen = ({ navigation }) => {
                       value={tableNumber}
                       onChangeText={setTableNumber}
                       placeholder="Contoh: Meja 05 / VIP / Bar"
-                      placeholderTextColor="#94A3B8"
+                      placeholderTextColor={colors.textSecondary}
                     />
                   </View>
                 )}
 
-                {/* Pilihan Metode Pembayaran (Clean Dropdown Selector) */}
-                <Text style={styles.fieldLabelModal}>Metode Pembayaran</Text>
-                {(() => {
-                  const PAYMENT_OPTIONS = [
-                    { key: "cash", label: "Tunai", desc: "Pembayaran uang tunai di kasir", icon: "cash-multiple" },
-                    { key: "qris", label: "QRIS", desc: "Scan kode QRIS toko", icon: "qrcode-scan" },
-                    { key: "transfer", label: "Transfer Bank", desc: "Transfer antar rekening bank", icon: "bank-transfer" },
-                    { key: "debit", label: "Debit / EDC", desc: "Gesek kartu di mesin EDC", icon: "credit-card-outline" },
-                    { key: "kasbon", label: "Kasbon / Hutang", desc: "Catat ke Buku Kasbon pelanggan", icon: "book-account-outline" },
-                  ];
-                  const activeOption =
-                    PAYMENT_OPTIONS.find((m) => m.key === paymentMethod) || PAYMENT_OPTIONS[0];
+                {/* Panel Pembayaran Terpadu (Metode + Nominal / Detail) */}
+                <View style={styles.paymentSectionCard}>
+                  <Text style={styles.fieldLabelModal}>Metode Pembayaran</Text>
+                  {(() => {
+                    const PAYMENT_OPTIONS = [
+                      { key: "cash", label: "Tunai", desc: "Pembayaran uang tunai di kasir", icon: "cash-multiple" },
+                      { key: "qris", label: "QRIS", desc: "Scan kode QRIS toko", icon: "qrcode-scan" },
+                      { key: "transfer", label: "Transfer Bank", desc: "Transfer antar rekening bank", icon: "bank-transfer" },
+                      { key: "debit", label: "Debit / EDC", desc: "Gesek kartu di mesin EDC", icon: "credit-card-outline" },
+                      { key: "kasbon", label: "Kasbon / Hutang", desc: "Catat ke Buku Kasbon pelanggan", icon: "book-account-outline" },
+                    ];
+                    const activeOption =
+                      PAYMENT_OPTIONS.find((m) => m.key === paymentMethod) || PAYMENT_OPTIONS[0];
 
-                  return (
-                    <View style={styles.paymentDropdownWrapper}>
-                      <TouchableOpacity
-                        style={[
-                          styles.paymentDropdownTrigger,
-                          showPaymentDropdown && styles.paymentDropdownTriggerOpen,
-                        ]}
-                        onPress={() => setShowPaymentDropdown((prev) => !prev)}
-                        activeOpacity={0.75}
-                      >
-                        <View style={styles.paymentDropdownTriggerLeft}>
-                          <View style={styles.paymentDropdownIconBox}>
-                            <MaterialCommunityIcons
-                              name={activeOption.icon}
-                              size={18}
-                              color={colors.primary}
-                            />
+                    return (
+                      <View style={styles.paymentDropdownWrapper}>
+                        <TouchableOpacity
+                          style={[
+                            styles.paymentDropdownTrigger,
+                            showPaymentDropdown && styles.paymentDropdownTriggerOpen,
+                          ]}
+                          onPress={() => setShowPaymentDropdown((prev) => !prev)}
+                          activeOpacity={0.75}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Metode pembayaran ${activeOption.label}. Ketuk untuk ganti`}
+                        >
+                          <View style={styles.paymentDropdownTriggerLeft}>
+                            <View style={styles.paymentDropdownIconBox}>
+                              <MaterialCommunityIcons
+                                name={activeOption.icon}
+                                size={18}
+                                color={colors.primaryDark}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.paymentDropdownSelectedLabel}>
+                                {activeOption.label}
+                              </Text>
+                              <Text style={styles.paymentDropdownSelectedDesc} numberOfLines={1}>
+                                {activeOption.desc}
+                              </Text>
+                            </View>
                           </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.paymentDropdownSelectedLabel}>
-                              {activeOption.label}
-                            </Text>
-                            <Text style={styles.paymentDropdownSelectedDesc} numberOfLines={1}>
-                              {activeOption.desc}
-                            </Text>
-                          </View>
-                        </View>
-                        <MaterialCommunityIcons
-                          name={showPaymentDropdown ? "chevron-up" : "chevron-down"}
-                          size={22}
-                          color="#64748B"
-                        />
-                      </TouchableOpacity>
+                          <MaterialCommunityIcons
+                            name={showPaymentDropdown ? "chevron-up" : "chevron-down"}
+                            size={22}
+                            color={colors.textSecondary}
+                          />
+                        </TouchableOpacity>
 
-                      {showPaymentDropdown && (
-                        <View style={styles.paymentDropdownList}>
-                          {PAYMENT_OPTIONS.map((m, idx) => {
-                            const isActive = paymentMethod === m.key;
-                            const isLockedKasbon = m.key === "kasbon" && !plan.isPro;
-                            return (
-                              <TouchableOpacity
-                                key={m.key}
-                                style={[
-                                  styles.paymentDropdownItem,
-                                  idx === PAYMENT_OPTIONS.length - 1 && { borderBottomWidth: 0 },
-                                  isActive && styles.paymentDropdownItemActive,
-                                ]}
-                                onPress={() => {
-                                  if (isLockedKasbon) {
+                        {showPaymentDropdown && (
+                          <View style={styles.paymentDropdownList}>
+                            {PAYMENT_OPTIONS.map((m, idx) => {
+                              const isActive = paymentMethod === m.key;
+                              const isLockedKasbon = m.key === "kasbon" && !plan.isPro;
+                              return (
+                                <TouchableOpacity
+                                  key={m.key}
+                                  style={[
+                                    styles.paymentDropdownItem,
+                                    idx === PAYMENT_OPTIONS.length - 1 && { borderBottomWidth: 0 },
+                                    isActive && styles.paymentDropdownItemActive,
+                                  ]}
+                                  onPress={() => {
+                                    if (isLockedKasbon) {
+                                      setShowPaymentDropdown(false);
+                                      setLockFeature("kasbon");
+                                      setShowLockModal(true);
+                                      return;
+                                    }
+                                    setPaymentMethod(m.key);
                                     setShowPaymentDropdown(false);
-                                    setLockFeature("kasbon");
-                                    setShowLockModal(true);
-                                    return;
-                                  }
-                                  setPaymentMethod(m.key);
-                                  setShowPaymentDropdown(false);
-                                  if (m.key !== "cash" && m.key !== "kasbon") {
-                                    setCashInput(formatToRpDisplay(grandTotal));
-                                  }
-                                }}
-                                activeOpacity={0.7}
-                              >
-                                <View style={styles.paymentDropdownItemLeft}>
-                                  <MaterialCommunityIcons
-                                    name={m.icon}
-                                    size={18}
-                                    color={isActive ? colors.primary : "#64748B"}
-                                  />
-                                  <View style={{ flex: 1 }}>
-                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                                      <Text
-                                        style={[
-                                          styles.paymentDropdownItemText,
-                                          isActive && styles.paymentDropdownItemTextActive,
-                                        ]}
-                                      >
-                                        {m.label}
+                                    if (m.key !== "cash" && m.key !== "kasbon") {
+                                      setCashInput(formatToRpDisplay(grandTotal));
+                                    }
+                                  }}
+                                  activeOpacity={0.7}
+                                >
+                                  <View style={styles.paymentDropdownItemLeft}>
+                                    <MaterialCommunityIcons
+                                      name={m.icon}
+                                      size={18}
+                                      color={isActive ? colors.primaryDark : colors.textSecondary}
+                                    />
+                                    <View style={{ flex: 1 }}>
+                                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                        <Text
+                                          style={[
+                                            styles.paymentDropdownItemText,
+                                            isActive && styles.paymentDropdownItemTextActive,
+                                          ]}
+                                        >
+                                          {m.label}
+                                        </Text>
+                                        {isLockedKasbon && (
+                                          <View style={styles.paymentProTag}>
+                                            <Text style={styles.paymentProTagText}>PRO</Text>
+                                          </View>
+                                        )}
+                                      </View>
+                                      <Text style={styles.paymentDropdownItemDesc} numberOfLines={1}>
+                                        {m.desc}
                                       </Text>
-                                      {isLockedKasbon && (
-                                        <View style={styles.paymentProTag}>
-                                          <Text style={styles.paymentProTagText}>PRO</Text>
-                                        </View>
-                                      )}
                                     </View>
-                                    <Text style={styles.paymentDropdownItemDesc} numberOfLines={1}>
-                                      {m.desc}
-                                    </Text>
                                   </View>
-                                </View>
-                                <MaterialCommunityIcons
-                                  name={isActive ? "radiobox-marked" : "radiobox-blank"}
-                                  size={20}
-                                  color={isActive ? colors.primary : "#CBD5E1"}
-                                />
-                              </TouchableOpacity>
-                            );
-                          })}
+                                  <MaterialCommunityIcons
+                                    name={isActive ? "radiobox-marked" : "radiobox-blank"}
+                                    size={20}
+                                    color={isActive ? colors.primary : colors.borderStrong}
+                                  />
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })()}
+
+                  <View style={styles.paymentSectionDivider} />
+
+                  {/* Konten Sesuai Metode Pembayaran */}
+                  {paymentMethod === "cash" ? (
+                    <View>
+                      <Text style={styles.fieldLabelModal}>Uang Tunai Diterima</Text>
+                      <TextInput
+                        style={styles.cashInputLarge}
+                        value={cashInput}
+                        onChangeText={(text) => setCashInput(formatToRpDisplay(text))}
+                        keyboardType="numeric"
+                        placeholder="Rp0"
+                        placeholderTextColor={colors.textSecondary}
+                        accessibilityLabel="Nominal uang tunai diterima"
+                      />
+
+                      {/* Quick Cash Buttons */}
+                      <View style={styles.quickCashGrid}>
+                        <TouchableOpacity
+                          style={[styles.quickCashBtn, styles.quickCashBtnPrimary]}
+                          onPress={() => setCashInput(formatToRpDisplay(grandTotal))}
+                          hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
+                        >
+                          <Text style={[styles.quickCashText, { color: colors.primaryDark }]}>
+                            Uang Pas
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.quickCashBtn}
+                          onPress={() =>
+                            setCashInput(
+                              formatToRpDisplay(
+                                grandTotal <= 20000 ? 20000 : 50000,
+                              ),
+                            )
+                          }
+                          hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
+                        >
+                          <Text style={styles.quickCashText}>
+                            {grandTotal <= 20000 ? "20 Ribu" : "50 Ribu"}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.quickCashBtn}
+                          onPress={() => setCashInput(formatToRpDisplay(100000))}
+                          hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
+                        >
+                          <Text style={styles.quickCashText}>100 Ribu</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.quickCashBtn}
+                          onPress={() => setCashInput(formatToRpDisplay(200000))}
+                          hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
+                        >
+                          <Text style={styles.quickCashText}>200 Ribu</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Kembalian Status Box */}
+                      {cashReceived >= grandTotal && grandTotal > 0 ? (
+                        <View style={styles.kembalianBoxSuccess}>
+                          <View>
+                            <Text style={styles.kembalianLabelSuccess}>
+                              {kembalian === 0 ? "Status Pembayaran" : "Kembalian Kasir"}
+                            </Text>
+                            <Text style={styles.kembalianValueSuccess}>
+                              {kembalian === 0 ? "Uang Pas (Lunas)" : formatRupiah(kembalian)}
+                            </Text>
+                          </View>
+                          <MaterialCommunityIcons
+                            name="check-circle"
+                            size={22}
+                            color={colors.successAltDark}
+                          />
+                        </View>
+                      ) : cashReceived > 0 ? (
+                        <View style={styles.kembalianBoxError}>
+                          <View>
+                            <Text style={styles.kembalianLabelError}>Uang Kurang</Text>
+                            <Text style={styles.kembalianValueError}>
+                              {formatRupiah(grandTotal - cashReceived)}
+                            </Text>
+                          </View>
+                          <MaterialCommunityIcons
+                            name="alert-circle"
+                            size={22}
+                            color={colors.errorTextDark}
+                          />
+                        </View>
+                      ) : (
+                        <View style={styles.kembalianBoxNeutral}>
+                          <MaterialCommunityIcons
+                            name="information-outline"
+                            size={18}
+                            color={colors.textSecondary}
+                          />
+                          <Text style={styles.kembalianTextNeutral}>
+                            Ketik nominal tunai atau ketuk Uang Pas.
+                          </Text>
                         </View>
                       )}
                     </View>
-                  );
-                })()}
-
-                {/* Konten Sesuai Metode Pembayaran */}
-                {paymentMethod === "cash" ? (
-                  <View style={styles.cashSectionBox}>
-                    <Text style={styles.fieldLabelModal}>Uang Tunai Diterima</Text>
-                    <TextInput
-                      style={styles.cashInputLarge}
-                      value={cashInput}
-                      onChangeText={(text) => setCashInput(formatToRpDisplay(text))}
-                      keyboardType="numeric"
-                      placeholder="Rp 0"
-                      placeholderTextColor="#94A3B8"
-                    />
-
-                    {/* Quick Cash Buttons */}
-                    <View style={styles.quickCashGrid}>
-                      <TouchableOpacity
-                        style={[styles.quickCashBtn, { backgroundColor: "#F1F5F9" }]}
-                        onPress={() => setCashInput(formatToRpDisplay(grandTotal))}
-                      >
-                        <Text style={[styles.quickCashText, { color: colors.primary }]}>
-                          Uang Pas
+                  ) : paymentMethod === "qris" ? (
+                    <View style={styles.nonCashCard}>
+                      <View style={styles.nonCashIconRow}>
+                        <MaterialCommunityIcons
+                          name="qrcode-scan"
+                          size={26}
+                          color={colors.infoText}
+                        />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={styles.nonCashCardTitle}>
+                            Pembayaran QRIS
+                          </Text>
+                          <Text style={styles.nonCashCardSub}>
+                            Tunjukkan QRIS toko ke pembeli. Pastikan notifikasi dana masuk telah terverifikasi.
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.nonCashAmountBadge}>
+                        <Text style={styles.nonCashAmountLabel}>Total Tagihan</Text>
+                        <Text style={styles.nonCashAmountValue}>
+                          {formatRupiah(grandTotal)}
                         </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.quickCashBtn}
-                        onPress={() =>
-                          setCashInput(
-                            formatToRpDisplay(
-                              grandTotal <= 20000 ? 20000 : 50000,
-                            ),
-                          )
-                        }
-                      >
-                        <Text style={styles.quickCashText}>
-                          {grandTotal <= 20000 ? "20 Ribu" : "50 Ribu"}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.quickCashBtn}
-                        onPress={() => setCashInput(formatToRpDisplay(100000))}
-                      >
-                        <Text style={styles.quickCashText}>100 Ribu</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.quickCashBtn}
-                        onPress={() => setCashInput(formatToRpDisplay(200000))}
-                      >
-                        <Text style={styles.quickCashText}>200 Ribu</Text>
-                      </TouchableOpacity>
+                      </View>
                     </View>
-
-                    {/* Kembalian Status Box */}
-                    {cashReceived >= grandTotal && grandTotal > 0 ? (
-                      <View style={styles.kembalianBoxSuccess}>
-                        <View>
-                          <Text style={styles.kembalianLabelSuccess}>
-                            {kembalian === 0 ? "STATUS PEMBAYARAN" : "KEMBALIAN KASIR"}
-                          </Text>
-                          <Text style={styles.kembalianValueSuccess}>
-                            {kembalian === 0 ? "UANG PAS (LUNAS)" : formatRupiah(kembalian)}
-                          </Text>
-                        </View>
+                  ) : paymentMethod === "kasbon" ? (
+                    <View style={styles.kasbonBox}>
+                      <View style={styles.kasbonHeader}>
                         <MaterialCommunityIcons
-                          name="check-circle"
-                          size={24}
-                          color="#059669"
-                        />
-                      </View>
-                    ) : cashReceived > 0 ? (
-                      <View style={styles.kembalianBoxError}>
-                        <View>
-                          <Text style={styles.kembalianLabelError}>UANG KURANG</Text>
-                          <Text style={styles.kembalianValueError}>
-                            {formatRupiah(grandTotal - cashReceived)}
-                          </Text>
-                        </View>
-                        <MaterialCommunityIcons
-                          name="alert-circle"
-                          size={24}
-                          color="#DC2626"
-                        />
-                      </View>
-                    ) : (
-                      <View style={styles.kembalianBoxNeutral}>
-                        <MaterialCommunityIcons
-                          name="information-outline"
+                          name="book-account-outline"
                           size={18}
-                          color="#64748B"
+                          color={colors.warningTextDark}
                         />
-                        <Text style={styles.kembalianTextNeutral}>
-                          Ketik uang diterima atau tekan tombol Uang Pas di atas.
+                        <Text style={styles.kasbonTitle}>
+                          Pencatatan Kasbon / Hutang
                         </Text>
                       </View>
-                    )}
-                  </View>
-                ) : paymentMethod === "qris" ? (
-                  <View style={styles.nonCashCard}>
-                    <View style={styles.nonCashIconRow}>
-                      <MaterialCommunityIcons
-                        name="qrcode-scan"
-                        size={28}
-                        color="#0284C7"
+                      <Text style={styles.kasbonSub}>
+                        Pesanan ini akan otomatis masuk ke Buku Kasbon pelanggan.
+                      </Text>
+
+                      <Text style={styles.fieldLabelModal}>Nama Pelanggan *</Text>
+                      <TextInput
+                        style={styles.fnbTableInput}
+                        value={kasbonCustomerName}
+                        onChangeText={setKasbonCustomerName}
+                        placeholder="Contoh: Pak Budi / Bu Siti"
+                        placeholderTextColor={colors.textSecondary}
                       />
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={styles.nonCashCardTitle}>
-                          Pembayaran QRIS
+
+                      <Text style={styles.fieldLabelModal}>No. WhatsApp / HP (Opsional)</Text>
+                      <TextInput
+                        style={styles.fnbTableInput}
+                        value={kasbonCustomerPhone}
+                        onChangeText={setKasbonCustomerPhone}
+                        keyboardType="phone-pad"
+                        placeholder="08123456789"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+
+                      <Text style={styles.fieldLabelModal}>
+                        DP / Uang Muka Dibayar Sekarang (Rp)
+                      </Text>
+                      <TextInput
+                        style={styles.fnbTableInput}
+                        value={kasbonDpInput}
+                        onChangeText={(t) => setKasbonDpInput(formatToRpDisplay(t))}
+                        keyboardType="numeric"
+                        placeholder="Rp0"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+
+                      <View style={styles.sisaKasbonRow}>
+                        <Text style={styles.sisaKasbonLabel}>
+                          Sisa Masuk Buku Hutang
                         </Text>
-                        <Text style={styles.nonCashCardSub}>
-                          Tunjukkan QRIS toko ke pembeli. Pastikan notifikasi dana masuk telah terverifikasi.
+                        <Text style={styles.sisaKasbonVal}>
+                          {formatRupiah(
+                            Math.max(
+                              0,
+                              grandTotal - parseRpToNumber(kasbonDpInput),
+                            ),
+                          )}
                         </Text>
                       </View>
                     </View>
-                    <View style={styles.nonCashAmountBadge}>
-                      <Text style={styles.nonCashAmountLabel}>Total Tagihan:</Text>
-                      <Text style={styles.nonCashAmountValue}>
-                        {formatRupiah(grandTotal)}
-                      </Text>
-                    </View>
-                  </View>
-                ) : paymentMethod === "kasbon" ? (
-                  <View style={styles.kasbonBox}>
-                    <View style={styles.kasbonHeader}>
-                      <MaterialCommunityIcons
-                        name="book-account-outline"
-                        size={20}
-                        color="#B45309"
-                      />
-                      <Text style={styles.kasbonTitle}>
-                        PENCATATAN KASBON / HUTANG
-                      </Text>
-                    </View>
-                    <Text style={styles.kasbonSub}>
-                      Pesanan ini akan otomatis masuk ke Buku Kasbon pelanggan.
-                    </Text>
-
-                    <Text style={styles.fieldLabelModal}>Nama Pelanggan *</Text>
-                    <TextInput
-                      style={styles.fnbTableInput}
-                      value={kasbonCustomerName}
-                      onChangeText={setKasbonCustomerName}
-                      placeholder="Contoh: Pak Budi / Bu Siti"
-                      placeholderTextColor="#94A3B8"
-                    />
-
-                    <Text style={styles.fieldLabelModal}>No. WhatsApp / HP (Opsional)</Text>
-                    <TextInput
-                      style={styles.fnbTableInput}
-                      value={kasbonCustomerPhone}
-                      onChangeText={setKasbonCustomerPhone}
-                      keyboardType="phone-pad"
-                      placeholder="08123456789"
-                      placeholderTextColor="#94A3B8"
-                    />
-
-                    <Text style={styles.fieldLabelModal}>
-                      DP / Uang Muka Dibayar Sekarang (Rp)
-                    </Text>
-                    <TextInput
-                      style={styles.fnbTableInput}
-                      value={kasbonDpInput}
-                      onChangeText={(t) => setKasbonDpInput(formatToRpDisplay(t))}
-                      keyboardType="numeric"
-                      placeholder="Rp 0"
-                      placeholderTextColor="#94A3B8"
-                    />
-
-                    <View style={styles.sisaKasbonRow}>
-                      <Text style={styles.sisaKasbonLabel}>
-                        Sisa Masuk Buku Hutang:
-                      </Text>
-                      <Text style={styles.sisaKasbonVal}>
-                        {formatRupiah(
-                          Math.max(
-                            0,
-                            grandTotal - parseRpToNumber(kasbonDpInput),
-                          ),
-                        )}
-                      </Text>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.nonCashCard}>
-                    <View style={styles.nonCashIconRow}>
-                      <MaterialCommunityIcons
-                        name={
+                  ) : (
+                    <View style={styles.nonCashCard}>
+                      <View style={styles.nonCashIconRow}>
+                        <MaterialCommunityIcons
+                          name={
+                            paymentMethod === "transfer"
+                              ? "bank-transfer"
+                              : "credit-card-outline"
+                          }
+                          size={26}
+                          color={colors.infoText}
+                        />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={styles.nonCashCardTitle}>
+                            {paymentMethod === "transfer"
+                              ? "Transfer Bank"
+                              : "Kartu Debit / Mesin EDC"}
+                          </Text>
+                          <Text style={styles.nonCashCardSub}>
+                            Nominal transaksi pas: {formatRupiah(grandTotal)}
+                          </Text>
+                        </View>
+                      </View>
+                      <TextInput
+                        style={[styles.fnbTableInput, { marginTop: 10, marginBottom: 0, fontSize: 13, height: 44 }]}
+                        value={paymentNotes}
+                        onChangeText={setPaymentNotes}
+                        placeholder={
                           paymentMethod === "transfer"
-                            ? "bank-transfer"
-                            : "credit-card-outline"
+                            ? "Catatan bank / nama pengirim (opsional)"
+                            : "Nama bank / referensi EDC (opsional)"
                         }
-                        size={28}
-                        color="#4F46E5"
+                        placeholderTextColor={colors.textSecondary}
                       />
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={styles.nonCashCardTitle}>
-                          {paymentMethod === "transfer"
-                            ? "Transfer Bank"
-                            : "Kartu Debit / Mesin EDC"}
-                        </Text>
-                        <Text style={styles.nonCashCardSub}>
-                          Nominal transaksi pas: {formatRupiah(grandTotal)}
-                        </Text>
-                      </View>
                     </View>
-                    <TextInput
-                      style={[styles.fnbTableInput, { marginTop: 10, fontSize: 13, height: 44 }]}
-                      value={paymentNotes}
-                      onChangeText={setPaymentNotes}
-                      placeholder={
-                        paymentMethod === "transfer"
-                          ? "Catatan bank / nama pengirim (opsional)"
-                          : "Nama bank / referensi EDC (opsional)"
-                      }
-                      placeholderTextColor="#94A3B8"
+                  )}
+                </View>
+
+                {/* Aksi Sekunder Keranjang (Ditempatkan di Bawah agar Aman & Tidak Memotong Alur Hitung) */}
+                <View style={styles.cartSecondaryActionsRow}>
+                  <TouchableOpacity
+                    onPress={handleHoldOrder}
+                    style={styles.cartSecondaryBtnHold}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                  >
+                    <MaterialCommunityIcons
+                      name="pause-circle-outline"
+                      size={16}
+                      color={colors.warningTextDark}
                     />
-                  </View>
-                )}
+                    <Text style={styles.cartSecondaryTextHold}>
+                      Tahan Pesanan
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={clearCart}
+                    style={styles.cartSecondaryBtnClear}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                  >
+                    <MaterialCommunityIcons
+                      name="trash-can-outline"
+                      size={16}
+                      color={colors.errorDark}
+                    />
+                    <Text style={styles.cartSecondaryTextClear}>
+                      Hapus Semua
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </ScrollView>
 
               {/* ── Docked Bottom Action Button ── */}
@@ -2203,6 +2182,13 @@ const KasirScreen = ({ navigation }) => {
                   const isKasbonValid =
                     paymentMethod !== "kasbon" || kasbonCustomerName.trim().length > 0;
                   const canSubmit = cart.length > 0 && isCashValid && isKasbonValid && !submitting;
+                  const PAYMENT_SUBMIT_LABELS = {
+                    cash: "Selesaikan Transaksi",
+                    qris: "Bayar QRIS",
+                    transfer: "Bayar Transfer",
+                    debit: "Bayar Debit",
+                    kasbon: "Simpan Kasbon",
+                  };
 
                   return (
                     <TouchableOpacity
@@ -2213,22 +2199,23 @@ const KasirScreen = ({ navigation }) => {
                       onPress={handleBayar}
                       disabled={!canSubmit}
                       activeOpacity={0.9}
+                      accessibilityRole="button"
                     >
                       {submitting ? (
-                        <ActivityIndicator color="#FFFFFF" size="small" />
+                        <ActivityIndicator color={colors.onPrimary} size="small" />
                       ) : (
                         <>
                           <MaterialCommunityIcons
-                            name="check-circle"
+                            name={canSubmit ? "check-circle" : "alert-circle-outline"}
                             size={20}
-                            color="#FFFFFF"
+                            color={colors.onPrimary}
                           />
                           <Text style={styles.modalBayarText}>
                             {!isCashValid
                               ? `Uang Kurang (${formatRupiah(grandTotal - cashReceived)})`
-                              : paymentMethod === "cash"
-                                ? `SELESAIKAN TRANSAKSI (${formatRupiah(grandTotal)})`
-                                : `BAYAR ${paymentMethod.toUpperCase()} (${formatRupiah(grandTotal)})`}
+                              : !isKasbonValid
+                                ? "Isi Nama Pelanggan Kasbon"
+                                : `${PAYMENT_SUBMIT_LABELS[paymentMethod] || "Selesaikan Transaksi"} (${formatRupiah(grandTotal)})`}
                           </Text>
                         </>
                       )}
@@ -2255,7 +2242,7 @@ const KasirScreen = ({ navigation }) => {
           >
             <View
               style={{
-                backgroundColor: lastTx?.is_offline ? "#D97706" : colors.primary,
+                backgroundColor: lastTx?.is_offline ? colors.warningText : colors.primary,
                 paddingVertical: 14,
                 alignItems: "center",
               }}
@@ -2263,12 +2250,12 @@ const KasirScreen = ({ navigation }) => {
               <MaterialCommunityIcons
                 name={lastTx?.is_offline ? "cloud-off-outline" : "check-circle"}
                 size={36}
-                color="#fff"
+                color={colors.onPrimary}
               />
               <Text
                 style={[
                   styles.successTitle,
-                  { color: "#fff", marginTop: 6, fontSize: 18 },
+                  { color: colors.onPrimary, marginTop: 6, fontSize: 18 },
                 ]}
               >
                 {lastTx?.is_offline ? "Disimpan Offline!" : "Transaksi Berhasil!"}
@@ -2276,8 +2263,8 @@ const KasirScreen = ({ navigation }) => {
               {lastTx?.is_offline && (
                 <Text
                   style={{
-                    color: "#FEF3C7",
-                    fontSize: 11,
+                    color: colors.warningTextMuted,
+                    fontSize: 12,
                     fontFamily: fonts.medium,
                     marginTop: 2,
                   }}
@@ -2355,7 +2342,7 @@ const KasirScreen = ({ navigation }) => {
                 {lastTx?.discount_amount > 0 && (
                   <View style={styles.receiptMetaRow}>
                     <Text style={styles.receiptMeta}>Diskon</Text>
-                    <Text style={[styles.receiptMeta, { color: "#DC2626" }]}>
+                    <Text style={[styles.receiptMeta, { color: colors.errorDark }]}>
                       -{formatRupiah(lastTx.discount_amount)}
                     </Text>
                   </View>
@@ -2396,7 +2383,7 @@ const KasirScreen = ({ navigation }) => {
                       <Text
                         style={[
                           styles.receiptMeta,
-                          { fontWeight: "bold", color: "#059669" },
+                          { fontWeight: "bold", color: colors.successText },
                         ]}
                       >
                         LUNAS
@@ -2430,18 +2417,18 @@ const KasirScreen = ({ navigation }) => {
                     <MaterialCommunityIcons
                       name="printer"
                       size={20}
-                      color="#fff"
+                      color={colors.onPrimary}
                     />
                     <Text style={styles.successBtnText}>Cetak</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.successBtn, { backgroundColor: "#25D366" }]}
+                    style={[styles.successBtn, { backgroundColor: colors.successButtonDark }]}
                     onPress={handleShareFromKasir}
                   >
                     <MaterialCommunityIcons
                       name="whatsapp"
                       size={20}
-                      color="#fff"
+                      color={colors.onPrimary}
                     />
                     <Text style={styles.successBtnText}>Kirim WA</Text>
                   </TouchableOpacity>
@@ -2452,14 +2439,14 @@ const KasirScreen = ({ navigation }) => {
                 <TouchableOpacity
                   style={[
                     styles.successBtn,
-                    { backgroundColor: "#0F172A", marginTop: 10 },
+                    { backgroundColor: colors.text, marginTop: 10 },
                   ]}
                   onPress={handlePrintBluetooth}
                 >
                   <MaterialCommunityIcons
                     name="bluetooth"
                     size={20}
-                    color="#fff"
+                    color={colors.onPrimary}
                   />
                   <Text style={styles.successBtnText}>
                     Cetak Langsung (Printer Bluetooth)
@@ -2470,24 +2457,24 @@ const KasirScreen = ({ navigation }) => {
               {isFnbMode && (
                 <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
                   <TouchableOpacity
-                    style={[styles.successBtn, { flex: 1, backgroundColor: "#D97706" }]}
+                    style={[styles.successBtn, { flex: 1, backgroundColor: colors.warningText }]}
                     onPress={handlePrintKitchenBluetooth}
                   >
                     <MaterialCommunityIcons
                       name="silverware-fork-knife"
                       size={18}
-                      color="#fff"
+                      color={colors.onPrimary}
                     />
                     <Text style={styles.successBtnText}>Struk Dapur</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.successBtn, { flex: 1, backgroundColor: "#15803D" }]}
+                    style={[styles.successBtn, { flex: 1, backgroundColor: colors.successButtonDark }]}
                     onPress={handleShareKitchenWA}
                   >
                     <MaterialCommunityIcons
                       name="whatsapp"
                       size={18}
-                      color="#fff"
+                      color={colors.onPrimary}
                     />
                     <Text style={styles.successBtnText}>WA Dapur</Text>
                   </TouchableOpacity>
@@ -2531,13 +2518,13 @@ const KasirScreen = ({ navigation }) => {
                 <View
                   style={[
                     styles.catModalIconWrap,
-                    { backgroundColor: "#FEF3C7" },
+                    { backgroundColor: colors.warningBannerBg },
                   ]}
                 >
                   <MaterialCommunityIcons
                     name="pause-circle-outline"
                     size={22}
-                    color="#B45309"
+                    color={colors.warningText}
                   />
                 </View>
                 <View>
@@ -2646,7 +2633,7 @@ const KasirScreen = ({ navigation }) => {
                     width: 36,
                     height: 36,
                     borderRadius: 10,
-                    backgroundColor: "#FEF3C7",
+                    backgroundColor: colors.warningBannerBg,
                     alignItems: "center",
                     justifyContent: "center",
                   }}
@@ -2654,7 +2641,7 @@ const KasirScreen = ({ navigation }) => {
                   <MaterialCommunityIcons
                     name="table-chair"
                     size={22}
-                    color="#D97706"
+                    color={colors.warningText}
                   />
                 </View>
                 <View>
@@ -2693,12 +2680,12 @@ const KasirScreen = ({ navigation }) => {
                   <MaterialCommunityIcons
                     name="silverware-fork-knife"
                     size={48}
-                    color="#CBD5E1"
+                    color={colors.borderStrong}
                   />
-                  <Text style={{ fontFamily: fonts.bold, color: "#475569", fontSize: 16, marginTop: 12 }}>
+                  <Text style={{ fontFamily: fonts.bold, color: colors.textBodySecondary, fontSize: 16, marginTop: 12 }}>
                     Belum Ada Pesanan Masuk
                   </Text>
-                  <Text style={{ fontFamily: fonts.regular, color: "#94A3B8", fontSize: 12, textAlign: "center", marginTop: 4, paddingHorizontal: 20 }}>
+                  <Text style={{ fontFamily: fonts.regular, color: colors.textSecondary, fontSize: 12, textAlign: "center", marginTop: 4, paddingHorizontal: 20 }}>
                     Pesanan yang dikirim pelanggan setelah memindai QR code di meja akan langsung muncul di sini.
                   </Text>
                 </View>
@@ -2730,12 +2717,12 @@ const KasirScreen = ({ navigation }) => {
                           <MaterialCommunityIcons
                             name={order.payment_method === "qris" ? "qrcode-scan" : "cash"}
                             size={12}
-                            color={order.payment_method === "qris" ? "#1D4ED8" : "#047857"}
+                            color={order.payment_method === "qris" ? colors.infoBadgeText : colors.successText}
                           />
                           <Text
                             style={[
                               styles.payMethodBadgeText,
-                              { color: order.payment_method === "qris" ? "#1D4ED8" : "#047857" },
+                              { color: order.payment_method === "qris" ? colors.infoBadgeText : colors.successText },
                             ]}
                           >
                             {order.payment_method === "qris" ? "QRIS Toko" : "Bayar di Kasir"}
@@ -2745,7 +2732,7 @@ const KasirScreen = ({ navigation }) => {
 
                       {/* Info Pemesan */}
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginVertical: 6 }}>
-                        <MaterialCommunityIcons name="account" size={14} color="#64748B" />
+                        <MaterialCommunityIcons name="account" size={14} color={colors.textSecondary} />
                         <Text style={styles.customerNameText}>
                           {order.customer_name} {order.customer_phone ? `(${order.customer_phone})` : ""}
                         </Text>
@@ -2798,11 +2785,11 @@ const KasirScreen = ({ navigation }) => {
                                 <Text style={styles.proofBtnTitle}>Bukti Pembayaran QRIS</Text>
                                 <Text style={styles.proofBtnSub}>Ketuk untuk perbesar & verifikasi</Text>
                               </View>
-                              <MaterialCommunityIcons name="arrow-expand" size={18} color="#0284C7" />
+                              <MaterialCommunityIcons name="arrow-expand" size={18} color={colors.infoText} />
                             </TouchableOpacity>
                           ) : (
                             <View style={styles.noProofWarning}>
-                              <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#DC2626" />
+                              <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.errorDark} />
                               <Text style={styles.noProofWarningText}>
                                 Pelanggan belum mengunggah foto bukti pembayaran.
                               </Text>
@@ -2824,7 +2811,7 @@ const KasirScreen = ({ navigation }) => {
                           onPress={() => handleCancelTableOrder(order)}
                           disabled={isProcessing}
                         >
-                          <MaterialCommunityIcons name="close-circle-outline" size={16} color="#EF4444" />
+                          <MaterialCommunityIcons name="close-circle-outline" size={16} color={colors.errorDark} />
                           <Text style={styles.btnCancelOrderText}>Tolak</Text>
                         </TouchableOpacity>
 
@@ -2833,7 +2820,7 @@ const KasirScreen = ({ navigation }) => {
                           onPress={() => handleAcceptTableOrder(order)}
                           disabled={isProcessing}
                         >
-                          <MaterialCommunityIcons name="printer" size={18} color="#FFFFFF" />
+                          <MaterialCommunityIcons name="printer" size={18} color={colors.onPrimary} />
                           <Text style={styles.btnAcceptOrderText}>
                             {isProcessing ? "Memproses..." : "Terima & Cetak Dapur"}
                           </Text>
@@ -2861,7 +2848,7 @@ const KasirScreen = ({ navigation }) => {
             style={styles.proofModalCloseBtn}
             onPress={() => setSelectedProofModal(null)}
           >
-            <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
+            <MaterialCommunityIcons name="close" size={24} color={colors.onPrimary} />
           </TouchableOpacity>
           {selectedProofModal && (
             <Image
@@ -2890,7 +2877,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 10,
@@ -2898,7 +2885,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
   },
   searchInput: {
     flex: 1,
@@ -2908,8 +2895,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   searchScanBtn: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: 10,
     backgroundColor: colors.primary,
     alignItems: "center",
@@ -2924,12 +2911,13 @@ const styles = StyleSheet.create({
   categoryPill: {
     flexDirection: "row",
     alignItems: "center",
+    minHeight: 38,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
     marginRight: 8,
     gap: 6,
   },
@@ -2940,42 +2928,42 @@ const styles = StyleSheet.create({
   categoryPillText: {
     fontSize: 13,
     fontFamily: fonts.semiBold,
-    color: colors.textSecondary,
+    color: colors.textBodySecondary,
   },
   categoryPillTextActive: {
-    color: "#FFFFFF",
+    color: colors.onPrimary,
     fontFamily: fonts.bold,
   },
   categoryCountBadge: {
-    backgroundColor: "#F1F5F9",
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    minWidth: 20,
+    minWidth: 22,
     alignItems: "center",
   },
   categoryCountBadgeActive: {
-    backgroundColor: "rgba(255,255,255,0.25)",
+    backgroundColor: colors.heroMetricBg,
   },
   categoryCountText: {
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: fonts.bold,
-    color: colors.textSecondary,
+    color: colors.textBodySecondary,
   },
   categoryCountTextActive: {
-    color: "#FFFFFF",
+    color: colors.onPrimary,
   },
 
   // Category Grid Modal (Centered Card)
   catModalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    backgroundColor: colors.overlayBackdrop,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 16,
   },
   catModalCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderRadius: 24,
     width: "92%",
     maxWidth: 420,
@@ -2983,7 +2971,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     overflow: "hidden",
     elevation: 10,
-    shadowColor: "#000",
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
@@ -2995,13 +2983,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: colors.cardBorder,
   },
   catModalIconWrap: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: colors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3011,19 +2999,19 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   catModalSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.textSecondary,
     marginTop: 1,
   },
   catModalCloseBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#F8FAFC",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
   },
   catModalGrid: {
     flexDirection: "row",
@@ -3034,16 +3022,16 @@ const styles = StyleSheet.create({
   },
   catGridItem: {
     width: (width - 32 - 20) / 3,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 16,
     padding: 14,
     alignItems: "center",
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
     position: "relative",
   },
   catGridItemActive: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: colors.infoSurfaceActive,
     borderColor: colors.primary,
     borderWidth: 2,
   },
@@ -3051,7 +3039,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
@@ -3067,15 +3055,15 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   catGridLabelActive: {
-    color: colors.primary,
+    color: colors.primaryDark,
   },
   catGridCount: {
-    fontSize: 10,
+    fontSize: 12,
     color: colors.textSecondary,
     fontWeight: "500",
   },
   catGridCountActive: {
-    color: colors.primary,
+    color: colors.primaryDark,
   },
   catGridCheckmark: {
     position: "absolute",
@@ -3087,18 +3075,18 @@ const styles = StyleSheet.create({
   productGrid: {
     paddingHorizontal: 10,
     paddingTop: 4,
-    paddingBottom: 110,
+    paddingBottom: 24,
   },
   productCard: {
     flex: 1,
     margin: 6,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderRadius: 18,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: colors.cardBorder,
     maxWidth: isTablet ? "31%" : "48%",
-    shadowColor: "#0F172A",
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -3116,41 +3104,41 @@ const styles = StyleSheet.create({
   productCardImg: {
     height: 118,
     width: "100%",
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     alignItems: "center",
     justifyContent: "center",
   },
   productCardImgPlaceholder: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     alignItems: "center",
     justifyContent: "center",
   },
   productCardInitialText: {
     fontFamily: fonts.extraBold,
     fontSize: 24,
-    color: "#FDBA74",
+    color: colors.primaryPlaceholder,
     letterSpacing: 1,
   },
   gridStockFloatingBadge: {
     position: "absolute",
     top: 8,
     left: 8,
-    backgroundColor: "rgba(15, 23, 42, 0.72)",
+    backgroundColor: colors.stockBadgeOverlay,
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 8,
   },
   gridStockFloatingBadgeLow: {
-    backgroundColor: "rgba(220, 38, 38, 0.88)",
+    backgroundColor: colors.stockBadgeLowOverlay,
   },
   gridStockFloatingText: {
-    fontSize: 10,
-    color: "#FFFFFF",
+    fontSize: 12,
+    color: colors.onPrimary,
     fontFamily: fonts.bold,
   },
   gridStockFloatingTextLow: {
-    color: "#FFFFFF",
+    color: colors.onPrimary,
   },
   gridQtyBadge: {
     position: "absolute",
@@ -3161,14 +3149,14 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: "#FFFFFF",
+    borderColor: colors.onPrimary,
     alignItems: "center",
     justifyContent: "center",
     elevation: 2,
   },
   gridQtyBadgeText: {
-    fontSize: 11,
-    color: "#FFFFFF",
+    fontSize: 12,
+    color: colors.onPrimary,
     fontFamily: fonts.bold,
   },
   productCardTouchArea: {
@@ -3180,15 +3168,15 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   productCardCategoryText: {
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: fonts.bold,
-    color: "#94A3B8",
+    color: colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
     marginBottom: 2,
   },
   productCardName: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontFamily: fonts.semiBold,
     color: colors.text,
     marginBottom: 2,
@@ -3209,12 +3197,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 12,
     paddingTop: 4,
-    minHeight: 38,
+    minHeight: 42,
   },
   cardAddBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
@@ -3227,32 +3215,32 @@ const styles = StyleSheet.create({
   qtyControl: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFF7ED",
-    borderRadius: 15,
+    backgroundColor: colors.primaryContainer,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#FED7AA",
+    borderColor: colors.primaryBorder,
     padding: 2,
   },
   qtyBtnSmall: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#FED7AA",
+    borderColor: colors.primaryBorder,
   },
   qtyBtnSmallPlus: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   qtyTextSmall: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontFamily: fonts.bold,
     color: colors.text,
     minWidth: 20,
@@ -3270,7 +3258,7 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 22,
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
@@ -3284,7 +3272,7 @@ const styles = StyleSheet.create({
   },
   emptySub: {
     fontFamily: fonts.regular,
-    fontSize: 12,
+    fontSize: 12.5,
     color: colors.textSecondary,
     textAlign: "center",
     lineHeight: 18,
@@ -3294,7 +3282,7 @@ const styles = StyleSheet.create({
   dockedBottomBar: {
     backgroundColor: colors.background,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: colors.cardBorder,
     paddingHorizontal: 16,
     paddingTop: 10,
   },
@@ -3307,9 +3295,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   dockedBarBtnEmpty: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
   },
   dockedBarBtnActive: {
     backgroundColor: colors.primary,
@@ -3332,12 +3320,12 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 8,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.22)",
+    backgroundColor: colors.heroMetricBg,
     alignItems: "center",
     justifyContent: "center",
   },
   dockedCountText: {
-    color: "#FFFFFF",
+    color: colors.onPrimary,
     fontSize: 14,
     fontFamily: fonts.extraBold,
   },
@@ -3352,10 +3340,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
   },
   dockedBarTotalActive: {
-    color: "#FFFFFF",
+    color: colors.onPrimary,
   },
   dockedBarSub: {
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 2,
   },
   dockedBarSubMuted: {
@@ -3363,7 +3351,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
   },
   dockedBarSubActive: {
-    color: "rgba(255,255,255,0.85)",
+    color: colors.onPrimarySoft,
     fontFamily: fonts.medium,
   },
   dockedActionPill: {
@@ -3373,31 +3361,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 12,
   },
-  dockedActionPillEmpty: {
-    backgroundColor: "#F1F5F9",
-  },
   dockedActionPillActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
   },
   dockedActionText: {
     fontFamily: fonts.bold,
     fontSize: 13,
   },
-  dockedActionTextEmpty: {
-    color: "#64748B",
-  },
   dockedActionTextActive: {
-    color: colors.primary,
+    color: colors.primaryDark,
   },
 
   // Modal Keranjang Bottom Sheet
   modalOverlayCart: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    backgroundColor: colors.overlayBackdrop,
   },
   cartBottomSheet: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.surfaceMuted,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     width: "100%",
@@ -3406,7 +3388,7 @@ const styles = StyleSheet.create({
     maxHeight: "92%",
     overflow: "hidden",
     elevation: 16,
-    shadowColor: "#000",
+    shadowColor: colors.text,
     shadowOpacity: 0.2,
     shadowRadius: 24,
   },
@@ -3414,7 +3396,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#CBD5E1",
+    backgroundColor: colors.borderStrong,
     alignSelf: "center",
     marginTop: 8,
     marginBottom: 4,
@@ -3426,73 +3408,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
-  },
-  modalHeaderIconBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: "#F1F5F9",
-    alignItems: "center",
-    justifyContent: "center",
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
   },
   modalTitleBottomSheet: {
     fontSize: 16,
     fontFamily: fonts.extraBold,
-    color: "#0F172A",
+    color: colors.text,
   },
   modalSubBottomSheet: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: fonts.medium,
-    color: "#64748B",
+    color: colors.textSecondary,
     marginTop: 1,
   },
-  modalHeaderActionBtnAmber: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  modalHeaderActionTextAmber: {
-    fontSize: 11,
-    fontFamily: fonts.bold,
-    color: "#B45309",
-  },
-  modalHeaderActionBtnRed: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  modalHeaderActionTextRed: {
-    fontSize: 11,
-    fontFamily: fonts.bold,
-    color: "#EF4444",
-  },
   modalCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#F1F5F9",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
 
   cartItemListContainer: {
-    marginBottom: 6,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    marginBottom: 10,
   },
   cartSecondaryActionsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 4,
   },
   cartSecondaryBtnHold: {
     flex: 1,
@@ -3500,17 +3451,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#FFFBEB",
+    minHeight: 44,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: colors.warningBorder,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 12,
   },
   cartSecondaryTextHold: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontFamily: fonts.bold,
-    color: "#B45309",
+    color: colors.warningTextDark,
   },
   cartSecondaryBtnClear: {
     flex: 1,
@@ -3518,40 +3470,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#FFF1F2",
+    minHeight: 44,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#FECDD3",
+    borderColor: colors.errorBorder,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 12,
   },
   cartSecondaryTextClear: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontFamily: fonts.bold,
-    color: "#DC2626",
+    color: colors.errorDark,
   },
   cartItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    marginBottom: 8,
-    padding: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  cartItemLast: {
+    borderBottomWidth: 0,
   },
   cartItemImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 9,
     marginRight: 10,
   },
   cartItemImagePlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 9,
     marginRight: 10,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: colors.surfaceSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3560,34 +3513,46 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   cartItemName: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontFamily: fonts.semiBold,
-    color: "#0F172A",
+    color: colors.text,
     marginBottom: 2,
+  },
+  cartItemMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    rowGap: 2,
+    columnGap: 6,
   },
   cartItemPrice: {
     fontSize: 13,
-    color: colors.primary,
+    color: colors.primaryDark,
     fontFamily: fonts.bold,
+  },
+  cartItemLineTotal: {
+    fontSize: 12,
+    color: colors.textBodySecondary,
+    fontFamily: fonts.semiBold,
   },
   qtyControlModal: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
     padding: 3,
   },
   qtyBtnModal: {
-    width: 26,
-    height: 26,
+    width: 30,
+    height: 30,
     borderRadius: 8,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: colors.borderStrong,
   },
   qtyTextModal: {
     fontSize: 13,
@@ -3598,52 +3563,52 @@ const styles = StyleSheet.create({
 
   // Breakdown Card
   calcBreakdownCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    marginBottom: 14,
+    borderColor: colors.border,
+    marginBottom: 10,
   },
   calcRowBreakdown: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   calcLabelBreakdown: {
     fontFamily: fonts.medium,
     fontSize: 13,
-    color: "#64748B",
+    color: colors.textSecondary,
   },
   calcValueBreakdown: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: "#0F172A",
+    color: colors.text,
   },
   diskonRowBreakdown: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   diskonInputBox: {
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: colors.borderStrong,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 5,
     fontSize: 13,
     fontFamily: fonts.bold,
-    color: colors.primary,
-    backgroundColor: "#F8FAFC",
+    color: colors.primaryDark,
+    backgroundColor: colors.surfaceMuted,
     width: 120,
     textAlign: "right",
   },
   calcDividerLine: {
     height: 1,
-    backgroundColor: "#F1F5F9",
-    marginBottom: 10,
+    backgroundColor: colors.cardBorder,
+    marginBottom: 8,
   },
   grandTotalHighlightRow: {
     flexDirection: "row",
@@ -3651,59 +3616,69 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   grandTotalHighlightTitle: {
-    fontFamily: fonts.extraBold,
-    fontSize: 13,
-    color: "#0F172A",
-    letterSpacing: 0.3,
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+    color: colors.text,
   },
-  grandTotalHighlightSub: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#64748B",
+  grandTotalDiscountSub: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: colors.successText,
     marginTop: 1,
   },
   grandTotalHighlightAmount: {
     fontFamily: fonts.extraBold,
-    fontSize: 20,
-    color: colors.primary,
+    fontSize: 19,
+    color: colors.primaryDark,
     letterSpacing: -0.3,
   },
 
   fieldLabelModal: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "#475569",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 12,
+    color: colors.textBodySecondary,
     marginBottom: 6,
   },
   fnbTableInput: {
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: colors.borderStrong,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: 13,
     fontFamily: fonts.medium,
     color: colors.text,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     marginBottom: 10,
   },
 
-  // Payment Method Dropdown
+  // Payment Section & Dropdown
+  paymentSectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 10,
+  },
+  paymentSectionDivider: {
+    height: 1,
+    backgroundColor: colors.cardBorder,
+    marginVertical: 10,
+  },
   paymentDropdownWrapper: {
-    marginBottom: 14,
+    marginBottom: 0,
   },
   paymentDropdownTrigger: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   paymentDropdownTriggerOpen: {
     borderColor: colors.primary,
@@ -3721,9 +3696,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 9,
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     borderWidth: 1,
-    borderColor: "#FFEDD5",
+    borderColor: colors.primaryBorderSoft,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -3734,12 +3709,12 @@ const styles = StyleSheet.create({
   },
   paymentDropdownSelectedDesc: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#64748B",
+    fontSize: 12,
+    color: colors.textSecondary,
     marginTop: 1,
   },
   paymentDropdownList: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderTopWidth: 0,
     borderColor: colors.primary,
@@ -3751,13 +3726,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: colors.cardBorder,
   },
   paymentDropdownItemActive: {
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
   },
   paymentDropdownItemLeft: {
     flexDirection: "row",
@@ -3769,142 +3744,139 @@ const styles = StyleSheet.create({
   paymentDropdownItemText: {
     fontFamily: fonts.semiBold,
     fontSize: 13,
-    color: "#334155",
+    color: colors.textDark,
   },
   paymentDropdownItemTextActive: {
     fontFamily: fonts.bold,
-    color: colors.primary,
+    color: colors.primaryDark,
   },
   paymentDropdownItemDesc: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#64748B",
+    fontSize: 12,
+    color: colors.textSecondary,
     marginTop: 1,
   },
   paymentProTag: {
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     borderWidth: 1,
-    borderColor: "#FED7AA",
+    borderColor: colors.primaryBorder,
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 5,
   },
   paymentProTagText: {
     fontFamily: fonts.bold,
-    fontSize: 9.5,
-    color: colors.primary,
+    fontSize: 12,
+    color: colors.primaryDark,
     letterSpacing: 0.3,
   },
 
-  // Cash Section
-  cashSectionBox: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    marginBottom: 14,
-  },
+  // Cash Section (inside paymentSectionCard)
   cashInputLarge: {
     borderWidth: 1.5,
     borderColor: colors.primary,
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 17,
     fontFamily: fonts.bold,
-    color: colors.primary,
-    backgroundColor: "#F8FAFC",
-    marginBottom: 10,
+    color: colors.primaryDark,
+    backgroundColor: colors.surfaceMuted,
+    marginBottom: 8,
   },
   quickCashGrid: {
     flexDirection: "row",
     gap: 6,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   quickCashBtn: {
     flex: 1,
+    minHeight: 40,
+    justifyContent: "center",
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
     alignItems: "center",
+  },
+  quickCashBtnPrimary: {
+    backgroundColor: colors.primaryContainer,
+    borderColor: colors.primaryBorder,
   },
   quickCashText: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "#334155",
+    fontSize: 12,
+    color: colors.textDark,
   },
 
   kembalianBoxSuccess: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#ECFDF5",
+    backgroundColor: colors.successContainer,
     borderWidth: 1,
-    borderColor: "#A7F3D0",
-    borderRadius: 12,
-    padding: 12,
+    borderColor: colors.successBorder,
+    borderRadius: 10,
+    padding: 10,
   },
   kembalianLabelSuccess: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "#065F46",
-    letterSpacing: 0.4,
+    fontSize: 12,
+    color: colors.successAltDark,
   },
   kembalianValueSuccess: {
     fontFamily: fonts.extraBold,
-    fontSize: 17,
-    color: "#065F46",
+    fontSize: 16,
+    color: colors.successAltDark,
     marginTop: 1,
   },
   kembalianBoxError: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#FEF2F2",
+    backgroundColor: colors.errorSoftBg,
     borderWidth: 1,
-    borderColor: "#FECACA",
-    borderRadius: 12,
-    padding: 12,
+    borderColor: colors.errorSoftBorder,
+    borderRadius: 10,
+    padding: 10,
   },
   kembalianLabelError: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "#991B1B",
-    letterSpacing: 0.4,
+    fontSize: 12,
+    color: colors.errorTextDark,
   },
   kembalianValueError: {
     fontFamily: fonts.extraBold,
-    fontSize: 17,
-    color: "#991B1B",
+    fontSize: 16,
+    color: colors.errorTextDark,
     marginTop: 1,
   },
   kembalianBoxNeutral: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    padding: 12,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 10,
   },
   kembalianTextNeutral: {
     flex: 1,
     fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#64748B",
+    fontSize: 12,
+    color: colors.textSecondary,
   },
 
   // Modal Footer
   modalFooterDock: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
+    borderTopColor: colors.border,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   modalBayarBtn: {
     backgroundColor: colors.primary,
@@ -3921,26 +3893,26 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   modalBayarBtnDisabled: {
-    backgroundColor: "#94A3B8",
+    backgroundColor: colors.textSecondary,
     elevation: 0,
     shadowOpacity: 0,
   },
   modalBayarText: {
-    color: "#FFFFFF",
+    color: colors.onPrimary,
     fontFamily: fonts.bold,
     fontSize: 14,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 
   // Success Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: colors.modalBackdrop,
     justifyContent: "center",
     padding: 16,
   },
   successModal: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderRadius: 24,
     width: "100%",
     maxWidth: 380,
@@ -3958,7 +3930,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 10,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.surfaceMuted,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
@@ -3972,7 +3944,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 6,
   },
-  successBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  successBtnText: { color: colors.onPrimary, fontWeight: "700", fontSize: 14 },
   successClose: {
     alignItems: "center",
     paddingVertical: 10,
@@ -3986,7 +3958,7 @@ const styles = StyleSheet.create({
 
   // ── Pratinjau Nota (kertas struk termal) ──
   receiptPaper: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
@@ -4002,14 +3974,14 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   receiptMeta: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     color: colors.textSecondary,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   receiptMetaCenter: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     textAlign: "center",
     color: colors.textSecondary,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
@@ -4022,7 +3994,7 @@ const styles = StyleSheet.create({
   },
   receiptDash: {
     borderBottomWidth: 1,
-    borderBottomColor: "#9CA3AF",
+    borderBottomColor: colors.receiptDash,
     borderStyle: "dashed",
     marginVertical: 10,
   },
@@ -4030,14 +4002,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   receiptItemName: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: "700",
     color: colors.text,
     marginBottom: 2,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   receiptItemTotal: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: colors.text,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
@@ -4055,8 +4027,8 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   receiptFooter: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     textAlign: "center",
     color: colors.textSecondary,
     marginTop: 2,
@@ -4069,7 +4041,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBannerBg,
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: -4,
@@ -4077,25 +4049,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#FDE68A",
-  },
-  heldBadgeIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FDE68A",
-    justifyContent: "center",
-    alignItems: "center",
+    borderColor: colors.warningBorder,
   },
   heldBannerTitle: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: "#92400E",
+    color: colors.warningTextDark,
   },
   heldBannerSub: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#B45309",
+    fontSize: 12,
+    color: colors.warningText,
     marginTop: 1,
   },
   heldOrderItemCard: {
@@ -4104,10 +4068,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 14,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
     marginBottom: 8,
   },
   heldOrderCardTitle: {
@@ -4124,20 +4088,20 @@ const styles = StyleSheet.create({
   heldOrderCardTotal: {
     fontFamily: fonts.bold,
     fontSize: 14,
-    color: colors.primary,
+    color: colors.primaryDark,
     marginTop: 4,
   },
   heldOrderDeleteBtn: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 10,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: colors.errorBannerBg,
     justifyContent: "center",
     alignItems: "center",
   },
   heldOrderRestoreBtn: {
     paddingHorizontal: 14,
-    height: 36,
+    height: 38,
     borderRadius: 10,
     backgroundColor: colors.primary,
     justifyContent: "center",
@@ -4146,47 +4110,17 @@ const styles = StyleSheet.create({
   heldOrderRestoreText: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: "#FFFFFF",
+    color: colors.onPrimary,
   },
 
-  // Payment Methods
-  paymentMethodRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  paymentMethodBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "#F1F5F9",
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-  },
-  paymentMethodBtnActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  paymentMethodText: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: colors.text,
-  },
-  paymentMethodTextActive: {
-    color: "#FFFFFF",
-  },
+  // Non-Cash & Payment Info Cards
   nonCashCard: {
-    backgroundColor: "#F0F9FF",
-    borderRadius: 14,
+    backgroundColor: colors.infoContainer,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#BAE6FD",
-    padding: 14,
-    marginTop: 10,
+    borderColor: colors.infoBorder,
+    padding: 12,
+    marginTop: 0,
   },
   nonCashIconRow: {
     flexDirection: "row",
@@ -4195,59 +4129,59 @@ const styles = StyleSheet.create({
   nonCashCardTitle: {
     fontFamily: fonts.bold,
     fontSize: 14,
-    color: "#0369A1",
+    color: colors.infoText,
   },
   nonCashCardSub: {
     fontFamily: fonts.regular,
     fontSize: 12,
-    color: "#0284C7",
+    color: colors.infoText,
     marginTop: 2,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   nonCashAmountBadge: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginTop: 10,
     borderWidth: 1,
-    borderColor: "#E0F2FE",
+    borderColor: colors.infoBorderSoft,
   },
   nonCashAmountLabel: {
     fontFamily: fonts.medium,
     fontSize: 13,
-    color: "#0369A1",
+    color: colors.infoText,
   },
   nonCashAmountValue: {
     fontFamily: fonts.bold,
     fontSize: 16,
-    color: "#0369A1",
+    color: colors.infoText,
   },
 
   // Wholesale badge in cart
   cartWholesaleBadge: {
-    backgroundColor: "#DCFCE7",
+    backgroundColor: colors.successBadgeBg,
     paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
+    paddingVertical: 2,
+    borderRadius: 5,
   },
   cartWholesaleBadgeText: {
     fontFamily: fonts.bold,
-    fontSize: 9,
-    color: "#16A34A",
+    fontSize: 12,
+    color: colors.successDark,
   },
 
   // Kasbon form box
   kasbonBox: {
-    backgroundColor: "#FFFBEB",
-    borderRadius: 14,
+    backgroundColor: colors.warningContainer,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#FDE68A",
-    padding: 14,
-    marginTop: 10,
+    borderColor: colors.warningBorder,
+    padding: 12,
+    marginTop: 0,
   },
   kasbonHeader: {
     flexDirection: "row",
@@ -4258,36 +4192,36 @@ const styles = StyleSheet.create({
   kasbonTitle: {
     fontFamily: fonts.bold,
     fontSize: 12,
-    color: "#92400E",
-    letterSpacing: 0.5,
+    color: colors.warningTextDark,
+    letterSpacing: 0.4,
   },
   kasbonSub: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#B45309",
+    fontSize: 12,
+    color: colors.warningText,
     marginBottom: 8,
   },
   sisaKasbonRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginTop: 10,
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: colors.warningBorder,
   },
   sisaKasbonLabel: {
     fontFamily: fonts.medium,
     fontSize: 12,
-    color: "#92400E",
+    color: colors.warningTextDark,
   },
   sisaKasbonVal: {
     fontFamily: fonts.extraBold,
     fontSize: 15,
-    color: "#DC2626",
+    color: colors.errorDark,
   },
 
   // Offline banner Kasir
@@ -4295,7 +4229,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#FFFBEB",
+    backgroundColor: colors.warningContainer,
     marginHorizontal: 16,
     marginTop: 10,
     marginBottom: -2,
@@ -4303,48 +4237,42 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#FDE68A",
-  },
-  offlineBadgeIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FEF3C7",
-    justifyContent: "center",
-    alignItems: "center",
+    borderColor: colors.warningBorder,
   },
   offlineBannerTitle: {
     fontFamily: fonts.bold,
-    fontSize: 12,
-    color: "#92400E",
+    fontSize: 12.5,
+    color: colors.warningTextDark,
   },
   offlineBannerSub: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#B45309",
+    fontSize: 12,
+    color: colors.warningText,
     marginTop: 1,
   },
   offlineSyncBtnKasir: {
-    backgroundColor: "#D97706",
+    backgroundColor: colors.warningText,
+    minHeight: 36,
+    justifyContent: "center",
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 8,
   },
   offlineSyncBtnKasirText: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "#FFFFFF",
+    fontSize: 12,
+    color: colors.onPrimary,
   },
 
   // F&B box in Cart Modal
   fnbCardBox: {
-    backgroundColor: "#F0FDF4",
+    backgroundColor: colors.successSoftBg,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#BBF7D0",
-    padding: 14,
-    marginTop: 6,
-    marginBottom: 4,
+    borderColor: colors.successSoftBorder,
+    padding: 12,
+    marginTop: 0,
+    marginBottom: 10,
   },
   fnbHeaderRow: {
     flexDirection: "row",
@@ -4355,8 +4283,8 @@ const styles = StyleSheet.create({
   fnbCardTitle: {
     fontFamily: fonts.bold,
     fontSize: 12,
-    color: "#166534",
-    letterSpacing: 0.5,
+    color: colors.successDark,
+    letterSpacing: 0.4,
   },
   fnbTypeRow: {
     flexDirection: "row",
@@ -4370,22 +4298,22 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 8,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: colors.borderStrong,
   },
   fnbTypeBtnActive: {
-    backgroundColor: "#16A34A",
-    borderColor: "#16A34A",
+    backgroundColor: colors.successButtonDark,
+    borderColor: colors.successButtonDark,
   },
   fnbTypeBtnText: {
     fontFamily: fonts.semiBold,
-    fontSize: 11,
-    color: "#475569",
+    fontSize: 12,
+    color: colors.textBodySecondary,
   },
   fnbTypeBtnTextActive: {
-    color: "#FFFFFF",
+    color: colors.onPrimary,
     fontFamily: fonts.bold,
   },
 
@@ -4394,7 +4322,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#FFFBEB",
+    backgroundColor: colors.warningContainer,
     marginHorizontal: 16,
     marginTop: 10,
     marginBottom: -2,
@@ -4402,29 +4330,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: "#FCD34D",
-  },
-  tableBadgeIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#D97706",
-    justifyContent: "center",
-    alignItems: "center",
+    borderColor: colors.warningBannerBorder,
   },
   tableBannerTitle: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: "#92400E",
+    color: colors.warningTextDark,
   },
   tableBannerSub: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#B45309",
+    fontSize: 12,
+    color: colors.warningText,
     marginTop: 1,
   },
   tableCountBadge: {
-    backgroundColor: "#DC2626",
+    backgroundColor: colors.errorDark,
     borderRadius: 12,
     paddingHorizontal: 7,
     paddingVertical: 2,
@@ -4433,18 +4353,18 @@ const styles = StyleSheet.create({
   },
   tableCountBadgeText: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "#FFFFFF",
+    fontSize: 12,
+    color: colors.onPrimary,
   },
   tableOrderCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
     padding: 14,
     marginBottom: 4,
     elevation: 1,
-    shadowColor: "#000",
+    shadowColor: colors.text,
     shadowOpacity: 0.05,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
@@ -4454,28 +4374,28 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: colors.cardBorder,
     paddingBottom: 8,
     marginBottom: 6,
   },
   tableNumBadge: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBannerBg,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: colors.warningBorder,
   },
   tableNumBadgeText: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: "#92400E",
+    color: colors.warningTextDark,
     letterSpacing: 0.5,
   },
   orderTimeText: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#94A3B8",
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   payMethodBadge: {
     flexDirection: "row",
@@ -4486,22 +4406,22 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   payMethodQris: {
-    backgroundColor: "#DBEAFE",
+    backgroundColor: colors.infoBadgeBg,
   },
   payMethodCash: {
-    backgroundColor: "#D1FAE5",
+    backgroundColor: colors.successPillBg,
   },
   payMethodBadgeText: {
     fontFamily: fonts.semiBold,
-    fontSize: 11,
+    fontSize: 12,
   },
   customerNameText: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: "#1E293B",
+    color: colors.secondary,
   },
   orderItemsContainer: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 10,
     padding: 10,
     gap: 6,
@@ -4515,33 +4435,33 @@ const styles = StyleSheet.create({
   orderItemName: {
     fontFamily: fonts.regular,
     fontSize: 12.5,
-    color: "#1E293B",
+    color: colors.secondary,
   },
   orderItemNote: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#D97706",
+    fontSize: 12,
+    color: colors.warningText,
     fontStyle: "italic",
     marginTop: 2,
   },
   orderItemSubtotal: {
     fontFamily: fonts.bold,
     fontSize: 12.5,
-    color: "#334155",
+    color: colors.textDark,
     marginLeft: 10,
   },
   orderGeneralNoteBox: {
-    backgroundColor: "#FFFBEB",
+    backgroundColor: colors.warningContainer,
     borderWidth: 1,
-    borderColor: "#FEF3C7",
+    borderColor: colors.warningBannerBg,
     borderRadius: 8,
     padding: 8,
     marginVertical: 4,
   },
   orderGeneralNoteText: {
     fontFamily: fonts.regular,
-    fontSize: 11.5,
-    color: "#92400E",
+    fontSize: 12,
+    color: colors.warningTextDark,
   },
   proofSection: {
     marginVertical: 8,
@@ -4550,9 +4470,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#F0F9FF",
+    backgroundColor: colors.infoContainer,
     borderWidth: 1,
-    borderColor: "#BAE6FD",
+    borderColor: colors.infoBorder,
     borderRadius: 10,
     padding: 8,
   },
@@ -4560,32 +4480,32 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 6,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: colors.border,
   },
   proofBtnTitle: {
     fontFamily: fonts.bold,
-    fontSize: 12,
-    color: "#0369A1",
+    fontSize: 12.5,
+    color: colors.infoText,
   },
   proofBtnSub: {
     fontFamily: fonts.regular,
-    fontSize: 10.5,
-    color: "#0284C7",
+    fontSize: 12,
+    color: colors.infoText,
   },
   noProofWarning: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#FEF2F2",
+    backgroundColor: colors.errorSoftBg,
     borderRadius: 8,
     padding: 8,
     borderWidth: 1,
-    borderColor: "#FEE2E2",
+    borderColor: colors.errorBannerBg,
   },
   noProofWarningText: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#DC2626",
+    fontSize: 12,
+    color: colors.errorDark,
     flex: 1,
   },
   orderTotalRow: {
@@ -4595,17 +4515,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: colors.cardBorder,
   },
   orderTotalLabel: {
     fontFamily: fonts.semiBold,
-    fontSize: 12,
-    color: "#64748B",
+    fontSize: 12.5,
+    color: colors.textSecondary,
   },
   orderTotalValue: {
     fontFamily: fonts.bold,
     fontSize: 15,
-    color: "#0F172A",
+    color: colors.text,
   },
   orderActionsRow: {
     flexDirection: "row",
@@ -4618,16 +4538,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     borderWidth: 1,
-    borderColor: "#FCA5A5",
-    backgroundColor: "#FEF2F2",
-    paddingVertical: 9,
+    borderColor: colors.errorBorderStrong,
+    backgroundColor: colors.errorSoftBg,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
   },
   btnCancelOrderText: {
     fontFamily: fonts.bold,
-    fontSize: 12,
-    color: "#EF4444",
+    fontSize: 12.5,
+    color: colors.errorDark,
   },
   btnAcceptOrder: {
     flex: 1,
@@ -4635,19 +4555,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#16A34A",
-    paddingVertical: 9,
+    backgroundColor: colors.successButtonDark,
+    paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 10,
   },
   btnAcceptOrderText: {
     fontFamily: fonts.bold,
     fontSize: 12.5,
-    color: "#FFFFFF",
+    color: colors.onPrimary,
   },
   proofModalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.9)",
+    backgroundColor: colors.proofBackdrop,
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
@@ -4657,9 +4577,9 @@ const styles = StyleSheet.create({
     top: 40,
     right: 20,
     zIndex: 10,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    padding: 8,
-    borderRadius: 20,
+    backgroundColor: colors.proofCloseBg,
+    padding: 10,
+    borderRadius: 22,
   },
   proofModalImage: {
     width: "100%",

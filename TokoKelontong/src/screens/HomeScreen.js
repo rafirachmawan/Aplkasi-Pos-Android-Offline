@@ -22,6 +22,7 @@ import TransactionRepository from "../database/transactionRepository";
 import { formatRupiah } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
 import PinModal from "../components/PinModal";
+import ConnectionStatusPill from "../components/ConnectionStatusPill";
 import {
   isPinProtected,
   isScreenLocked,
@@ -230,12 +231,8 @@ const HomeScreen = ({ navigation }) => {
 
       {/* ─── Header Toko Bersih & Status Koneksi ─── */}
       <View style={styles.topNavbar}>
-        <TouchableOpacity
-          style={styles.brandLeftRow}
-          activeOpacity={0.82}
-          onPress={() => navigateWithPin("Pengaturan")}
-        >
-          <View style={styles.storeAvatarBtn}>
+        <View style={styles.brandLeftRow}>
+          <View style={styles.storeAvatarBtn} accessible={false}>
             <Image
               source={
                 state.storeLogo
@@ -278,18 +275,11 @@ const HomeScreen = ({ navigation }) => {
               {dateFormatted}
             </Text>
           </View>
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity
-          style={[
-            styles.connStatusPill,
-            syncStatus.offline
-              ? styles.connStatusPillOffline
-              : syncStatus.syncing
-                ? styles.connStatusPillSyncing
-                : styles.connStatusPillOnline,
-          ]}
-          activeOpacity={0.8}
+        <ConnectionStatusPill
+          offline={syncStatus.offline}
+          syncing={syncStatus.syncing}
           onPress={() => {
             if (offlineCount > 0) {
               navigation.navigate("TransaksiPending");
@@ -297,34 +287,7 @@ const HomeScreen = ({ navigation }) => {
               refreshSyncCounts();
             }
           }}
-        >
-          <View
-            style={[
-              styles.connStatusDot,
-              syncStatus.offline
-                ? { backgroundColor: "#F59E0B" }
-                : syncStatus.syncing
-                  ? { backgroundColor: colors.primary }
-                  : { backgroundColor: "#10B981" },
-            ]}
-          />
-          <Text
-            style={[
-              styles.connStatusText,
-              syncStatus.offline
-                ? styles.connStatusTextOffline
-                : syncStatus.syncing
-                  ? styles.connStatusTextSyncing
-                  : styles.connStatusTextOnline,
-            ]}
-          >
-            {syncStatus.offline
-              ? "Offline"
-              : syncStatus.syncing
-                ? "Sinkron..."
-                : "Online"}
-          </Text>
-        </TouchableOpacity>
+        />
       </View>
 
       <ScrollView
@@ -339,6 +302,7 @@ const HomeScreen = ({ navigation }) => {
               style={styles.offlineAlertLeft}
               onPress={() => navigation.navigate("TransaksiPending")}
               activeOpacity={0.7}
+              accessibilityRole="button"
             >
               <View style={styles.offlineTextWrap}>
                 <Text style={styles.offlineTitle}>
@@ -358,6 +322,7 @@ const HomeScreen = ({ navigation }) => {
               onPress={handleSyncOffline}
               disabled={syncingOffline}
               activeOpacity={0.8}
+              accessibilityRole="button"
             >
               <Text style={styles.offlineBtnText}>
                 {syncingOffline ? "Mengirim..." : "Sinkronkan"}
@@ -373,10 +338,21 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.salesHeroTagText}>OMZET HARI INI</Text>
             <TouchableOpacity
               style={styles.privacyToggle}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
               onPress={() => setHideBalance(!hideBalance)}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                hideBalance
+                  ? "Tampilkan nominal omzet dan laba"
+                  : "Sembunyikan nominal omzet dan laba"
+              }
             >
+              <MaterialCommunityIcons
+                name={hideBalance ? "eye-outline" : "eye-off-outline"}
+                size={15}
+                color={colors.onPrimary}
+              />
               <Text style={styles.privacyToggleText}>
                 {hideBalance ? "Tampilkan" : "Sembunyikan"}
               </Text>
@@ -384,14 +360,14 @@ const HomeScreen = ({ navigation }) => {
           </View>
 
           <Text style={styles.heroOmzetAmount} numberOfLines={1}>
-            {hideBalance ? "Rp ••••••••" : formatRupiah(totalOmzet)}
+            {hideBalance ? "Rp••••••••" : formatRupiah(totalOmzet)}
           </Text>
 
           <View style={styles.metricsRow}>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>Estimasi Laba Bersih</Text>
               <Text style={styles.metricValue} numberOfLines={1}>
-                {hideBalance ? "Rp ••••••" : formatRupiah(totalLaba)}
+                {hideBalance ? "Rp••••••" : formatRupiah(totalLaba)}
               </Text>
             </View>
 
@@ -418,6 +394,8 @@ const HomeScreen = ({ navigation }) => {
                 key={menu.key}
                 style={styles.gridCard}
                 activeOpacity={0.82}
+                accessibilityRole="button"
+                accessibilityLabel={menu.title}
                 onPress={() => navigateWithPin(menu.key)}
               >
                 <View style={styles.gridCardTop}>
@@ -462,6 +440,8 @@ const HomeScreen = ({ navigation }) => {
                 key={item.key}
                 style={[styles.settingsRow, !isLast && styles.settingsRowBorder]}
                 activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel={item.title}
                 onPress={() => {
                   if (item.directNavigate) {
                     navigation.navigate(item.key);
@@ -489,7 +469,7 @@ const HomeScreen = ({ navigation }) => {
                 <MaterialCommunityIcons
                   name="chevron-right"
                   size={20}
-                  color="#94A3B8"
+                  color={colors.textMuted}
                 />
               </TouchableOpacity>
             );
@@ -500,12 +480,14 @@ const HomeScreen = ({ navigation }) => {
         <TouchableOpacity
           style={styles.logoutBottomButton}
           activeOpacity={0.78}
+          accessibilityRole="button"
+          accessibilityLabel="Keluar Akun"
           onPress={handleLogout}
         >
           <MaterialCommunityIcons
             name="logout"
             size={18}
-            color="#DC2626"
+            color={colors.errorDark}
           />
           <Text style={styles.logoutBottomText}>Keluar Akun (Logout)</Text>
         </TouchableOpacity>
@@ -526,6 +508,8 @@ const HomeScreen = ({ navigation }) => {
         <TouchableOpacity
           style={styles.mainKasirButton}
           activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel="Buka Kasir POS"
           onPress={() => navigateWithPin("Kasir")}
         >
           <View style={styles.mainKasirTextCol}>
@@ -583,7 +567,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: colors.cardBorder,
     gap: 10,
   },
   brandLeftRow: {
@@ -596,11 +580,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#FED7AA",
+    borderColor: colors.primaryBorder,
     overflow: "hidden",
   },
   storeAvatarPhoto: {
@@ -629,82 +613,42 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   tierBadge: {
-    backgroundColor: "#F1F5F9",
+    backgroundColor: colors.surfaceSubtle,
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
   },
   tierBadgePro: {
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     borderWidth: 1,
-    borderColor: "#FED7AA",
+    borderColor: colors.primaryBorder,
   },
   tierBadgeText: {
     fontFamily: fonts.bold,
-    fontSize: 9.5,
-    color: "#64748B",
-    letterSpacing: 0.5,
+    fontSize: 12,
+    color: colors.textBodySecondary,
+    letterSpacing: 0.4,
   },
   tierBadgeTextPro: {
-    color: colors.primary,
+    color: colors.primaryDark,
   },
   fnbTag: {
-    backgroundColor: "#0F172A",
-    paddingHorizontal: 6,
+    backgroundColor: colors.text,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
   },
   fnbTagText: {
     fontFamily: fonts.bold,
-    fontSize: 9,
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
+    fontSize: 12,
+    color: colors.onPrimary,
+    letterSpacing: 0.4,
   },
   statusDateText: {
     fontFamily: fonts.medium,
-    fontSize: 11.5,
+    fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
-  },
-  connStatusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  connStatusPillOnline: {
-    backgroundColor: "#ECFDF5",
-    borderColor: "#A7F3D0",
-  },
-  connStatusPillOffline: {
-    backgroundColor: "#FFFBEB",
-    borderColor: "#FDE68A",
-  },
-  connStatusPillSyncing: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
-  },
-  connStatusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  connStatusText: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 0.2,
-  },
-  connStatusTextOnline: {
-    color: "#047857",
-  },
-  connStatusTextOffline: {
-    color: "#B45309",
-  },
-  connStatusTextSyncing: {
-    color: colors.primary,
   },
 
   // ── Scroll Content ──
@@ -725,10 +669,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#FED7AA",
+    borderColor: colors.primaryBorder,
     padding: 14,
     marginBottom: 16,
   },
@@ -742,24 +686,26 @@ const styles = StyleSheet.create({
   offlineTitle: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: "#9A3412",
+    color: colors.primaryTextDark,
   },
   offlineSub: {
     fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#C2410C",
+    fontSize: 12,
+    color: colors.primaryDark,
     marginTop: 2,
   },
   offlineBtn: {
     backgroundColor: colors.primary,
+    minHeight: 40,
+    justifyContent: "center",
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 10,
   },
   offlineBtnText: {
     fontFamily: fonts.bold,
     fontSize: 12,
-    color: "#FFFFFF",
+    color: colors.onPrimary,
   },
 
   // ── Sales Hero Card (Warm Orange) ──
@@ -781,7 +727,7 @@ const styles = StyleSheet.create({
     width: 190,
     height: 190,
     borderRadius: 95,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: colors.heroDecorCircle,
     top: -60,
     right: -50,
   },
@@ -793,25 +739,29 @@ const styles = StyleSheet.create({
   },
   salesHeroTagText: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "rgba(255,255,255,0.86)",
-    letterSpacing: 0.8,
+    fontSize: 12,
+    color: colors.onPrimarySoft,
+    letterSpacing: 0.6,
   },
   privacyToggle: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.16)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    minHeight: 34,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: colors.heroControlBg,
   },
   privacyToggleText: {
     fontFamily: fonts.semiBold,
-    fontSize: 11,
-    color: "#FFFFFF",
+    fontSize: 12,
+    color: colors.onPrimary,
   },
   heroOmzetAmount: {
     fontFamily: fonts.extraBold,
     fontSize: 32,
-    color: "#FFFFFF",
+    color: colors.onPrimary,
     letterSpacing: -0.6,
     marginBottom: 18,
   },
@@ -821,21 +771,23 @@ const styles = StyleSheet.create({
   },
   metricBox: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.16)",
+    justifyContent: "space-between",
+    backgroundColor: colors.heroMetricBg,
     borderRadius: 14,
     paddingVertical: 11,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   metricLabel: {
     fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "rgba(255,255,255,0.8)",
-    marginBottom: 3,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.onPrimarySoft,
+    marginBottom: 4,
   },
   metricValue: {
     fontFamily: fonts.bold,
     fontSize: 15,
-    color: "#FFFFFF",
+    color: colors.onPrimary,
   },
 
   // ── Section Headings ──
@@ -863,10 +815,10 @@ const styles = StyleSheet.create({
     flexGrow: isTablet ? 0 : 1,
     backgroundColor: colors.surface,
     borderRadius: 20,
-    padding: 18,
+    padding: 16,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
-    shadowColor: "#0F172A",
+    borderColor: colors.cardBorder,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.03,
     shadowRadius: 10,
@@ -882,42 +834,42 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     borderWidth: 1,
-    borderColor: "#FFEDD5",
+    borderColor: colors.primaryBorderSoft,
     alignItems: "center",
     justifyContent: "center",
   },
   gridCardBadges: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
   },
   lockBadge: {
-    backgroundColor: "#F1F5F9",
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   lockBadgeText: {
     fontFamily: fonts.bold,
-    fontSize: 9,
-    color: "#64748B",
-    letterSpacing: 0.4,
+    fontSize: 12,
+    color: colors.textBodySecondary,
+    letterSpacing: 0.3,
   },
   proBadge: {
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.primaryContainer,
     borderWidth: 1,
-    borderColor: "#FED7AA",
+    borderColor: colors.primaryBorder,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   proBadgeText: {
     fontFamily: fonts.bold,
-    fontSize: 9,
-    letterSpacing: 0.5,
-    color: colors.primary,
+    fontSize: 12,
+    letterSpacing: 0.3,
+    color: colors.primaryDark,
   },
   gridCardTitle: {
     fontFamily: fonts.bold,
@@ -938,8 +890,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
-    shadowColor: "#0F172A",
+    borderColor: colors.cardBorder,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.03,
     shadowRadius: 8,
@@ -955,7 +907,7 @@ const styles = StyleSheet.create({
   },
   settingsRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: colors.cardBorder,
   },
   settingsTextCol: {
     flex: 1,
@@ -984,9 +936,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#FFF1F2",
+    backgroundColor: colors.errorContainer,
     borderWidth: 1,
-    borderColor: "#FECDD3",
+    borderColor: colors.errorBorder,
     borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 18,
@@ -996,7 +948,7 @@ const styles = StyleSheet.create({
   logoutBottomText: {
     fontFamily: fonts.bold,
     fontSize: 13.5,
-    color: "#DC2626",
+    color: colors.errorDark,
   },
 
   // ── Floating Bottom CTA: Buka Kasir POS ──
@@ -1008,22 +960,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 10,
     paddingBottom: Platform.OS === "ios" ? 28 : 16,
-    backgroundColor: "rgba(255, 253, 251, 0.94)",
+    backgroundColor: colors.floatingBarBg,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: colors.cardBorder,
   },
   mainKasirButton: {
     maxWidth: 680,
     width: "100%",
     alignSelf: "center",
-    backgroundColor: "#0F172A",
+    backgroundColor: colors.text,
     borderRadius: 18,
     paddingVertical: 15,
     paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    shadowColor: "#0F172A",
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.18,
     shadowRadius: 12,
@@ -1036,14 +988,14 @@ const styles = StyleSheet.create({
   mainKasirTitle: {
     fontFamily: fonts.extraBold,
     fontSize: 16,
-    color: "#FFFFFF",
+    color: colors.onPrimary,
     letterSpacing: -0.2,
     marginBottom: 2,
   },
   mainKasirSubtitle: {
     fontFamily: fonts.medium,
     fontSize: 12,
-    color: "rgba(255,255,255,0.72)",
+    color: colors.onDarkMuted,
   },
   mainKasirActionPill: {
     backgroundColor: colors.primary,
@@ -1054,7 +1006,7 @@ const styles = StyleSheet.create({
   mainKasirActionText: {
     fontFamily: fonts.bold,
     fontSize: 13,
-    color: "#FFFFFF",
+    color: colors.onPrimary,
   },
 });
 
