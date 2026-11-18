@@ -113,9 +113,9 @@ const GudangScreen = ({ navigation }) => {
     const matchCat =
       selectedCategory === "Semua" || p.category === selectedCategory;
     const matchSearch =
-      p.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(p.product_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.barcode &&
-        p.barcode.toLowerCase().includes(searchQuery.toLowerCase()));
+        String(p.barcode).toLowerCase().includes(searchQuery.toLowerCase()));
     let matchStock = true;
     if (stockFilter === "low") {
       matchStock =

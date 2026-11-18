@@ -10,13 +10,13 @@
     },
     "preview": {
       "distribution": "internal",
-      "channel": "production",
+      "channel": "preview",
       "android": {
         "buildType": "apk"
       }
     },
     "apk": {
-      "channel": "production",
+      "channel": "apk",
       "android": {
         "buildType": "apk"
       }

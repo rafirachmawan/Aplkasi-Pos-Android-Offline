@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "./supabaseClient";
-import { SUPABASE_URL } from "../config/supabaseConfig";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../config/supabaseConfig";
 import { LEGACY_GLOBAL_STORE_KEYS } from "./sessionStore";
 
 // Semua username disimpan sebagai email internal di Supabase Auth,
@@ -81,52 +81,64 @@ export async function signIn({ username, password }) {
 }
 
 export async function signOut() {
-  await clearStoreLocalSession();
-  let res;
+  let accessToken = null;
   try {
-    res = await Promise.race([
-      supabase.auth.signOut(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), 8000),
-      ),
-    ]);
-  } catch (e) {
-    res = { error: e };
+    const { data } = await supabase.auth.getSession();
+    accessToken = data?.session?.access_token || null;
+  } catch {
+    accessToken = null;
   }
-  if (res?.error) {
-    // Offline: sesi di server tidak bisa dicabut, tetapi sesi di HP ini
-    // tetap harus dihapus agar keluar akun benar-benar berlaku.
-    try {
-      const ref = (String(SUPABASE_URL).match(/^https?:\/\/([^./]+)/) || [])[1];
-      if (ref) {
-        const key = `sb-${ref}-auth-token`;
-        await AsyncStorage.multiRemove([key, `${key}-user`, `${key}-code-verifier`]);
-      }
-    } catch (err) {
-      console.warn("Gagal menghapus sesi lokal:", err);
+
+  await clearStoreLocalSession();
+  try {
+    const ref = (String(SUPABASE_URL).match(/^https?:\/\/([^./]+)/) || [])[1];
+    if (ref) {
+      const key = `sb-${ref}-auth-token`;
+      await AsyncStorage.multiRemove([key, `${key}-user`, `${key}-code-verifier`]);
     }
-    res = await supabase.auth.signOut({ scope: "local" });
+  } catch (err) {
+    console.warn("Gagal menghapus sesi lokal:", err);
   }
+
+  // Keluar lokal seketika agar mode offline tidak menggantung menunggu timeout jaringan.
+  const res = await supabase.auth.signOut({ scope: "local" });
+
+  // Cabut token sesi di server secara best-effort di latar belakang bila online.
+  if (accessToken) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal: controller.signal,
+    })
+      .catch(() => {})
+      .finally(() => clearTimeout(timer));
+  }
+
   return res;
 }
 
 // Profile akun + toko milik user yang sedang login.
 export async function getProfile() {
-  let res = await supabase
-    .from("profiles")
-    .select("id, username, role, store_id, stores(id, store_name, security_pin)")
-    .single();
+  const selectVariants = [
+    "id, username, role, store_id, stores(id, store_name, security_pin, security_pin_hash)",
+    "id, username, role, store_id, stores(id, store_name, security_pin)",
+    "id, username, role, store_id, stores(id, store_name)",
+  ];
 
-  if (res.error) {
-    // Fallback jika kolom security_pin belum ada di schema cache
-    res = await supabase
-      .from("profiles")
-      .select("id, username, role, store_id, stores(id, store_name)")
-      .single();
+  let lastRes = null;
+  for (const cols of selectVariants) {
+    lastRes = await supabase.from("profiles").select(cols).single();
+    if (!lastRes.error) {
+      return lastRes.data;
+    }
   }
 
-  if (res.error) throw res.error;
-  return res.data;
+  throw lastRes.error;
 }
 
 // Ganti nama toko di cloud (terbaca oleh semua HP toko yang sama).

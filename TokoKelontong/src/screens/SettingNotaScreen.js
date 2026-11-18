@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useRef } from "react";
 import {
   View,
   Text,
@@ -27,9 +27,16 @@ import {
   resolveReceiptProfile,
 } from "../utils/receiptGenerator";
 import {
+  PAPER_SIZE_OPTIONS,
+  getPaperSpec,
+  normalizePaperSize,
+} from "../utils/helpers";
+import {
   isPrinterConfigured,
   isBluetoothPrintingSupported,
   printReceiptViaBluetooth,
+  getSavedPaperSize,
+  savePaperSize,
 } from "../utils/bluetoothPrinter";
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
@@ -77,6 +84,9 @@ const SettingNotaScreen = ({ navigation }) => {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [btPrinterReady, setBtPrinterReady] = useState(false);
+  const [paperSize, setPaperSize] = useState("58mm");
+  const [paperSaveNotice, setPaperSaveNotice] = useState(false);
+  const paperTimerRef = useRef(null);
 
   // Tier langganan toko. Gratis = template nota standar (MarketPos, tanpa alamat/telepon/custom footer).
   const plan = usePlan();
@@ -91,20 +101,43 @@ const SettingNotaScreen = ({ navigation }) => {
   }, [isReadOnly]);
 
   const effectivePreviewProfile = resolveReceiptProfile(
-    { storeName, storeAddress, storeContact, footerMessage },
+    { storeName, storeAddress, storeContact, footerMessage, paperSize },
     plan.isPro,
   );
+  const activePaperSpec = getPaperSpec(paperSize);
 
   const handleLockedTap = () => {
     if (isReadOnly) setShowLockModal(true);
   };
 
+  const handleSelectPaperSize = async (nextId) => {
+    const normalized = normalizePaperSize(nextId);
+    setPaperSize(normalized);
+    try {
+      await savePaperSize(normalized);
+      setPaperSaveNotice(true);
+      if (paperTimerRef.current) clearTimeout(paperTimerRef.current);
+      paperTimerRef.current = setTimeout(() => setPaperSaveNotice(false), 2200);
+    } catch (e) {
+      Alert.alert(
+        "Gagal Menyimpan",
+        "Ukuran kertas printer gagal disimpan: " + (e?.message || ""),
+      );
+    }
+  };
+
   useEffect(() => {
+    getSavedPaperSize()
+      .then(setPaperSize)
+      .catch(() => setPaperSize("58mm"));
     if (isBluetoothPrintingSupported()) {
       isPrinterConfigured()
         .then(setBtPrinterReady)
         .catch(() => setBtPrinterReady(false));
     }
+    return () => {
+      if (paperTimerRef.current) clearTimeout(paperTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -250,6 +283,7 @@ const SettingNotaScreen = ({ navigation }) => {
         storeContact: storeContact.trim(),
         footerMessage: footerMessage.trim(),
         name: trimmedName,
+        paperSize: normalizePaperSize(paperSize),
       };
 
       if (profileKey) {
@@ -303,7 +337,7 @@ const SettingNotaScreen = ({ navigation }) => {
     ];
 
     const profile = resolveReceiptProfile(
-      { storeName, storeAddress, storeContact, footerMessage },
+      { storeName, storeAddress, storeContact, footerMessage, paperSize },
       plan.isPro,
     );
 
@@ -348,13 +382,97 @@ const SettingNotaScreen = ({ navigation }) => {
               color={colors.warningTextDark}
             />
             <Text style={styles.readOnlyBannerText}>
-              Paket Gratis: nota memakai nama MarketPos dengan pesan penutup
-              bawaan. Alamat toko, no. telepon, dan pesan khusus tersedia di
+              Paket Gratis: ukuran kertas printer bebas diatur gratis. Nama toko
+              (MarketPos), alamat, no. telepon, & pesan khusus tersedia di
               paket Pro.
             </Text>
             <Text style={styles.readOnlyBannerAction}>Upgrade</Text>
           </TouchableOpacity>
         )}
+
+        {/* ── KARTU 0: UKURAN KERTAS PRINTER (GRATIS UNTUK SEMUA PAKET) ── */}
+        <View style={styles.formCard}>
+          <View style={styles.cardHeaderRowBetween}>
+            <Text style={styles.cardHeaderTitle}>UKURAN KERTAS PRINTER</Text>
+            <View style={styles.freeChip}>
+              <MaterialCommunityIcons
+                name={paperSaveNotice ? "check-circle" : "check-circle-outline"}
+                size={13}
+                color={colors.successDark}
+              />
+              <Text style={styles.freeChipText}>
+                {paperSaveNotice ? "Tersimpan" : "Gratis"}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.paperHelperText}>
+            Pilih lebar kertas printer thermal atau dokumen A4/PDF. Otomatis
+            tersimpan di perangkat untuk Kasir & Laporan.
+          </Text>
+
+          <View style={styles.paperOptionRow} accessibilityRole="radiogroup">
+            {PAPER_SIZE_OPTIONS.map((opt) => {
+              const isSelected = paperSize === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[
+                    styles.paperOptionBtn,
+                    isSelected && styles.paperOptionBtnActive,
+                  ]}
+                  onPress={() => handleSelectPaperSize(opt.id)}
+                  activeOpacity={0.8}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
+                  accessibilityLabel={`Pilih ukuran kertas ${opt.shortLabel} (${opt.colLabel})`}
+                >
+                  <Text
+                    style={[
+                      styles.paperOptionLabel,
+                      isSelected && styles.paperOptionLabelActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {opt.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.paperOptionCol,
+                      isSelected && styles.paperOptionColActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {opt.colLabel}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View
+            style={[
+              styles.paperDetailBox,
+              paperSaveNotice && styles.paperDetailBoxSaved,
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={paperSaveNotice ? "check-circle" : "printer-pos"}
+              size={18}
+              color={paperSaveNotice ? colors.successDark : colors.primaryDark}
+            />
+            <Text
+              style={[
+                styles.paperDetailText,
+                paperSaveNotice && styles.paperDetailTextSaved,
+              ]}
+            >
+              {paperSaveNotice
+                ? `Ukuran ${activePaperSpec.shortLabel} tersimpan & langsung aktif.`
+                : `${activePaperSpec.shortLabel} — ${activePaperSpec.desc}`}
+            </Text>
+          </View>
+        </View>
 
         {/* ── KARTU 1: IDENTITAS TOKO ── */}
         <View style={styles.formCard}>
@@ -676,10 +794,20 @@ const SettingNotaScreen = ({ navigation }) => {
           </View>
 
           <Text style={styles.previewSubtext}>
-            Tampilan nyata struk belanja di kertas printer kasir:
+            Tampilan nyata struk kasir · Ukuran aktif:{" "}
+            <Text style={styles.previewPaperTag}>
+              {activePaperSpec.shortLabel} ({activePaperSpec.colLabel})
+            </Text>
           </Text>
 
-          <View style={styles.receiptPaper}>
+          <View
+            style={[
+              styles.receiptPaper,
+              paperSize === "58mm" && styles.receiptPaper58,
+              paperSize === "80mm" && styles.receiptPaper80,
+              paperSize === "a4" && styles.receiptPaperA4,
+            ]}
+          >
             <Text style={styles.receiptStoreName}>
               {effectivePreviewProfile.storeName}
             </Text>
@@ -966,6 +1094,93 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.warningTextDark,
   },
+  freeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.successContainer,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  freeChipText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.successDark,
+  },
+  paperHelperText: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textBodySecondary,
+    marginBottom: 12,
+  },
+  paperOptionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  paperOptionBtn: {
+    flex: 1,
+    minHeight: 54,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paperOptionBtnActive: {
+    backgroundColor: colors.primaryContainer,
+    borderColor: colors.primary,
+  },
+  paperOptionLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.text,
+  },
+  paperOptionLabelActive: {
+    color: colors.primaryTextDark,
+  },
+  paperOptionCol: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  paperOptionColActive: {
+    color: colors.primaryDark,
+  },
+  paperDetailBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 10,
+  },
+  paperDetailBoxSaved: {
+    backgroundColor: colors.successContainer,
+    borderColor: colors.successBorder,
+  },
+  paperDetailText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textDark,
+  },
+  paperDetailTextSaved: {
+    color: colors.successDark,
+    fontFamily: fonts.semiBold,
+  },
   addPresetBtnLocked: {
     backgroundColor: colors.surfaceSubtle,
     borderColor: colors.border,
@@ -1129,9 +1344,15 @@ const styles = StyleSheet.create({
   // ── Live Receipt Preview (Authentic Thermal Paper) ──
   previewSubtext: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    color: "#64748B",
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
     marginBottom: 10,
+  },
+  previewPaperTag: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.primaryDark,
   },
   receiptPaper: {
     backgroundColor: "#FFFFFF",
@@ -1144,6 +1365,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 1,
+  },
+  receiptPaper58: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 268,
+  },
+  receiptPaper80: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 360,
+  },
+  receiptPaperA4: {
+    width: "100%",
+    borderTopWidth: 4,
+    borderTopColor: colors.info,
   },
   receiptStoreName: {
     fontSize: 15,

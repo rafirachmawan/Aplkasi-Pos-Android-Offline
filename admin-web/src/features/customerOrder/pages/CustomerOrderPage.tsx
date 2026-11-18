@@ -75,7 +75,35 @@ export function CustomerOrderPage() {
         setLoading(true)
         setErrorMsg(null)
 
-        // 1. Ambil info toko
+        // 1. Utamakan RPC menu publik (tidak membocorkan security_pin / capital_price).
+        //    Fallback ke query langsung hanya bila RPC v11 belum dipasang di Supabase.
+        const rpcRes = await customerSupabase.rpc('get_public_store_menu', {
+          p_store_id: storeId,
+        })
+
+        const rpcErrCode = String(rpcRes.error?.code || '')
+        const rpcErrMsg = String(rpcRes.error?.message || '').toLowerCase()
+        const isMissingRpc =
+          rpcErrCode === 'PGRST202' ||
+          rpcErrCode === '42883' ||
+          rpcErrMsg.includes('get_public_store_menu')
+
+        if (!rpcRes.error && rpcRes.data?.store) {
+          setStoreInfo(rpcRes.data.store as StoreInfo)
+          setProducts((rpcRes.data.products as ProductItem[]) || [])
+          return
+        }
+
+        if (!isMissingRpc) {
+          if (rpcRes.error) {
+            console.error('rpc menu error:', rpcRes.error)
+          }
+          setErrorMsg('Toko tidak ditemukan atau tautan meja tidak valid.')
+          setLoading(false)
+          return
+        }
+
+        // Fallback query langsung untuk kompatibilitas sebelum migration_v11
         const { data: store, error: storeErr } = await customerSupabase
           .from('stores')
           .select('id, store_name, qris_image_url')
@@ -90,7 +118,6 @@ export function CustomerOrderPage() {
 
         setStoreInfo(store as StoreInfo)
 
-        // 2. Ambil produk toko
         const { data: prods, error: prodErr } = await customerSupabase
           .from('products')
           .select('id, product_name, selling_price, category, image_uri, stock_quantity')
@@ -243,34 +270,67 @@ export function CustomerOrderPage() {
         uploadedProofUrl = urlData.publicUrl
       }
 
-      // 2. Simpan order ke table_orders
-      const orderPayload = {
-        store_id: storeId,
-        table_number: tableNumber,
-        customer_name: customerName.trim(),
-        customer_phone: customerPhone.trim(),
-        total_amount: cartTotalPrice,
-        payment_method: paymentMethod,
-        payment_proof_url: uploadedProofUrl,
-        status: 'pending',
-        items: cartList.map((item) => ({
-          product_id: item.product.id,
-          name: item.product.product_name,
-          price: item.product.selling_price,
-          quantity: item.quantity,
-          notes: item.notes.trim(),
-        })),
-        notes: generalNotes.trim(),
-      }
+      // 2. Utamakan RPC submit_public_table_order (hitung harga di server, paksa status 'pending').
+      //    Fallback ke insert langsung hanya bila RPC v11 belum dipasang.
+      const rpcItems = cartList.map((item) => ({
+        product_id: item.product.id,
+        name: item.product.product_name,
+        price: item.product.selling_price,
+        quantity: item.quantity,
+        notes: item.notes.trim(),
+      }))
 
-      const { data: insertedOrder, error: insertError } = await customerSupabase
-        .from('table_orders')
-        .insert(orderPayload)
-        .select()
-        .single()
+      const rpcSubmit = await customerSupabase.rpc('submit_public_table_order', {
+        p_store_id: storeId,
+        p_table_number: String(tableNumber || '1'),
+        p_customer_name: customerName.trim(),
+        p_customer_phone: customerPhone.trim(),
+        p_payment_method: paymentMethod,
+        p_payment_proof_url: uploadedProofUrl,
+        p_items: rpcItems,
+        p_notes: generalNotes.trim(),
+      })
 
-      if (insertError) {
-        throw new Error('Gagal mengirimkan pesanan: ' + insertError.message)
+      let insertedOrder: any = null
+      if (!rpcSubmit.error && rpcSubmit.data) {
+        insertedOrder = rpcSubmit.data
+      } else {
+        const errCode = String(rpcSubmit.error?.code || '')
+        const errMsg = String(rpcSubmit.error?.message || '').toLowerCase()
+        const isMissingRpc =
+          errCode === 'PGRST202' ||
+          errCode === '42883' ||
+          errMsg.includes('submit_public_table_order')
+
+        if (!isMissingRpc) {
+          throw new Error(
+            'Gagal mengirimkan pesanan: ' + (rpcSubmit.error?.message || 'Error server'),
+          )
+        }
+
+        const orderPayload = {
+          store_id: storeId,
+          table_number: tableNumber,
+          customer_name: customerName.trim(),
+          customer_phone: customerPhone.trim(),
+          total_amount: cartTotalPrice,
+          payment_method: paymentMethod,
+          payment_proof_url: uploadedProofUrl,
+          status: 'pending',
+          items: rpcItems,
+          notes: generalNotes.trim(),
+        }
+
+        const { data: fallbackOrder, error: insertError } = await customerSupabase
+          .from('table_orders')
+          .insert(orderPayload)
+          .select()
+          .single()
+
+        if (insertError) {
+          throw new Error('Gagal mengirimkan pesanan: ' + insertError.message)
+        }
+        insertedOrder = fallbackOrder
       }
 
       // Berhasil

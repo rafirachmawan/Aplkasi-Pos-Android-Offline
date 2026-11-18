@@ -1,6 +1,8 @@
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { Alert, Platform } from "react-native";
+import { Alert } from "react-native";
+import qrcode from "qrcode-generator";
+import { escapeHtml } from "./helpers";
 import {
   isBluetoothPrintingSupported,
   printTableQRCodeViaBluetooth,
@@ -55,21 +57,29 @@ export const generateAndShareTableQRPdf = async ({
     const tablesCount = Math.max(1, Math.min(100, parseInt(totalTables, 10) || 10));
     const cardsHtml = [];
 
+    const safeStoreName = escapeHtml(storeName || "MarketPos Resto");
+    const safeDocTitleStore = escapeHtml(storeName || "MarketPos");
+
     for (let i = 1; i <= tablesCount; i++) {
       const url = getTableOrderUrl(storeId, i, baseUrl);
-      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&format=png&data=${encodeURIComponent(
-        url
-      )}`;
+      const qr = qrcode(0, "M");
+      qr.addData(url);
+      qr.make();
+      const qrSvg = qr.createSvgTag({
+        cellSize: 5,
+        margin: 2,
+        scalable: true,
+      });
 
       cardsHtml.push(`
         <div class="qr-card">
-          <div class="store-badge">${storeName || "MarketPos Resto"}</div>
+          <div class="store-badge">${safeStoreName}</div>
           <div class="table-title">MEJA ${i}</div>
           <div class="qr-wrapper">
-            <img src="${qrApiUrl}" class="qr-img" alt="QR Meja ${i}" />
+            ${qrSvg}
           </div>
-          <div class="instruction">Scan kamera HP untuk pesan menu & bayar</div>
-          <div class="url-text">${url}</div>
+          <div class="instruction">Scan kamera HP untuk pesan menu &amp; bayar</div>
+          <div class="url-text">${escapeHtml(url)}</div>
         </div>
       `);
     }
@@ -79,7 +89,7 @@ export const generateAndShareTableQRPdf = async ({
       <html>
       <head>
         <meta charset="utf-8" />
-        <title>Barcode QR Meja - ${storeName || "MarketPos"}</title>
+        <title>Barcode QR Meja - ${safeDocTitleStore}</title>
         <style>
           @page {
             size: A4;
@@ -154,7 +164,8 @@ export const generateAndShareTableQRPdf = async ({
             margin: 6px 0;
             display: inline-block;
           }
-          .qr-img {
+          .qr-img,
+          .qr-wrapper svg {
             width: 160px;
             height: 160px;
             display: block;
@@ -176,7 +187,7 @@ export const generateAndShareTableQRPdf = async ({
       </head>
       <body>
         <div class="header-doc">
-          <div class="doc-title">${storeName || "MarketPos Resto"} - QR Code Meja</div>
+          <div class="doc-title">${safeStoreName} - QR Code Meja</div>
           <div class="doc-subtitle">Gunting dan letakkan kartu QR ini di masing-masing meja pelanggan</div>
         </div>
         <div class="grid">

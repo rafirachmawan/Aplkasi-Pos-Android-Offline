@@ -260,13 +260,22 @@ const LaporanScreen = ({ navigation, route }) => {
       return;
     }
     try {
-      const data = await TransactionRepository.getFullReportForExport();
+      const datePattern =
+        activeTab === "Harian"
+          ? getDateStr()
+          : activeTab === "Bulanan"
+            ? getMonthStr()
+            : "";
+      const data = await TransactionRepository.getFullReportForExport(datePattern);
       if (!data || data.length === 0) {
-        Alert.alert("Info", "Tidak ada data untuk diekspor.");
+        Alert.alert("Info", "Tidak ada data untuk diekspor pada periode ini.");
         return;
       }
 
-      const filename = `Laporan_Semua_Transaksi_${getDateStr().replace(/-/g, "")}.csv`;
+      const suffix = datePattern
+        ? datePattern.replace(/-/g, "")
+        : "Semua";
+      const filename = `Laporan_${activeTab}_${suffix}.csv`;
       const result = await exportToCSV(data, filename);
 
       if (result.success) {
@@ -296,7 +305,15 @@ const LaporanScreen = ({ navigation, route }) => {
     try {
       const storeId = profile?.store_id || profile?.stores?.id || null;
       const scoped = await getScopedStoreProfile(storeId);
-      if (Object.keys(scoped).length > 0) {
+      const hasSavedProfile = Boolean(
+        scoped.storeName ||
+          scoped.name ||
+          scoped.storeAddress ||
+          scoped.storeContact ||
+          scoped.footerMessage ||
+          scoped.printerAddress,
+      );
+      if (hasSavedProfile) {
         return resolveReceiptProfile(scoped, plan.isPro);
       }
       const nameKey = getStoreNameKey(storeId);
@@ -308,7 +325,13 @@ const LaporanScreen = ({ navigation, route }) => {
       const logo = logoKey ? await AsyncStorage.getItem(logoKey) : null;
       const printerAddress = await AsyncStorage.getItem("printerAddress");
       return resolveReceiptProfile(
-        { storeName, name: storeName, logo, printerAddress },
+        {
+          storeName,
+          name: storeName,
+          logo,
+          printerAddress,
+          paperSize: scoped.paperSize,
+        },
         plan.isPro,
       );
     } catch {

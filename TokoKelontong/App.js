@@ -15,6 +15,7 @@ import { AuthProvider } from "./src/context/AuthContext";
 import AppNavigator from "./src/navigation/AppNavigator";
 import CustomAlertHost from "./src/components/CustomAlertHost";
 import StartupSplashView from "./src/components/StartupSplashView";
+import ErrorBoundary from "./src/components/ErrorBoundary";
 import { colors } from "./src/theme/colors";
 
 const theme = {
@@ -48,17 +49,19 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <AppProvider>
-          <PaperProvider theme={theme}>
-            <NavigationContainer>
-              <AppNavigator />
-            </NavigationContainer>
-            <CustomAlertHost />
-          </PaperProvider>
-        </AppProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <AppProvider>
+            <PaperProvider theme={theme}>
+              <NavigationContainer>
+                <AppNavigator />
+              </NavigationContainer>
+              <CustomAlertHost />
+            </PaperProvider>
+          </AppProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

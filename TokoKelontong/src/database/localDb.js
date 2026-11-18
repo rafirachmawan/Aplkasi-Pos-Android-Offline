@@ -241,6 +241,32 @@ async function getPendingQtyMap(db, storeId) {
   return map;
 }
 
+/**
+ * Mengurangi stok produk server dengan transaksi outbox lokal yang belum
+ * tersinkron (pending / needs_review) agar stok di Gudang selaras dengan Kasir.
+ */
+export async function applyPendingStockDeductions(storeId, products) {
+  if (!storeId || !Array.isArray(products) || products.length === 0) {
+    return products || [];
+  }
+  try {
+    const db = await getDb();
+    const pendingMap = await getPendingQtyMap(db, storeId);
+    if (Object.keys(pendingMap).length === 0) return products;
+    return products.map((p) => {
+      if (!p || Number(p.min_stock_threshold) < 0) return p;
+      const pendingQty = pendingMap[p.id] || 0;
+      if (!pendingQty) return p;
+      return {
+        ...p,
+        stock_quantity: (Number(p.stock_quantity) || 0) - pendingQty,
+      };
+    });
+  } catch {
+    return products;
+  }
+}
+
 function rowToProduct(row, pendingMap) {
   let p;
   try {

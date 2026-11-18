@@ -5,26 +5,32 @@ import { supabase } from "./supabaseClient";
  * Aman terhadap kondisi offline dan error schema.
  */
 
-export const fetchPendingTableOrders = async (storeId) => {
+async function fetchTableOrdersByStatuses(storeId, statuses, label) {
   if (!storeId) return [];
   try {
     const { data, error } = await supabase
       .from("table_orders")
       .select("*")
       .eq("store_id", storeId)
-      .eq("status", "pending")
+      .in("status", statuses)
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.warn("fetchPendingTableOrders warning:", error.message);
+      console.warn(`${label} warning:`, error.message);
       return [];
     }
     return data || [];
   } catch (err) {
-    console.warn("fetchPendingTableOrders error:", err.message);
+    console.warn(`${label} error:`, err.message);
     return [];
   }
-};
+}
+
+export const fetchActiveTableOrders = (storeId) =>
+  fetchTableOrdersByStatuses(storeId, ["pending", "accepted"], "fetchActiveTableOrders");
+
+export const fetchPendingTableOrders = (storeId) =>
+  fetchTableOrdersByStatuses(storeId, ["pending"], "fetchPendingTableOrders");
 
 export const updateTableOrderStatus = async (orderId, newStatus) => {
   if (!orderId) return { success: false, error: "Order ID missing" };

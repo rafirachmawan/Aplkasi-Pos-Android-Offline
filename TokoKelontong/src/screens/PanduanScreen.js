@@ -112,11 +112,11 @@ const PanduanScreen = () => {
             },
             {
               subtitle: "Filter Periode",
-              desc: "Pilih filter Tanggal, Bulan, atau Tahun untuk menganalisis performa toko pada periode tertentu."
+              desc: "Pilih filter Harian atau Bulanan untuk menganalisis performa toko pada periode tertentu."
             },
             {
-              subtitle: "Grafik Visual & Produk Terlaris",
-              desc: "Grafik tren transaksi dan daftar produk paling laku membantu Anda menentukan strategi belanja stok barang."
+              subtitle: "Produk Terlaris",
+              desc: "Daftar produk paling laku membantu Anda menentukan strategi belanja stok barang."
             }
           ]}
         />
@@ -151,14 +151,14 @@ const PanduanScreen = () => {
         {/* 4. Laporan Penjualan */}
         <GuideSection
           title="Laporan & Ekspor Excel"
-          badge="Data SQL"
+          badge="Rekap"
           icon="file-document-outline"
           iconBg={colors.iconBg}
           iconColor={colors.iconColor}
           content={[
             {
               subtitle: "Rekap Harian & Bulanan",
-              desc: "Lihat rekapitulasi total Omset dan Laba Bersih yang dihitung secara presisi menggunakan agregasi SQL."
+              desc: "Lihat rekapitulasi total Omset dan Laba Bersih dari data transaksi cloud maupun transaksi offline di HP."
             },
             {
               subtitle: "Cetak Ulang Struk Masa Lalu",

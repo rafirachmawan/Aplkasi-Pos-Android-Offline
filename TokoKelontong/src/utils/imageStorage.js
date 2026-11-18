@@ -120,6 +120,52 @@ export const uploadProductImage = async (localUri, folder = "products") => {
 };
 
 /**
+ * Mengekstrak path objek di dalam bucket publik Supabase Storage.
+ */
+export const extractStorageObjectPath = (
+  publicUrl,
+  bucketName = DEFAULT_BUCKET,
+) => {
+  const urlStr = String(publicUrl || "").trim();
+  if (!urlStr || !urlStr.startsWith(SUPABASE_URL)) return null;
+  const marker = `/storage/v1/object/public/${bucketName}/`;
+  const idx = urlStr.indexOf(marker);
+  if (idx === -1) return null;
+  const pathPart = urlStr.slice(idx + marker.length).split("?")[0];
+  return pathPart ? decodeURIComponent(pathPart) : null;
+};
+
+/**
+ * Menghapus file foto lama di bucket product-images secara aman (best-effort)
+ * hanya jika tidak lagi dipakai oleh baris produk mana pun di database.
+ */
+export const deleteProductImageByUrl = async (publicUrl) => {
+  try {
+    const objectPath = extractStorageObjectPath(publicUrl, DEFAULT_BUCKET);
+    if (!objectPath) return false;
+
+    const { count, error: countErr } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("image_uri", publicUrl);
+
+    if (countErr || (count ?? 0) > 0) return false;
+
+    const { error: rmErr } = await supabase.storage
+      .from(DEFAULT_BUCKET)
+      .remove([objectPath]);
+    if (rmErr) {
+      console.warn("Gagal bersihkan foto lama di storage:", rmErr.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("Cleanup foto storage dilewati:", err?.message || err);
+    return false;
+  }
+};
+
+/**
  * Apakah URI ini URL cloud (bukan file lokal)?
  */
 export const isCloudImageUri = (uri) =>

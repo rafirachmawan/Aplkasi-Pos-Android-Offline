@@ -35,7 +35,6 @@ import {
 } from "../services/sessionStore";
 import {
   changePassword,
-  signOut,
   updateStoreName,
 } from "../services/authService";
 import { getDeviceId } from "../services/licenseService";
@@ -118,7 +117,6 @@ const PengaturanScreen = ({ navigation }) => {
   const [logoUri, setLogoUri] = useState(state.storeLogo || null);
   const [saved, setSaved] = useState(false);
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
-  const [pendingSource, setPendingSource] = useState(null);
 
   // Account & security states
   const { profile, refreshProfile } = useAuth();

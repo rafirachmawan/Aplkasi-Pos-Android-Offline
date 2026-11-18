@@ -88,7 +88,13 @@ const DashboardScreen = ({ navigation }) => {
     try {
       const products = await ProductRepository.getAllProducts();
       setTotalProducts(products.length);
-      const lowStock = await ProductRepository.getLowStockProducts();
+      const lowStock = products
+        .filter(
+          (p) =>
+            Number(p.min_stock_threshold) >= 0 &&
+            (Number(p.stock_quantity) || 0) <= (p.min_stock_threshold ?? 5),
+        )
+        .sort((a, b) => (Number(a.stock_quantity) || 0) - (Number(b.stock_quantity) || 0));
       setLowStockProducts(lowStock);
 
       let pattern = "";

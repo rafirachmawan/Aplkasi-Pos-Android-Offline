@@ -24,6 +24,7 @@ import { syncNow } from "../services/syncService";
 import { useAuth } from "../context/AuthContext";
 import { colors, fonts } from "../theme/colors";
 import { encodeCode128 } from "../utils/barcode128";
+import { escapeHtml } from "../utils/helpers";
 import { uploadProductImage, isCloudImageUri } from "../utils/imageStorage";
 import {
   isPrinterConfigured,
@@ -146,7 +147,6 @@ const AddProductScreen = ({ navigation, route }) => {
 
   // Image Source Selection Modal state
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
-  const [pendingSource, setPendingSource] = useState(null);
 
   // Printer Bluetooth: tombol cetak langsung hanya tampil bila sudah diatur
   const [btPrinterReady, setBtPrinterReady] = useState(false);
@@ -333,16 +333,20 @@ const AddProductScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (existingProduct) {
       setBarcode(existingProduct.barcode || "");
-      setProductName(existingProduct.product_name);
-      setCapitalPrice(existingProduct.capital_price.toLocaleString("id-ID"));
-      setSellingPrice(existingProduct.selling_price.toLocaleString("id-ID"));
+      setProductName(String(existingProduct.product_name || ""));
+      setCapitalPrice(
+        Number(existingProduct.capital_price ?? 0).toLocaleString("id-ID"),
+      );
+      setSellingPrice(
+        Number(existingProduct.selling_price ?? 0).toLocaleString("id-ID"),
+      );
       const isUnlimited = Number(existingProduct.min_stock_threshold) < 0;
       setUseStockManagement(!isUnlimited);
       setStockQuantity(
-        isUnlimited ? "" : existingProduct.stock_quantity.toString(),
+        isUnlimited ? "" : String(existingProduct.stock_quantity ?? 0),
       );
       setMinStock(
-        isUnlimited ? "5" : existingProduct.min_stock_threshold.toString(),
+        isUnlimited ? "5" : String(existingProduct.min_stock_threshold ?? 5),
       );
       setImageUri(existingProduct.image_uri || null);
       const prodUnit = existingProduct.unit || "pcs";
@@ -548,7 +552,7 @@ const AddProductScreen = ({ navigation, route }) => {
         <svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="80" style="max-width:280px; height:auto;">
           <rect width="${totalWidth}" height="80" fill="white"/>
           <g transform="translate(10,0)">${svgBars}</g>
-          <text x="${totalWidth / 2}" y="76" text-anchor="middle" font-size="10" font-family="monospace">${barcode}</text>
+          <text x="${totalWidth / 2}" y="76" text-anchor="middle" font-size="10" font-family="monospace">${escapeHtml(barcode)}</text>
         </svg>
       `;
 
@@ -556,7 +560,7 @@ const AddProductScreen = ({ navigation, route }) => {
         <html>
           <body style="margin:0;display:flex;justify-content:center;align-items:center;height:100vh;">
             <div style="text-align:center;border:1px solid #ccc;padding:16px;border-radius:8px;width:280px;">
-              <p style="font-size:14px;font-weight:bold;margin:0 0 8px;">${productName || "Produk"}</p>
+              <p style="font-size:14px;font-weight:bold;margin:0 0 8px;">${escapeHtml(productName || "Produk")}</p>
               ${svgString}
             </div>
           </body>

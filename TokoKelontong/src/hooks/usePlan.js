@@ -21,8 +21,8 @@ export default function usePlan() {
     });
     setStatus(getPlanStatus());
 
-    // Tarik plan terbaru dari server setiap layar dibuka.
-    void refreshPlan({ force: true });
+    // Segarkan plan bila interval minimum sudah lewat (hindari query ganda tiap buka layar).
+    void refreshPlan();
 
     const timer = setInterval(() => {
       setStatus(getPlanStatus());

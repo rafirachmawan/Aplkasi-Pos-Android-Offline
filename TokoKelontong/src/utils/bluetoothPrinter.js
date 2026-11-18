@@ -8,11 +8,30 @@
 // dan baru aktif pada development build / APK.
 import { Platform, PermissionsAndroid, NativeModules } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  PRINTER_PAPER_SIZE_KEY,
+  normalizePaperSize,
+  getPaperSpec,
+} from "./helpers";
 
 const PRINTER_ADDRESS_KEY = "printerAddress";
 const PRINTER_NAME_KEY = "printerName";
-const LINE_WIDTH = 32; // lebar kolom printer thermal 58mm
 const DEFAULT_PRINTER_LABEL = "Printer Bluetooth";
+
+export const getSavedPaperSize = async () => {
+  try {
+    const saved = await AsyncStorage.getItem(PRINTER_PAPER_SIZE_KEY);
+    return normalizePaperSize(saved);
+  } catch {
+    return "58mm";
+  }
+};
+
+export const savePaperSize = async (paperSize) => {
+  const normalized = normalizePaperSize(paperSize);
+  await AsyncStorage.setItem(PRINTER_PAPER_SIZE_KEY, normalized);
+  return normalized;
+};
 
 // ── Pemuatan library native secara lazy ─────────────────────────────────────
 let cachedLib = null;
@@ -45,17 +64,40 @@ export const isBluetoothPrintingSupported = () =>
 
 const rp = (n) => "Rp" + Number(n || 0).toLocaleString("id-ID");
 
-const dash = () => "-".repeat(LINE_WIDTH);
+const createLineFormatter = (cols = 32) => {
+  const dash = () => "-".repeat(cols);
 
-// Susun baris "kiri .... kanan" selebar 32 kolom.
-const row = (left, right) => {
-  const l = String(left ?? "");
-  const r = String(right ?? "");
-  const space = LINE_WIDTH - l.length - r.length;
-  if (space < 1) {
-    return l.slice(0, Math.max(1, LINE_WIDTH - r.length - 1)) + " " + r;
-  }
-  return l + " ".repeat(space) + r;
+  // Susun baris "kiri .... kanan" sesuai lebar kolom kertas (32 atau 48).
+  const row = (left, right) => {
+    const l = String(left ?? "");
+    const r = String(right ?? "");
+    const space = cols - l.length - r.length;
+    if (space < 1) {
+      return l.slice(0, Math.max(1, cols - r.length - 1)) + " " + r;
+    }
+    return l + " ".repeat(space) + r;
+  };
+
+  return { cols, dash, row };
+};
+
+const resolveBluetoothSpec = async (explicitPaperSize = null) => {
+  const rawSize =
+    explicitPaperSize != null ? explicitPaperSize : await getSavedPaperSize();
+  const spec = getPaperSpec(rawSize);
+  return {
+    ...spec,
+    ...createLineFormatter(spec.bluetoothCols),
+  };
+};
+
+const prepareBluetoothPrint = async (explicitPaperSize = null) => {
+  const lib = await connectToPrinter();
+  const spec = await resolveBluetoothSpec(explicitPaperSize);
+  const printer = lib.BluetoothEscposPrinter;
+  await printer.printerInit();
+  await printer.setWidth(spec.bluetoothDots);
+  return { printer, spec, dash: spec.dash, row: spec.row };
 };
 
 const formatLocalDateTime = (iso) => {
@@ -317,11 +359,10 @@ export const connectToPrinter = async () => {
 export const printTestViaBluetooth = async ({
   storeName = "MarketPos",
   printerName = DEFAULT_PRINTER_LABEL,
+  paperSize = null,
 } = {}) => {
-  const lib = await connectToPrinter();
-  const printer = lib.BluetoothEscposPrinter;
-  await printer.printerInit();
-  await printer.setWidth(384);
+  const { printer, spec, dash, row } = await prepareBluetoothPrint(paperSize);
+  const maxValLen = Math.max(22, spec.bluetoothCols - 10);
 
   await printer.printerAlign(printer.ALIGN.CENTER);
   await printer.setBlob(1);
@@ -332,12 +373,13 @@ export const printTestViaBluetooth = async ({
 
   await printer.printerAlign(printer.ALIGN.LEFT);
   await printer.printText(row("Status", "Terhubung & Siap") + "\n", TEXT_OPTS);
+  await printer.printText(row("Kertas", spec.shortLabel) + "\n", TEXT_OPTS);
   await printer.printText(
-    row("Toko", String(storeName || "MarketPos").slice(0, 22)) + "\n",
+    row("Toko", String(storeName || "MarketPos").slice(0, maxValLen)) + "\n",
     TEXT_OPTS,
   );
   await printer.printText(
-    row("Printer", String(printerName || DEFAULT_PRINTER_LABEL).slice(0, 22)) +
+    row("Printer", String(printerName || DEFAULT_PRINTER_LABEL).slice(0, maxValLen)) +
       "\n",
     TEXT_OPTS,
   );
@@ -357,10 +399,7 @@ const TEXT_OPTS = { encoding: "UTF-8", codepage: 0 };
 
 // Cetak nota transaksi langsung ke printer thermal.
 export const printReceiptViaBluetooth = async (tx, details, storeProfile = {}) => {
-  const lib = await connectToPrinter();
-  const printer = lib.BluetoothEscposPrinter;
-  await printer.printerInit();
-  await printer.setWidth(384); // 58mm = 384 dot
+  const { printer, dash, row } = await prepareBluetoothPrint(storeProfile?.paperSize);
 
   // ── Header toko ──
   await printer.printerAlign(printer.ALIGN.CENTER);
@@ -446,10 +485,7 @@ export const printReceiptViaBluetooth = async (tx, details, storeProfile = {}) =
 
 // Cetak struk dapur (Kitchen Ticket) khusus staf dapur / barista (TANPA HARGA).
 export const printKitchenTicketViaBluetooth = async (tx, details, storeProfile = {}) => {
-  const lib = await connectToPrinter();
-  const printer = lib.BluetoothEscposPrinter;
-  await printer.printerInit();
-  await printer.setWidth(384);
+  const { printer, dash, row } = await prepareBluetoothPrint(storeProfile?.paperSize);
 
   // Header dapur
   await printer.printerAlign(printer.ALIGN.CENTER);
@@ -508,11 +544,9 @@ export const printBarcodeLabelViaBluetooth = async ({
   barcode,
   productName,
   priceText,
+  paperSize = null,
 }) => {
-  const lib = await connectToPrinter();
-  const printer = lib.BluetoothEscposPrinter;
-  await printer.printerInit();
-  await printer.setWidth(384);
+  const { printer } = await prepareBluetoothPrint(paperSize);
 
   await printer.printerAlign(printer.ALIGN.CENTER);
   await printer.setBlob(1);
@@ -530,11 +564,10 @@ export const printTableQRCodeViaBluetooth = async ({
   storeName,
   tableNumber,
   url,
+  paperSize = null,
 }) => {
-  const lib = await connectToPrinter();
-  const printer = lib.BluetoothEscposPrinter;
-  await printer.printerInit();
-  await printer.setWidth(384);
+  const { printer, spec, dash } = await prepareBluetoothPrint(paperSize);
+  const qrSize = spec.bluetoothDots >= 576 ? 320 : 260;
 
   await printer.printerAlign(printer.ALIGN.CENTER);
   await printer.setBlob(1);
@@ -548,7 +581,7 @@ export const printTableQRCodeViaBluetooth = async ({
     // ESC/POS printQRCode(url, size, errorCorrection)
     await printer.printQRCode(
       String(url),
-      260,
+      qrSize,
       printer.ERROR_CORRECTION ? printer.ERROR_CORRECTION.L : 1
     );
   } catch (qrErr) {

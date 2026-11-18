@@ -1,8 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../services/supabaseClient";
 import { getAuthSnapshot } from "../services/sessionStore";
+import { hashStorePin } from "./helpers";
 
 const PIN_STORAGE_KEY = "@TokoKelontong:SecurityPin";
+const PIN_HASH_KEY_PREFIX = "@TokoKelontong:SecurityPinHash";
 const LOCKED_MENUS_STORAGE_KEY = "@TokoKelontong:LockedMenus";
 
 /**
@@ -63,41 +65,84 @@ export const DEFAULT_LOCKED_MENUS = {
   Kasir: false,
 };
 
+const hashKeyFor = (storeId) => `${PIN_HASH_KEY_PREFIX}:${storeId}`;
+const legacyKeyFor = (storeId) => `${PIN_STORAGE_KEY}:${storeId}`;
+
+function isHexSha256(val) {
+  return typeof val === "string" && /^[0-9a-f]{64}$/i.test(val.trim());
+}
+
+function isMissingRpcError(err) {
+  if (!err) return false;
+  const code = String(err.code || "");
+  const msg = String(err.message || "").toLowerCase();
+  return code === "PGRST202" || code === "42883" || msg.includes("set_store_security_pin");
+}
+
 /**
- * Mengambil data store aktif (store_id & security_pin dari Supabase)
- * untuk memastikan isolasi antar toko dan mencegah kebocoran PIN ke toko baru.
+ * Mengambil data store aktif beserta hash PIN dari Supabase.
+ * Mendukung fallback ke security_pin plaintext selama masa transisi APK lama.
  */
 async function fetchOnlineStoreData() {
   const { data: sess } = await supabase.auth.getSession();
   const uid = sess?.session?.user?.id;
   if (!uid) return null;
 
-  const { data: profile, error } = await supabase
+  let res = await supabase
     .from("profiles")
-    .select("store_id, stores(id, security_pin)")
+    .select("store_id, stores(id, security_pin_hash, security_pin)")
     .eq("id", uid)
     .maybeSingle();
 
-  if (error || !profile) return null;
+  if (res.error) {
+    res = await supabase
+      .from("profiles")
+      .select("store_id, stores(id, security_pin)")
+      .eq("id", uid)
+      .maybeSingle();
+  }
 
-  const storeId = profile.store_id || null;
-  const pin = profile.stores?.security_pin || null;
-  return { storeId, pin };
+  if (res.error || !res.data) return null;
+
+  const storeId = res.data.store_id || null;
+  const serverHash = res.data.stores?.security_pin_hash || null;
+  const legacyPin = res.data.stores?.security_pin || null;
+  const pinHash =
+    isHexSha256(serverHash)
+      ? serverHash.trim().toLowerCase()
+      : legacyPin && String(legacyPin).length >= 4
+        ? hashStorePin(storeId, legacyPin)
+        : null;
+
+  return { storeId, pinHash };
 }
 
-// Saat offline: toko aktif dari salinan lokal, PIN dari cache lokal toko itu.
+// Saat offline: baca hash PIN lokal toko ini, migrasikan format plaintext lama bila ada.
 async function getOfflineStoreData() {
   try {
     const snap = await getAuthSnapshot();
     if (!snap?.store_id) return null;
-    const scoped = await AsyncStorage.getItem(
-      `${PIN_STORAGE_KEY}:${snap.store_id}`,
-    );
-    return {
-      storeId: snap.store_id,
-      pin: scoped || snap.security_pin || null,
-      offline: true,
-    };
+    const storeId = snap.store_id;
+
+    const storedHash = await AsyncStorage.getItem(hashKeyFor(storeId));
+    if (isHexSha256(storedHash)) {
+      return { storeId, pinHash: storedHash.trim().toLowerCase(), offline: true };
+    }
+
+    const legacyScoped = await AsyncStorage.getItem(legacyKeyFor(storeId));
+    const plainFallback = legacyScoped || snap.security_pin || null;
+    const derivedHash =
+      snap.security_pin_hash ||
+      (plainFallback && String(plainFallback).length >= 4
+        ? hashStorePin(storeId, plainFallback)
+        : null);
+
+    if (derivedHash) {
+      await AsyncStorage.setItem(hashKeyFor(storeId), derivedHash);
+      await AsyncStorage.multiRemove([legacyKeyFor(storeId), PIN_STORAGE_KEY]);
+    }
+
+    return { storeId, pinHash: derivedHash, offline: true };
   } catch {
     return null;
   }
@@ -112,48 +157,53 @@ export async function getCurrentStoreData() {
       ),
     ]);
     if (online) return online;
-  } catch (err) {
+  } catch {
     // jatuh ke data lokal di bawah
   }
   return getOfflineStoreData();
 }
 
-export const getSecurityPin = async () => {
+/**
+ * Mengembalikan hash SHA-256 PIN toko aktif (atau null bila PIN belum diatur).
+ * Tidak lagi menyimpan maupun mengembalikan PIN plaintext ke storage lokal.
+ */
+export const getSecurityPinHash = async () => {
   try {
-    // 1. Sinkronisasi dengan toko aktif di Supabase
     const storeData = await getCurrentStoreData();
-    if (storeData && storeData.storeId) {
-      const scopedKey = `${PIN_STORAGE_KEY}:${storeData.storeId}`;
+    if (storeData?.storeId) {
+      const scopedHashKey = hashKeyFor(storeData.storeId);
       if (storeData.offline) {
-        // Tanpa server: pakai PIN lokal toko ini, jangan hapus cache apa pun
-        return storeData.pin && String(storeData.pin).length >= 4
-          ? String(storeData.pin)
-          : null;
+        return isHexSha256(storeData.pinHash) ? storeData.pinHash : null;
       }
-      if (storeData.pin && String(storeData.pin).length >= 4) {
-        // Toko ini memang telah mengatur PIN di database
-        await AsyncStorage.setItem(scopedKey, String(storeData.pin));
-        return String(storeData.pin);
-      } else {
-        // Toko ini (misal toko yang baru dibuat) TIDAK memiliki PIN di database!
-        // Bersihkan seluruh cache PIN lokal agar tidak bocor dari sesi akun toko sebelumnya
-        await AsyncStorage.removeItem(scopedKey);
-        await AsyncStorage.removeItem(PIN_STORAGE_KEY);
-        return null;
+
+      if (isHexSha256(storeData.pinHash)) {
+        await AsyncStorage.setItem(scopedHashKey, storeData.pinHash);
+        await AsyncStorage.multiRemove([
+          legacyKeyFor(storeData.storeId),
+          PIN_STORAGE_KEY,
+        ]);
+        return storeData.pinHash;
       }
+
+      // Toko ini tidak memiliki PIN di database -> bersihkan cache lokal agar tidak bocor
+      await AsyncStorage.multiRemove([
+        scopedHashKey,
+        legacyKeyFor(storeData.storeId),
+        PIN_STORAGE_KEY,
+      ]);
+      return null;
     }
 
-    // 2. Jika offline / belum login, periksa session lokal ter-scope
     const legacy = await AsyncStorage.getItem(PIN_STORAGE_KEY);
-    return legacy || null;
+    return legacy ? hashStorePin("global", legacy) : null;
   } catch {
     return null;
   }
 };
 
 export const isPinProtected = async () => {
-  const pin = await getSecurityPin();
-  return !!pin && pin.length >= 4;
+  const hash = await getSecurityPinHash();
+  return isHexSha256(hash);
 };
 
 export const getLockedMenus = async () => {
@@ -197,46 +247,79 @@ export const isScreenLocked = async (screenName) => {
 };
 
 export const setSecurityPin = async (newPin) => {
-  if (!newPin || newPin.length < 4) {
+  if (!newPin || String(newPin).length < 4) {
     throw new Error("PIN harus terdiri dari 4 digit angka.");
   }
 
+  const cleanPin = String(newPin);
   const storeData = await getCurrentStoreData();
   if (storeData?.storeId) {
-    await AsyncStorage.setItem(
-      `${PIN_STORAGE_KEY}:${storeData.storeId}`,
-      String(newPin),
-    );
+    const pinHash = hashStorePin(storeData.storeId, cleanPin);
+    await AsyncStorage.setItem(hashKeyFor(storeData.storeId), pinHash);
+    await AsyncStorage.multiRemove([
+      legacyKeyFor(storeData.storeId),
+      PIN_STORAGE_KEY,
+    ]);
+
     try {
-      await supabase
-        .from("stores")
-        .update({ security_pin: String(newPin) })
-        .eq("id", storeData.storeId);
+      const { error: rpcErr } = await supabase.rpc("set_store_security_pin", {
+        p_pin_hash: pinHash,
+        p_legacy_pin: cleanPin,
+      });
+      if (rpcErr && isMissingRpcError(rpcErr)) {
+        await supabase
+          .from("stores")
+          .update({ security_pin: cleanPin })
+          .eq("id", storeData.storeId);
+      }
     } catch (err) {
       console.warn("Gagal sinkron PIN ke server:", err.message);
     }
+    return;
   }
-  await AsyncStorage.setItem(PIN_STORAGE_KEY, String(newPin));
+
+  await AsyncStorage.setItem(PIN_STORAGE_KEY, cleanPin);
 };
 
 export const removeSecurityPin = async () => {
   const storeData = await getCurrentStoreData();
   if (storeData?.storeId) {
-    await AsyncStorage.removeItem(`${PIN_STORAGE_KEY}:${storeData.storeId}`);
+    await AsyncStorage.multiRemove([
+      hashKeyFor(storeData.storeId),
+      legacyKeyFor(storeData.storeId),
+      PIN_STORAGE_KEY,
+    ]);
     try {
-      await supabase
-        .from("stores")
-        .update({ security_pin: null })
-        .eq("id", storeData.storeId);
+      const { error: rpcErr } = await supabase.rpc("set_store_security_pin", {
+        p_pin_hash: null,
+        p_legacy_pin: null,
+      });
+      if (rpcErr && isMissingRpcError(rpcErr)) {
+        await supabase
+          .from("stores")
+          .update({ security_pin: null })
+          .eq("id", storeData.storeId);
+      }
     } catch (err) {
       console.warn("Gagal sinkron hapus PIN ke server:", err.message);
     }
+    return;
   }
   await AsyncStorage.removeItem(PIN_STORAGE_KEY);
 };
 
 export const verifyPin = async (inputPin) => {
-  const currentPin = await getSecurityPin();
-  if (!currentPin) return true; // jika belum diset, anggap lolos
-  return String(inputPin) === String(currentPin);
+  const storeData = await getCurrentStoreData();
+  if (storeData?.storeId) {
+    const expectedHash = isHexSha256(storeData.pinHash)
+      ? storeData.pinHash
+      : await getSecurityPinHash();
+    if (!expectedHash) return true;
+    const candidateHash = hashStorePin(storeData.storeId, String(inputPin));
+    return candidateHash === expectedHash;
+  }
+
+  const stored = await getSecurityPinHash();
+  if (!stored) return true;
+  return hashStorePin("global", String(inputPin)) === stored;
 };

@@ -1,4 +1,9 @@
-import { formatRupiah } from './helpers';
+import {
+  formatRupiah,
+  escapeHtml,
+  normalizePaperSize,
+  getPaperSpec,
+} from './helpers';
 
 export const FREE_RECEIPT_DEFAULTS = {
   storeName: 'MarketPos',
@@ -12,13 +17,16 @@ export const FREE_RECEIPT_DEFAULTS = {
  * Pada paket Gratis (`!isPro`), nota selalu memakai nama "MarketPos",
  * tanpa alamat/telepon toko, dan pesan penutup bawaan tanpa menghapus
  * data profil tersimpan apabila sebelumnya pernah memakai paket Pro.
+ * Ukuran kertas printer (`paperSize`) tetap bebas diatur di semua paket.
  */
 export const resolveReceiptProfile = (storeProfile = {}, isPro = false) => {
   const safe =
     storeProfile && typeof storeProfile === 'object' ? storeProfile : {};
+  const paperSize = normalizePaperSize(safe.paperSize);
   if (!isPro) {
     return {
       ...safe,
+      paperSize,
       storeName: FREE_RECEIPT_DEFAULTS.storeName,
       name: FREE_RECEIPT_DEFAULTS.storeName,
       storeAddress: FREE_RECEIPT_DEFAULTS.storeAddress,
@@ -31,6 +39,7 @@ export const resolveReceiptProfile = (storeProfile = {}, isPro = false) => {
     FREE_RECEIPT_DEFAULTS.storeName;
   return {
     ...safe,
+    paperSize,
     storeName: resolvedName,
     name: resolvedName,
     storeAddress: String(safe.storeAddress || '').trim(),
@@ -195,10 +204,83 @@ export const generateDailyClosingWAMessage = (summary, storeProfile, dateStr) =>
 
 // ── HTML receipt generator for Printing / PDF ────────────────────────────────
 export const generateReceiptHTML = (transaction, details, storeProfile) => {
-  const storeName     = storeProfile?.storeName    || storeProfile?.name || FREE_RECEIPT_DEFAULTS.storeName;
-  const storeAddress  = storeProfile?.storeAddress || '';
-  const storeContact  = storeProfile?.storeContact || '';
-  const footerMessage = storeProfile?.footerMessage || FREE_RECEIPT_DEFAULTS.footerMessage;
+  const spec = getPaperSpec(storeProfile?.paperSize);
+  const is58 = spec.id === '58mm';
+  const thermalOverrideCSS = spec.isThermalHtml
+    ? `
+    @page { size: ${spec.htmlPageCss}; margin: ${spec.htmlPageMargin}; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      background: #fff;
+      min-height: auto;
+      padding: 10px 6px;
+    }
+    .receipt {
+      max-width: ${spec.htmlPreviewWidth};
+      border-radius: 0;
+      box-shadow: none;
+      border: 1px dashed #CBD5E1;
+      color: #000;
+    }
+    .receipt-top {
+      background: #fff;
+      color: #000;
+      padding: 12px 10px 10px;
+      border-bottom: 1px dashed #000;
+    }
+    .store-name { font-size: ${is58 ? '16px' : '18px'}; color: #000; letter-spacing: 0.4px; }
+    .store-info { font-size: ${is58 ? '11px' : '12px'}; color: #111827; opacity: 1; }
+    .receipt-body { padding: 6px 10px 10px; }
+    .meta-card {
+      background: transparent;
+      border: none;
+      border-bottom: 1px dashed #000;
+      border-radius: 0;
+      padding: 6px 0;
+      margin: 4px 0 8px;
+    }
+    .meta-label { font-size: 10px; color: #4B5563; }
+    .meta-value { font-size: ${is58 ? '11px' : '12px'}; color: #000; }
+    .section-heading { font-size: ${is58 ? '11px' : '12px'}; border-bottom-color: #9CA3AF; color: #000; }
+    .item { padding: 5px 0; border-bottom: 1px dotted #9CA3AF; }
+    .item-name { font-size: ${is58 ? '12px' : '13px'}; color: #000; margin-bottom: 2px; }
+    .item-qty, .item-subtotal { font-size: ${is58 ? '11px' : '12px'}; color: #111827; }
+    .dashed { border-top: 1px dashed #000; margin: 8px 0; }
+    .calc-label, .calc-val { font-size: ${is58 ? '11px' : '12px'}; color: #000; }
+    .grand-total {
+      background: transparent;
+      border-top: 1px dashed #000;
+      border-bottom: 1px dashed #000;
+      border-radius: 0;
+      padding: 8px 0;
+      margin: 8px 0;
+    }
+    .grand-label { font-size: ${is58 ? '13px' : '15px'}; color: #000; }
+    .grand-value { font-size: ${is58 ? '15px' : '18px'}; color: #000; }
+    .payment-box { background: transparent; border: none; padding: 2px 0; }
+    .pay-label, .pay-val { font-size: ${is58 ? '11px' : '12px'}; color: #000 !important; }
+    .pay-row.kembali .pay-val { font-size: ${is58 ? '12px' : '14px'}; color: #000 !important; }
+    .receipt-footer { padding: 10px 8px 12px; border-top: 1px dashed #000; margin-top: 8px; }
+    .footer-msg { font-size: ${is58 ? '11px' : '12px'}; color: #111827; font-style: normal; }
+    .footer-dots { display: none; }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .receipt { max-width: ${spec.htmlMaxWidth}; border: none; }
+    }
+  `
+    : `
+    @page { size: ${spec.htmlPageCss}; margin: ${spec.htmlPageMargin}; }
+    @media print { body { background: #fff; padding: 0; } .receipt { box-shadow: none; } }
+  `;
+
+  const safeStoreName = escapeHtml(
+    storeProfile?.storeName || storeProfile?.name || FREE_RECEIPT_DEFAULTS.storeName,
+  );
+  const safeStoreAddress = escapeHtml(storeProfile?.storeAddress || '');
+  const safeStoreContact = escapeHtml(storeProfile?.storeContact || '');
+  const safeFooterMessage = escapeHtml(
+    storeProfile?.footerMessage || FREE_RECEIPT_DEFAULTS.footerMessage,
+  );
 
   const date = new Date(transaction.created_at).toLocaleString('id-ID', {
     weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
@@ -207,7 +289,7 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
 
   const detailsHTML = details.map(item => `
     <div class="item">
-      <div class="item-name">${item.product_name}</div>
+      <div class="item-name">${escapeHtml(item.product_name)}</div>
       <div class="item-row-detail">
         <span class="item-qty">${item.quantity} × ${formatRupiah(item.price_at_sale)}</span>
         <span class="item-subtotal">${formatRupiah(item.quantity * item.price_at_sale)}</span>
@@ -224,7 +306,7 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
 
   const fnbBadgeHTML = (transaction.table_number || (transaction.order_type && transaction.order_type !== 'retail')) ? `
     <div class="fnb-card">
-      ${transaction.table_number ? `<div><strong>Meja:</strong> ${transaction.table_number}</div>` : ''}
+      ${transaction.table_number ? `<div><strong>Meja:</strong> ${escapeHtml(transaction.table_number)}</div>` : ''}
       ${transaction.order_type ? `<div><strong>Tipe:</strong> ${transaction.order_type === 'dine_in' ? 'Dine In' : 'Take Away'}</div>` : ''}
     </div>
   ` : '';
@@ -335,25 +417,26 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
     .receipt-footer { text-align: center; padding: 20px 28px 28px; border-top: 2px dashed #E5E7EB; margin-top: 16px; }
     .footer-msg { font-size: 14px; color: #6B7280; font-style: italic; line-height: 1.6; }
     .footer-dots { margin-top: 14px; font-size: 20px; color: #D1D5DB; letter-spacing: 6px; }
+    ${thermalOverrideCSS}
   </style>
 </head>
 <body>
   <div class="receipt">
     <div class="receipt-top">
-      <div class="store-name">${storeName}</div>
-      ${storeAddress ? `<div class="store-info">📍 ${storeAddress}</div>` : ''}
-      ${storeContact ? `<div class="store-info">📞 ${storeContact}</div>` : ''}
+      <div class="store-name">${safeStoreName}</div>
+      ${safeStoreAddress ? `<div class="store-info">📍 ${safeStoreAddress}</div>` : ''}
+      ${safeStoreContact ? `<div class="store-info">📞 ${safeStoreContact}</div>` : ''}
     </div>
 
     <div class="receipt-body">
       <div class="meta-card">
         <div class="meta-block">
           <div class="meta-label">No. Nota</div>
-          <div class="meta-value">${transaction.invoice_number}</div>
+          <div class="meta-value">${escapeHtml(transaction.invoice_number)}</div>
         </div>
         <div class="meta-block">
           <div class="meta-label">Tanggal</div>
-          <div class="meta-value">${date}</div>
+          <div class="meta-value">${escapeHtml(date)}</div>
         </div>
       </div>
 
@@ -371,7 +454,7 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
       </div>
 
       ${(() => {
-        const method = String(transaction.payment_method || 'cash').toUpperCase();
+        const method = escapeHtml(String(transaction.payment_method || 'cash').toUpperCase());
         if (method === 'CASH' || method === 'TUNAI') {
           return `
           <div class="payment-box">
@@ -402,7 +485,7 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
     </div>
 
     <div class="receipt-footer">
-      <div class="footer-msg">${footerMessage}</div>
+      <div class="footer-msg">${safeFooterMessage}</div>
       <div class="footer-dots">• • •</div>
     </div>
   </div>
@@ -412,7 +495,9 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
 
 // ── HTML Kitchen Ticket generator (Khusus Staf Dapur: Tanpa Harga) ──────────
 export const generateKitchenReceiptHTML = (transaction, details, storeProfile) => {
-  const storeName = storeProfile?.storeName || 'MarketPos Resto';
+  const spec = getPaperSpec(storeProfile?.paperSize);
+  const kitchenMaxWidth = spec.isThermalHtml ? spec.htmlPreviewWidth : '420px';
+  const safeStoreName = escapeHtml(storeProfile?.storeName || 'MarketPos Resto');
   const date = new Date(transaction.created_at).toLocaleString('id-ID', {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
     day: 'numeric', month: 'short', year: 'numeric',
@@ -424,7 +509,7 @@ export const generateKitchenReceiptHTML = (transaction, details, storeProfile) =
 
   const itemsListHTML = (details || []).map(item => `
     <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed #ccc;">
-      <span style="font-size: 18px; font-weight: 700; color: #111;">${item.product_name}</span>
+      <span style="font-size: 18px; font-weight: 700; color: #111;">${escapeHtml(item.product_name)}</span>
       <span style="font-size: 20px; font-weight: 900; background: #000; color: #fff; padding: 2px 10px; border-radius: 6px;">${item.quantity}x</span>
     </div>
   `).join('');
@@ -435,7 +520,9 @@ export const generateKitchenReceiptHTML = (transaction, details, storeProfile) =
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: monospace, sans-serif; background: #fff; padding: 20px; max-width: 380px; margin: 0 auto; }
+    @page { size: ${spec.htmlPageCss}; margin: ${spec.htmlPageMargin}; }
+    body { font-family: monospace, sans-serif; background: #fff; padding: ${spec.id === '58mm' ? '8px' : '20px'}; max-width: ${kitchenMaxWidth}; margin: 0 auto; }
+    @media print { body { padding: 0; max-width: ${spec.htmlMaxWidth}; } }
     .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
     .title { font-size: 22px; font-weight: 900; letter-spacing: 1px; }
     .table-box { background: #f3f4f6; border: 2px solid #000; padding: 12px; text-align: center; margin: 12px 0; border-radius: 8px; }
@@ -447,12 +534,12 @@ export const generateKitchenReceiptHTML = (transaction, details, storeProfile) =
 <body>
   <div class="header">
     <div class="title">*** STRUK DAPUR ***</div>
-    <div>${storeName}</div>
-    <div style="font-size: 12px; margin-top: 4px;">No: ${transaction.invoice_number} | ${date}</div>
+    <div>${safeStoreName}</div>
+    <div style="font-size: 12px; margin-top: 4px;">No: ${escapeHtml(transaction.invoice_number)} | ${escapeHtml(date)}</div>
   </div>
 
   <div class="table-box">
-    <div class="table-num">MEJA: ${transaction.table_number || '-'}</div>
+    <div class="table-num">MEJA: ${escapeHtml(transaction.table_number || '-')}</div>
     <div class="order-type">[ ${orderType} ]</div>
   </div>
 
@@ -462,7 +549,7 @@ export const generateKitchenReceiptHTML = (transaction, details, storeProfile) =
 
   ${transaction.payment_notes ? `
     <div class="notes-box">
-      <strong>Catatan Pesanan:</strong> ${transaction.payment_notes}
+      <strong>Catatan Pesanan:</strong> ${escapeHtml(transaction.payment_notes)}
     </div>
   ` : ''}
 

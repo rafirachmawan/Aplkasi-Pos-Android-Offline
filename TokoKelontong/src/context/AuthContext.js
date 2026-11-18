@@ -65,7 +65,8 @@ function profileFromSnapshot(snap) {
     stores: {
       id: snap.store_id,
       store_name: snap.store_name,
-      security_pin: snap.security_pin,
+      security_pin_hash: snap.security_pin_hash || null,
+      security_pin: snap.security_pin || null,
     },
   };
 }

@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   Pressable,
+  Platform,
 } from "react-native";
 import { colors, fonts } from "../theme/colors";
 
@@ -77,7 +78,7 @@ const CustomAlertHost = () => {
         const next = pendingQueue.shift();
         setCurrentAlert(next);
       }
-    }, 80);
+    }, 150);
   };
 
   if (!currentAlert) return null;
@@ -136,7 +137,7 @@ const CustomAlertHost = () => {
     <Modal
       visible={Boolean(currentAlert)}
       transparent
-      animationType="fade"
+      animationType={Platform.OS === "android" ? "none" : "fade"}
       statusBarTranslucent
       onRequestClose={() => {
         if (options?.cancelable !== false) {

@@ -30,6 +30,8 @@ import {
   formatRupiah,
   formatToRpInput as formatToRpDisplay,
   parseRpInput as parseRpToNumber,
+  parseFlexibleDueDate,
+  formatDueDateDisplay,
 } from "../utils/helpers";
 import {
   generateReceiptHTML,
@@ -51,9 +53,13 @@ import ConnectionStatusPill from "../components/ConnectionStatusPill";
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
 import { useAuth } from "../context/AuthContext";
-import { getScopedStoreProfile } from "../services/sessionStore";
 import {
-  fetchPendingTableOrders,
+  getScopedStoreProfile,
+  getHeldOrdersKey,
+  readScopedJsonArrayWithMigration,
+} from "../services/sessionStore";
+import {
+  fetchActiveTableOrders,
   updateTableOrderStatus,
   subscribeToTableOrders,
 } from "../services/tableOrderService";
@@ -76,7 +82,6 @@ const KasirScreen = ({ navigation }) => {
   const [selectedCategory, setSelectedCategory] = useState("Semua");
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showCartModal, setShowCartModal] = useState(false);
   const [cashInput, setCashInput] = useState("");
   const [discountInput, setDiscountInput] = useState("");
@@ -108,24 +113,31 @@ const KasirScreen = ({ navigation }) => {
 
   // F&B Realtime Table Orders State
   const { profile } = useAuth();
+  const activeStoreId = profile?.store_id || profile?.stores?.id || null;
   const [pendingTableOrders, setPendingTableOrders] = useState([]);
+  const [activeTableOrderId, setActiveTableOrderId] = useState(null);
   const [showTableOrdersModal, setShowTableOrdersModal] = useState(false);
   const [selectedProofModal, setSelectedProofModal] = useState(null);
   const [processingOrderId, setProcessingOrderId] = useState(null);
 
+  const pendingNewCount = pendingTableOrders.filter(
+    (o) => o.status === "pending",
+  ).length;
+  const parsedKasbonDue = parseFlexibleDueDate(kasbonDueDate);
+
   const loadPendingOrders = useCallback(async () => {
-    const storeId = profile?.store_id || profile?.stores?.id;
+    const storeId = activeStoreId;
     if (!storeId || !isFnbMode) return;
     try {
-      const orders = await fetchPendingTableOrders(storeId);
+      const orders = await fetchActiveTableOrders(storeId);
       setPendingTableOrders(orders);
     } catch (err) {
       console.warn("Gagal memuat pesanan meja:", err);
     }
-  }, [profile?.store_id, profile?.stores?.id, isFnbMode]);
+  }, [activeStoreId, isFnbMode]);
 
   useEffect(() => {
-    const storeId = profile?.store_id || profile?.stores?.id;
+    const storeId = activeStoreId;
     if (!storeId || !isFnbMode) return;
     loadPendingOrders();
     const unsub = subscribeToTableOrders(storeId, () => {
@@ -136,7 +148,7 @@ const KasirScreen = ({ navigation }) => {
       unsub();
       clearInterval(interval);
     };
-  }, [profile?.store_id, profile?.stores?.id, isFnbMode, loadPendingOrders]);
+  }, [activeStoreId, isFnbMode, loadPendingOrders]);
 
   const handleAcceptTableOrder = async (order) => {
     setProcessingOrderId(order.id);
@@ -144,6 +156,16 @@ const KasirScreen = ({ navigation }) => {
       const res = await updateTableOrderStatus(order.id, "accepted");
       if (!res.success) {
         throw new Error(res.error || "Gagal mengubah status pesanan");
+      }
+
+      // Pastikan profil toko terkini sudah dimuat sebelum cetak struk dapur
+      let currentProfile = storeProfile;
+      try {
+        const scoped = await getScopedStoreProfile(activeStoreId);
+        currentProfile = resolveReceiptProfile(scoped, plan.isPro);
+        setStoreProfile(currentProfile);
+      } catch {
+        currentProfile = resolveReceiptProfile(storeProfile, plan.isPro);
       }
 
       // Cetak Struk Dapur Bluetooth jika printer sudah terhubung
@@ -160,7 +182,7 @@ const KasirScreen = ({ navigation }) => {
             product_name: it.name || it.product_name,
             quantity: it.quantity,
           })),
-          storeProfile
+          currentProfile
         );
       } catch (printErr) {
         console.warn("Cetak dapur otomatis tidak aktif:", printErr.message);
@@ -199,6 +221,9 @@ const KasirScreen = ({ navigation }) => {
             setProcessingOrderId(order.id);
             try {
               await updateTableOrderStatus(order.id, "cancelled");
+              if (activeTableOrderId === order.id) {
+                setActiveTableOrderId(null);
+              }
               await loadPendingOrders();
             } catch (err) {
               Alert.alert("Gagal", err.message);
@@ -214,28 +239,35 @@ const KasirScreen = ({ navigation }) => {
   const handleLoadOrderToKasir = (order) => {
     dispatch({ type: "CLEAR_CART" });
     (order.items || []).forEach((item) => {
-      const prod = allProducts.find((p) => p.id === item.product_id) || {
-        id: item.product_id,
-        name: item.name,
-        selling_price: item.price,
-      };
+      const prod = allProducts.find((p) => p.id === item.product_id);
+      const qty = Math.max(1, Number(item.quantity) || 1);
+      const productId = prod?.id || item.product_id;
+      const sellingPrice = Number(prod?.selling_price ?? item.price ?? 0) || 0;
+      const capitalPrice = Number(prod?.capital_price ?? 0) || 0;
+
       dispatch({
         type: "ADD_TO_CART",
         payload: {
-          product_id: prod.id,
-          name: prod.name,
-          price: item.price,
-          quantity: item.quantity,
+          product_id: productId,
+          product_name:
+            prod?.product_name || item.name || item.product_name || "Menu",
+          selling_price: sellingPrice,
+          capital_price: capitalPrice,
+          stock_quantity: prod?.stock_quantity ?? 999,
+          category: prod?.category || "",
+          image_uri: prod?.image_uri || null,
+          wholesale_rules: prod?.wholesale_rules || [],
         },
       });
-      if (item.quantity > 1) {
+      if (qty > 1) {
         dispatch({
           type: "UPDATE_CART_QTY",
-          payload: { product_id: prod.id, quantity: item.quantity },
+          payload: { product_id: productId, quantity: qty },
         });
       }
     });
 
+    setActiveTableOrderId(order.id);
     setTableNumber(String(order.table_number || ""));
     setOrderType("dine_in");
     setPaymentMethod(order.payment_method === "qris" ? "qris" : "cash");
@@ -254,23 +286,26 @@ const KasirScreen = ({ navigation }) => {
 
   const loadHeldOrders = useCallback(async () => {
     try {
-      const data = await AsyncStorage.getItem("@TokoKelontong:HeldOrders");
-      if (data) {
-        setHeldOrders(JSON.parse(data));
-      } else {
+      const heldKey = getHeldOrdersKey(activeStoreId);
+      if (!heldKey) {
         setHeldOrders([]);
+        return;
       }
+      const list = await readScopedJsonArrayWithMigration(
+        heldKey,
+        "@TokoKelontong:HeldOrders",
+      );
+      setHeldOrders(list);
     } catch {
       setHeldOrders([]);
     }
-  }, []);
+  }, [activeStoreId]);
 
   const saveHeldOrders = async (newList) => {
     setHeldOrders(newList);
-    await AsyncStorage.setItem(
-      "@TokoKelontong:HeldOrders",
-      JSON.stringify(newList),
-    );
+    const heldKey = getHeldOrdersKey(activeStoreId);
+    if (!heldKey) return;
+    await AsyncStorage.setItem(heldKey, JSON.stringify(newList));
   };
 
   // Indikator status Online / Offline di header Kasir POS
@@ -302,6 +337,9 @@ const KasirScreen = ({ navigation }) => {
       loadProducts();
       loadHeldOrders();
       refreshSyncCounts();
+      getScopedStoreProfile(activeStoreId)
+        .then((data) => setStoreProfile(resolveReceiptProfile(data, plan.isPro)))
+        .catch(() => {});
       // Cek apakah printer Bluetooth sudah diatur (untuk tombol cetak langsung)
       if (isBluetoothPrintingSupported()) {
         isPrinterConfigured()
@@ -310,7 +348,7 @@ const KasirScreen = ({ navigation }) => {
       } else {
         setBtPrinterReady(false);
       }
-    }, [loadHeldOrders]),
+    }, [loadHeldOrders, activeStoreId, plan.isPro]),
   );
 
   const applyProducts = (products) => {
@@ -354,9 +392,11 @@ const KasirScreen = ({ navigation }) => {
     const matchCategory =
       selectedCategory === "Semua" || p.category === selectedCategory;
     const matchSearch =
-      p.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(p.product_name || "")
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()) ||
       (p.barcode &&
-        p.barcode.toLowerCase().includes(searchQuery.toLowerCase()));
+        String(p.barcode).toLowerCase().includes(searchQuery.toLowerCase()));
     return matchCategory && matchSearch;
   });
 
@@ -379,7 +419,9 @@ const KasirScreen = ({ navigation }) => {
       multiScan: true,
       onBarcodeScanned: async (code) => {
         try {
-          const product = await ProductRepository.getProductByBarcode(code);
+          const product = await ProductRepository.getProductByBarcode(code, {
+            localFirst: true,
+          });
           if (product) {
             addToCart(product);
             return { status: "added", product };
@@ -438,6 +480,7 @@ const KasirScreen = ({ navigation }) => {
         style: "destructive",
         onPress: () => {
           dispatch({ type: "CLEAR_CART" });
+          setActiveTableOrderId(null);
           setShowCartModal(false);
         },
       },
@@ -514,6 +557,13 @@ const KasirScreen = ({ navigation }) => {
       Alert.alert("Keranjang Kosong", "Pilih produk terlebih dahulu.");
       return;
     }
+    if (grandTotal <= 0) {
+      Alert.alert(
+        "Total Tagihan Rp0",
+        "Total belanja harus lebih dari Rp0. Kurangi nominal diskon terlebih dahulu.",
+      );
+      return;
+    }
     if (paymentMethod === "cash" && cashReceived < grandTotal) {
       Alert.alert(
         "Uang Kurang",
@@ -534,6 +584,14 @@ const KasirScreen = ({ navigation }) => {
         Alert.alert(
           "DP Melebihi Total",
           "Uang muka tidak boleh lebih besar dari total tagihan.",
+        );
+        return;
+      }
+      if (!parsedKasbonDue.valid) {
+        Alert.alert(
+          "Jatuh Tempo Tidak Valid",
+          parsedKasbonDue.error ||
+            "Periksa kembali format tanggal jatuh tempo atau kosongkan.",
         );
         return;
       }
@@ -569,32 +627,42 @@ const KasirScreen = ({ navigation }) => {
         isFnbMode ? tableNumber.trim() : "",
       );
 
-      // Jika kasbon, simpan juga ke buku kasbon / debtRepository
+      let prefetchedTx = null;
+      // Jika kasbon, simpan ke buku kasbon tanpa pemotongan DP ganda
       if (paymentMethod === "kasbon") {
         try {
+          try {
+            prefetchedTx = await TransactionRepository.getTransactionById(txId);
+          } catch (_) {
+            prefetchedTx = null;
+          }
           const dp = parseRpToNumber(kasbonDpInput);
-          const remainingDebt = Math.max(0, grandTotal - dp);
-          const createdDebt = await debtRepository.createDebt({
+          await debtRepository.createDebt({
             customer_name: kasbonCustomerName.trim(),
             customer_phone: kasbonCustomerPhone.trim(),
             transaction_id: txId,
+            invoice_number: prefetchedTx?.invoice_number || "",
             total_debt: grandTotal,
-            remaining_debt: remainingDebt,
-            due_date: kasbonDueDate.trim() || null,
+            initial_dp: dp,
+            due_date: parsedKasbonDue.iso,
             notes: kasbonNotes.trim() || "Transaksi Kasir POS",
           });
-
-          // Jika ada DP, catat langsung sebagai cicilan pertama
-          if (dp > 0 && createdDebt?.id) {
-            await debtRepository.recordPayment(createdDebt.id, {
-              payment_amount: dp,
-              payment_method: "cash",
-              notes: "DP / Uang Muka di Kasir",
-            });
-          }
         } catch (debtErr) {
           console.warn("Gagal simpan kasbon ke debtRepository:", debtErr);
+          Alert.alert(
+            "Transaksi Tersimpan — Cek Buku Kasbon",
+            "Transaksi penjualan berhasil dicatat, namun pencatatan ke Buku Kasbon mengalami kendala. Periksa Buku Kasbon untuk memastikan catatan tercatat.",
+          );
         }
+      }
+
+      // Selesaikan status pesanan meja F&B jika checkout berasal dari QR self-order
+      const completedTableOrderId = activeTableOrderId;
+      if (completedTableOrderId) {
+        setActiveTableOrderId(null);
+        updateTableOrderStatus(completedTableOrderId, "completed")
+          .then(() => loadPendingOrders())
+          .catch((e) => console.warn("Gagal selesaikan order meja:", e));
       }
 
       // Transaksi sudah tercatat di server: amankan UI dulu
@@ -614,7 +682,8 @@ const KasirScreen = ({ navigation }) => {
       refreshSyncCounts();
 
       try {
-        const fullTx = await TransactionRepository.getTransactionById(txId);
+        const fullTx =
+          prefetchedTx || (await TransactionRepository.getTransactionById(txId));
         setStoreProfile(await getStoreProfile());
 
         try {
@@ -694,7 +763,8 @@ const KasirScreen = ({ navigation }) => {
   const handlePrintKitchenBluetooth = async () => {
     if (!lastTx) return;
     try {
-      await printKitchenTicketViaBluetooth(lastTx, lastTxDetails, storeProfile);
+      const currentProfile = await getStoreProfile();
+      await printKitchenTicketViaBluetooth(lastTx, lastTxDetails, currentProfile);
       Alert.alert("✅ Berhasil", "Struk dapur berhasil dicetak ke printer Bluetooth.");
     } catch (err) {
       Alert.alert("Gagal Cetak Dapur", err.message || "Pastikan printer Bluetooth terhubung.");
@@ -728,6 +798,7 @@ const KasirScreen = ({ navigation }) => {
     const updated = [newHeld, ...heldOrders];
     saveHeldOrders(updated);
     dispatch({ type: "CLEAR_CART" });
+    setActiveTableOrderId(null);
     setDiscountInput("");
     setCashInput("");
     setShowCartModal(false);
@@ -1212,7 +1283,7 @@ const KasirScreen = ({ navigation }) => {
                 style={[
                   styles.categoryPillText,
                   {
-                    color: pendingTableOrders.length > 0 ? colors.primaryDark : colors.textBodySecondary,
+                    color: pendingNewCount > 0 ? colors.primaryDark : colors.textBodySecondary,
                     fontFamily: fonts.bold,
                   },
                 ]}
@@ -1222,7 +1293,8 @@ const KasirScreen = ({ navigation }) => {
               {pendingTableOrders.length > 0 && (
                 <View
                   style={{
-                    backgroundColor: colors.primary,
+                    backgroundColor:
+                      pendingNewCount > 0 ? colors.primaryDark : colors.infoText,
                     borderRadius: 10,
                     paddingHorizontal: 6,
                     paddingVertical: 1,
@@ -1287,128 +1359,6 @@ const KasirScreen = ({ navigation }) => {
           })}
         </ScrollView>
       </View>
-
-      {/* ── Modal Kategori Grid (Centered Card) ── */}
-      <Modal
-        visible={showCategoryModal}
-        transparent
-        statusBarTranslucent={true}
-        animationType="fade"
-        onRequestClose={() => setShowCategoryModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.catModalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowCategoryModal(false)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={styles.catModalCard}
-            onPress={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <View style={styles.catModalHeader}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
-              >
-                <View style={styles.catModalIconWrap}>
-                  <MaterialCommunityIcons
-                    name="shape-outline"
-                    size={20}
-                    color={colors.primary}
-                  />
-                </View>
-                <View>
-                  <Text style={styles.catModalTitle}>Pilih Kategori</Text>
-                  <Text style={styles.catModalSubtitle}>
-                    {categories.length - 1} kategori • {allProducts.length}{" "}
-                    produk
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={() => setShowCategoryModal(false)}
-                style={styles.catModalCloseBtn}
-              >
-                <MaterialCommunityIcons
-                  name="close"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Grid */}
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.catModalGrid}
-            >
-              {categories.map((cat, idx) => {
-                const count =
-                  cat === "Semua"
-                    ? allProducts.length
-                    : allProducts.filter((p) => p.category === cat).length;
-                const isActive = selectedCategory === cat;
-                const iconName = cat === "Semua" ? "apps" : "tag-outline";
-
-                return (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[
-                      styles.catGridItem,
-                      isActive && styles.catGridItemActive,
-                    ]}
-                    onPress={() => {
-                      setSelectedCategory(cat);
-                      setShowCategoryModal(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={[
-                        styles.catGridIconWrap,
-                        isActive && styles.catGridIconWrapActive,
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name={iconName}
-                        size={22}
-                        color={isActive ? colors.onPrimary : colors.iconColor}
-                      />
-                    </View>
-                    <Text
-                      style={[
-                        styles.catGridLabel,
-                        isActive && styles.catGridLabelActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {cat}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.catGridCount,
-                        isActive && styles.catGridCountActive,
-                      ]}
-                    >
-                      {count} produk
-                    </Text>
-                    {isActive && (
-                      <View style={styles.catGridCheckmark}>
-                        <MaterialCommunityIcons
-                          name="check-circle"
-                          size={16}
-                          color={colors.primary}
-                        />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       {/* ── Grid Produk Responsif ── */}
       <FlatList
@@ -2064,6 +2014,44 @@ const KasirScreen = ({ navigation }) => {
                         placeholderTextColor={colors.textSecondary}
                       />
 
+                      <Text style={styles.fieldLabelModal}>
+                        Jatuh Tempo (Opsional)
+                      </Text>
+                      <TextInput
+                        style={styles.fnbTableInput}
+                        value={kasbonDueDate}
+                        onChangeText={setKasbonDueDate}
+                        autoCapitalize="none"
+                        placeholder="Misal: 12 Januari atau 12-01 (boleh kosong)"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                      {kasbonDueDate.trim() &&
+                      parsedKasbonDue.valid &&
+                      parsedKasbonDue.display ? (
+                        <Text
+                          style={{
+                            fontFamily: fonts.medium,
+                            fontSize: 12,
+                            color: colors.successText,
+                            marginTop: -4,
+                            marginBottom: 8,
+                          }}
+                        >
+                          Terjadwal jatuh tempo: {parsedKasbonDue.display}
+                        </Text>
+                      ) : null}
+
+                      <Text style={styles.fieldLabelModal}>
+                        Catatan Kasbon (Opsional)
+                      </Text>
+                      <TextInput
+                        style={styles.fnbTableInput}
+                        value={kasbonNotes}
+                        onChangeText={setKasbonNotes}
+                        placeholder="Misal: Janji bayar minggu depan"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+
                       <View style={styles.sisaKasbonRow}>
                         <Text style={styles.sisaKasbonLabel}>
                           Sisa Masuk Buku Hutang
@@ -2632,9 +2620,10 @@ const KasirScreen = ({ navigation }) => {
                   />
                 </View>
                 <View>
-                  <Text style={styles.catModalTitle}>Pesanan Meja Masuk</Text>
+                  <Text style={styles.catModalTitle}>Pesanan Meja</Text>
                   <Text style={styles.catModalSubtitle}>
-                    {pendingTableOrders.length} pesanan menunggu konfirmasi
+                    {pendingNewCount} baru •{" "}
+                    {pendingTableOrders.length - pendingNewCount} diproses dapur
                   </Text>
                 </View>
               </View>
@@ -2670,15 +2659,16 @@ const KasirScreen = ({ navigation }) => {
                     color={colors.borderStrong}
                   />
                   <Text style={{ fontFamily: fonts.bold, color: colors.textBodySecondary, fontSize: 16, marginTop: 12 }}>
-                    Belum Ada Pesanan Masuk
+                    Belum Ada Pesanan Aktif
                   </Text>
                   <Text style={{ fontFamily: fonts.regular, color: colors.textSecondary, fontSize: 12, textAlign: "center", marginTop: 4, paddingHorizontal: 20 }}>
-                    Pesanan yang dikirim pelanggan setelah memindai QR code di meja akan langsung muncul di sini.
+                    Pesanan yang dikirim pelanggan setelah memindai QR code di meja akan muncul di sini sampai selesai dibayar.
                   </Text>
                 </View>
               ) : (
                 pendingTableOrders.map((order) => {
                   const isProcessing = processingOrderId === order.id;
+                  const isAccepted = order.status === "accepted";
                   const orderDate = new Date(order.created_at).toLocaleTimeString("id-ID", {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -2688,10 +2678,22 @@ const KasirScreen = ({ navigation }) => {
                     <View key={order.id} style={styles.tableOrderCard}>
                       {/* Top Header Card */}
                       <View style={styles.tableOrderCardHeader}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", flex: 1 }}>
                           <View style={styles.tableNumBadge}>
                             <Text style={styles.tableNumBadgeText}>MEJA {order.table_number}</Text>
                           </View>
+                          {isAccepted ? (
+                            <View
+                              style={[
+                                styles.payMethodBadge,
+                                { backgroundColor: colors.warningContainer, borderWidth: 1, borderColor: colors.warningBorder },
+                              ]}
+                            >
+                              <Text style={[styles.payMethodBadgeText, { color: colors.warningTextDark }]}>
+                                Diproses Dapur
+                              </Text>
+                            </View>
+                          ) : null}
                           <Text style={styles.orderTimeText}>{orderDate}</Text>
                         </View>
 
@@ -2732,7 +2734,7 @@ const KasirScreen = ({ navigation }) => {
                             <View style={{ flex: 1 }}>
                               <Text style={styles.orderItemName}>
                                 <Text style={{ fontFamily: fonts.bold }}>{it.quantity}x </Text>
-                                {it.name}
+                                {it.name || it.product_name}
                               </Text>
                               {!!it.notes && (
                                 <Text style={styles.orderItemNote}>Catatan: "{it.notes}"</Text>
@@ -2799,19 +2801,34 @@ const KasirScreen = ({ navigation }) => {
                           disabled={isProcessing}
                         >
                           <MaterialCommunityIcons name="close-circle-outline" size={16} color={colors.errorDark} />
-                          <Text style={styles.btnCancelOrderText}>Tolak</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.btnAcceptOrder}
-                          onPress={() => handleAcceptTableOrder(order)}
-                          disabled={isProcessing}
-                        >
-                          <MaterialCommunityIcons name="printer" size={18} color={colors.onPrimary} />
-                          <Text style={styles.btnAcceptOrderText}>
-                            {isProcessing ? "Memproses..." : "Terima & Cetak Dapur"}
+                          <Text style={styles.btnCancelOrderText}>
+                            {isAccepted ? "Batalkan" : "Tolak"}
                           </Text>
                         </TouchableOpacity>
+
+                        {isAccepted ? (
+                          <TouchableOpacity
+                            style={[styles.btnAcceptOrder, { backgroundColor: colors.primaryDark }]}
+                            onPress={() => handleLoadOrderToKasir(order)}
+                            disabled={isProcessing}
+                          >
+                            <MaterialCommunityIcons name="cart-arrow-down" size={18} color={colors.onPrimary} />
+                            <Text style={styles.btnAcceptOrderText}>
+                              Muat ke Kasir & Bayar
+                            </Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.btnAcceptOrder}
+                            onPress={() => handleAcceptTableOrder(order)}
+                            disabled={isProcessing}
+                          >
+                            <MaterialCommunityIcons name="printer" size={18} color={colors.onPrimary} />
+                            <Text style={styles.btnAcceptOrderText}>
+                              {isProcessing ? "Memproses..." : "Terima & Cetak Dapur"}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     </View>
                   );

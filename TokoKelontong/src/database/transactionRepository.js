@@ -137,7 +137,7 @@ function outboxRowToTransaction(row) {
     payment_notes: row.payment_notes,
     order_type: row.order_type,
     table_number: row.table_number,
-    is_offline: row.status !== "synced" && !!getSyncState().offline,
+    is_offline: row.status !== "synced",
     sync_status: row.status,
   };
 }
@@ -500,7 +500,8 @@ class TransactionRepository {
   /**
    * Data lengkap untuk ekspor CSV (nota + detail, nama barang snapshot)
    */
-  async getFullReportForExport() {
+  async getFullReportForExport(datePattern = "") {
+    const { start, end } = rangeFromPattern(datePattern);
     const server = await serverOrNull(async () => {
       for (let attempt = 0; attempt < 3; attempt++) {
         const cols = [
@@ -520,13 +521,16 @@ class TransactionRepository {
         );
         const selectCols = cols.join(", ");
         try {
-          const rows = await fetchAllPages(() =>
-            supabase
+          const rows = await fetchAllPages(() => {
+            let query = supabase
               .from("transactions")
               .select(selectCols)
               .order("created_at", { ascending: false })
-              .order("id", { ascending: false }),
-          );
+              .order("id", { ascending: false });
+            if (start) query = query.gte("created_at", start);
+            if (end) query = query.lt("created_at", end);
+            return query;
+          });
           if (hasPaymentMethodCol === null) hasPaymentMethodCol = true;
           if (hasClientTxIdCol === null) hasClientTxIdCol = true;
           return rows;
@@ -573,7 +577,7 @@ class TransactionRepository {
     const serverClientIds = new Set(
       (server || []).map((r) => r.client_tx_id).filter(Boolean),
     );
-    const localUnsynced = (await getUnsyncedInRange("")).filter(
+    const localUnsynced = (await getUnsyncedInRange(datePattern)).filter(
       ({ row }) => !serverClientIds.has(row.client_tx_id),
     );
     if (server === null && localUnsynced.length === 0) {

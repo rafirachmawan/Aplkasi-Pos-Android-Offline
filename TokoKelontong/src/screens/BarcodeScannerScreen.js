@@ -23,6 +23,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppContext } from "../context/AppContext";
 import usePlan from "../hooks/usePlan";
+import ProductRepository from "../database/productRepository";
 import { colors, fonts } from "../theme/colors";
 import { formatRupiah } from "../utils/helpers";
 
@@ -135,6 +136,36 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     );
   }, [cart, plan.isPro]);
 
+  const scanProductLocally = useCallback(
+    async (code) => {
+      const product = await ProductRepository.getProductByBarcode(code, {
+        localFirst: true,
+      });
+      if (product) {
+        dispatch({
+          type: "ADD_TO_CART",
+          payload: {
+            product_id: product.id,
+            product_name: product.product_name,
+            selling_price: product.selling_price,
+            capital_price: product.capital_price,
+            stock_quantity: product.stock_quantity,
+            category: product.category,
+            image_uri: product.image_uri,
+            wholesale_rules: product.wholesale_rules || [],
+          },
+        });
+        return { status: "added", product };
+      }
+      return {
+        status: "not_found",
+        code,
+        message: `Barcode ${code} belum terdaftar di gudang.`,
+      };
+    },
+    [dispatch],
+  );
+
   const handleBarCodeScanned = useCallback(
     async ({ data }) => {
       const code = String(data || "").trim();
@@ -170,10 +201,12 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
       });
 
       try {
-        const result = onBarcodeScanned ? await onBarcodeScanned(code) : null;
+        const result = onBarcodeScanned
+          ? await onBarcodeScanned(code)
+          : await scanProductLocally(code);
         if (!isMountedRef.current) return;
 
-        if (!result || result.status === "added") {
+        if (result && result.status === "added") {
           const addedName =
             result?.product?.product_name || `Produk (${code})`;
           const addedId = result?.product?.id || null;
@@ -220,7 +253,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
               }
             }
           }
-        } else if (result.status === "not_found") {
+        } else if (result?.status === "not_found") {
           showTemporaryFeedback({
             status: "not_found",
             text: result.message || `Barcode ${code} belum terdaftar`,
@@ -233,7 +266,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
         } else {
           showTemporaryFeedback({
             status: "error",
-            text: result.message || "Gagal memindai produk",
+            text: result?.message || "Gagal memindai produk",
           });
           cooldownUntilRef.current = Date.now() + GLOBAL_SCAN_COOLDOWN_MS;
           lastCodeRef.current = {
@@ -255,6 +288,7 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
     [
       isMultiMode,
       onBarcodeScanned,
+      scanProductLocally,
       autoClose,
       navigation,
       showTemporaryFeedback,

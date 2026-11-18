@@ -1,7 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../services/supabaseClient";
 import { getActiveStoreId } from "../services/sessionStore";
-import { getCatalog, getCatalogProductByBarcode } from "./localDb";
+import { deleteProductImageByUrl } from "../utils/imageStorage";
+import {
+  getCatalog,
+  getCatalogProductByBarcode,
+  applyPendingStockDeductions,
+} from "./localDb";
 
 const LOCAL_WHOLESALE_KEY = "@TokoKelontong:LocalWholesale";
 const PAGE_SIZE = 1000;
@@ -107,7 +112,16 @@ class ProductRepository {
    */
   async getAllProductsWithSource() {
     try {
-      const products = await this.fetchProductsFromServer();
+      let targetStoreId = null;
+      try {
+        targetStoreId = (await getActiveStoreId()) || (await getStoreId());
+      } catch {
+        targetStoreId = null;
+      }
+      const serverProducts = await this.fetchProductsFromServer(targetStoreId);
+      const products = targetStoreId
+        ? await applyPendingStockDeductions(targetStoreId, serverProducts)
+        : serverProducts;
       return { products, fromCache: false };
     } catch (err) {
       if (isNetworkLikeError(err)) {
@@ -157,15 +171,27 @@ class ProductRepository {
   }
 
   /**
-   * Mencari produk berdasarkan barcode
+   * Mencari produk berdasarkan barcode.
+   * Jika `localFirst` aktif (mode kasir), baca SQLite lokal dulu agar instan & offline-first.
    */
-  async getProductByBarcode(barcode) {
-    let res;
+  async getProductByBarcode(barcode, { localFirst = false } = {}) {
     let targetStoreId = null;
     try {
       targetStoreId = (await getActiveStoreId()) || (await getStoreId());
     } catch (_) {}
 
+    if (localFirst && targetStoreId) {
+      try {
+        const cached = await getCatalogProductByBarcode(targetStoreId, barcode);
+        if (cached) return cached;
+      } catch {
+        // lanjut cek server
+      }
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    let res;
     try {
       let query = supabase
         .from("products")
@@ -174,10 +200,13 @@ class ProductRepository {
       if (targetStoreId) {
         query = query.eq("store_id", targetStoreId);
       }
-      res = await query.maybeSingle();
+      res = await query.abortSignal(controller.signal).maybeSingle();
     } catch (err) {
       res = { error: err };
+    } finally {
+      clearTimeout(timer);
     }
+
     if (res.error) {
       if (isNetworkLikeError(res.error)) {
         try {
@@ -196,13 +225,18 @@ class ProductRepository {
     if (!data) return null;
 
     const localMap = await getLocalWholesaleMap();
-    return {
+    const product = {
       ...data,
       wholesale_rules:
         data.wholesale_rules && Array.isArray(data.wholesale_rules) && data.wholesale_rules.length > 0
           ? data.wholesale_rules
           : localMap[data.id] || [],
     };
+    if (targetStoreId) {
+      const [adjusted] = await applyPendingStockDeductions(targetStoreId, [product]);
+      return adjusted;
+    }
+    return product;
   }
 
   /**
@@ -250,6 +284,17 @@ class ProductRepository {
       .sort((a, b) => a.stock_quantity - b.stock_quantity);
   }
 
+  async _assertUniqueBarcode(barcode, excludeProductId = null) {
+    const clean = String(barcode || "").trim();
+    if (!clean) return;
+    const existing = await this.getProductByBarcode(clean);
+    if (existing && existing.id !== excludeProductId) {
+      throw new Error(
+        `Barcode sudah terdaftar untuk produk: ${existing.product_name}.`,
+      );
+    }
+  }
+
   /**
    * Menambahkan produk baru (store_id otomatis milik akun login)
    */
@@ -268,14 +313,7 @@ class ProductRepository {
     } = product;
 
     // Validasi barcode unik (pesan ramah seperti versi lokal)
-    if (barcode) {
-      const existing = await this.getProductByBarcode(barcode);
-      if (existing) {
-        throw new Error(
-          `Barcode sudah terdaftar untuk produk: ${existing.product_name}.`,
-        );
-      }
-    }
+    await this._assertUniqueBarcode(barcode);
 
     const storeId = await getStoreId();
     const payload = {
@@ -373,6 +411,20 @@ class ProductRepository {
       wholesale_rules = [],
     } = product;
 
+    await this._assertUniqueBarcode(barcode, id);
+
+    let oldImageUri = null;
+    try {
+      const { data: existingRow } = await supabase
+        .from("products")
+        .select("image_uri")
+        .eq("id", id)
+        .maybeSingle();
+      oldImageUri = existingRow?.image_uri || null;
+    } catch {
+      oldImageUri = null;
+    }
+
     const payload = {
       barcode,
       product_name,
@@ -423,6 +475,10 @@ class ProductRepository {
       await setLocalWholesale(id, wholesale_rules || []);
     }
 
+    if (updated && oldImageUri && oldImageUri !== image_uri) {
+      void deleteProductImageByUrl(oldImageUri);
+    }
+
     return updated;
   }
 
@@ -434,8 +490,13 @@ class ProductRepository {
       .from("products")
       .delete()
       .eq("id", id)
-      .select();
+      .select("id, image_uri");
     if (error) throw error;
+    for (const row of data || []) {
+      if (row?.image_uri) {
+        void deleteProductImageByUrl(row.image_uri);
+      }
+    }
     return (data || []).length > 0;
   }
 }
