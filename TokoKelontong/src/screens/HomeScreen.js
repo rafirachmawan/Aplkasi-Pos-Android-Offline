@@ -149,7 +149,7 @@ const HomeScreen = ({ navigation }) => {
           text: "Keluar",
           style: "destructive",
           onPress: () => {
-            dispatch({ type: "CLEAR_CART" });
+            dispatch({ type: "RESET_STORE_STATE" });
             signOut();
           },
         },
@@ -161,7 +161,7 @@ const HomeScreen = ({ navigation }) => {
   const dateFormatted = now.toLocaleDateString("id-ID", {
     weekday: "long",
     day: "numeric",
-    month: "long",
+    month: "short",
     year: "numeric",
   });
 
@@ -230,8 +230,18 @@ const HomeScreen = ({ navigation }) => {
       />
 
       {/* ─── Header Toko Bersih & Status Koneksi ─── */}
-      <View style={styles.topNavbar}>
-        <View style={styles.brandLeftRow}>
+      <View
+        style={[
+          styles.topNavbar,
+          {
+            paddingTop:
+              Platform.OS === "android"
+                ? Math.max(insets.top, StatusBar.currentHeight || 0) + 12
+                : Math.max(insets.top, 14) + 8,
+          },
+        ]}
+      >
+        <View style={styles.topNavbarInner}>
           <View style={styles.storeAvatarBtn} accessible={false}>
             <Image
               source={
@@ -248,11 +258,30 @@ const HomeScreen = ({ navigation }) => {
             />
           </View>
 
-          <View style={styles.storeHeaderLeft}>
-            <View style={styles.storeNameRow}>
-              <Text style={styles.storeNameText} numberOfLines={1}>
+          <View style={styles.storeHeaderRight}>
+            <View style={styles.storeTopRow}>
+              <Text
+                style={styles.storeNameText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 {storeName}
               </Text>
+              <ConnectionStatusPill
+                style={styles.connectionPill}
+                offline={syncStatus.offline}
+                syncing={syncStatus.syncing}
+                onPress={() => {
+                  if (offlineCount > 0) {
+                    navigation.navigate("TransaksiPending");
+                  } else {
+                    refreshSyncCounts();
+                  }
+                }}
+              />
+            </View>
+
+            <View style={styles.storeMetaRow}>
               <View
                 style={[styles.tierBadge, plan.isPro && styles.tierBadgePro]}
               >
@@ -270,24 +299,19 @@ const HomeScreen = ({ navigation }) => {
                   <Text style={styles.fnbTagText}>F&B</Text>
                 </View>
               )}
+              <Text style={styles.metaSeparator} accessible={false}>
+                •
+              </Text>
+              <Text
+                style={styles.statusDateText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {dateFormatted}
+              </Text>
             </View>
-            <Text style={styles.statusDateText} numberOfLines={1}>
-              {dateFormatted}
-            </Text>
           </View>
         </View>
-
-        <ConnectionStatusPill
-          offline={syncStatus.offline}
-          syncing={syncStatus.syncing}
-          onPress={() => {
-            if (offlineCount > 0) {
-              navigation.navigate("TransaksiPending");
-            } else {
-              refreshSyncCounts();
-            }
-          }}
-        />
       </View>
 
       <ScrollView
@@ -559,64 +583,74 @@ const styles = StyleSheet.create({
   // ── Top Navbar ──
   topNavbar: {
     backgroundColor: colors.surface,
-    paddingTop:
-      Platform.OS === "android" ? (StatusBar.currentHeight || 0) + 14 : 52,
     paddingBottom: 14,
     paddingHorizontal: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
-    gap: 10,
   },
-  brandLeftRow: {
-    flex: 1,
+  topNavbarInner: {
+    maxWidth: 680,
+    width: "100%",
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
   storeAvatarBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     backgroundColor: colors.primaryContainer,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.primaryBorder,
     overflow: "hidden",
+    flexShrink: 0,
   },
   storeAvatarPhoto: {
     width: "100%",
     height: "100%",
   },
   storeAvatarLogoDefault: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
   },
-  storeHeaderLeft: {
+  storeHeaderRight: {
     flex: 1,
+    minWidth: 0,
     justifyContent: "center",
   },
-  storeNameRow: {
+  storeTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  storeNameText: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: fonts.extraBold,
+    fontSize: 17,
+    lineHeight: 22,
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  connectionPill: {
+    flexShrink: 0,
+  },
+  storeMetaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    flexWrap: "wrap",
-  },
-  storeNameText: {
-    fontFamily: fonts.extraBold,
-    fontSize: 18,
-    color: colors.text,
-    letterSpacing: -0.3,
-    flexShrink: 1,
+    marginTop: 5,
   },
   tierBadge: {
     backgroundColor: colors.surfaceSubtle,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
+    flexShrink: 0,
   },
   tierBadgePro: {
     backgroundColor: colors.primaryContainer,
@@ -627,28 +661,36 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 12,
     color: colors.textBodySecondary,
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   tierBadgeTextPro: {
-    color: colors.primaryDark,
+    color: colors.primaryTextDark,
   },
   fnbTag: {
     backgroundColor: colors.text,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
+    flexShrink: 0,
   },
   fnbTagText: {
     fontFamily: fonts.bold,
     fontSize: 12,
     color: colors.onPrimary,
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
+  },
+  metaSeparator: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.textMuted,
+    flexShrink: 0,
   },
   statusDateText: {
+    flex: 1,
+    minWidth: 0,
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 2,
   },
 
   // ── Scroll Content ──

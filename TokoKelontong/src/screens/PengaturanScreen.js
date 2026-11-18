@@ -25,6 +25,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import {
+  getStoreLogoKey,
+  getStoreNameKey,
+  getStoreProfileKey,
+  getBusinessModeKey,
+  getFnbTablesKey,
+  getFnbQrisKey,
+  clearLegacyGlobalStoreKeys,
+} from "../services/sessionStore";
+import {
   changePassword,
   signOut,
   updateStoreName,
@@ -163,32 +172,40 @@ const PengaturanScreen = ({ navigation }) => {
   const [singleTableNumber, setSingleTableNumber] = useState("1");
   const [customWebBaseUrl, setCustomWebBaseUrl] = useState(DEFAULT_ORDER_BASE_URL);
 
-  // Load config F&B dari local storage & cloud saat mode F&B aktif
+  // Load config F&B dari local storage terisolasi per toko & cloud saat mode F&B aktif
   useEffect(() => {
-    if (businessMode === "fnb") {
-      // 1. Baca dari cache lokal dulu
-      AsyncStorage.getItem("@TokoKelontong:FnbActiveTables").then((val) => {
-        if (val) setActiveTablesCount(val);
-      });
-      AsyncStorage.getItem("@TokoKelontong:FnbQrisUrl").then((val) => {
-        if (val) setQrisImageUrl(val);
-      });
-
-      // 2. Jika ada koneksi & storeId, sinkron dari cloud
-      if (storeId) {
-        fetchStoreFnbConfig(storeId)
-          .then((cfg) => {
-            if (cfg.qrisImageUrl) {
-              setQrisImageUrl(cfg.qrisImageUrl);
-              AsyncStorage.setItem("@TokoKelontong:FnbQrisUrl", cfg.qrisImageUrl).catch(() => {});
-            }
-            if (cfg.activeTables) {
-              setActiveTablesCount(String(cfg.activeTables));
-              AsyncStorage.setItem("@TokoKelontong:FnbActiveTables", String(cfg.activeTables)).catch(() => {});
-            }
-          })
-          .catch(() => {});
+    setActiveTablesCount("10");
+    setQrisImageUrl("");
+    if (businessMode === "fnb" && storeId) {
+      const tablesKey = getFnbTablesKey(storeId);
+      const qrisKey = getFnbQrisKey(storeId);
+      if (tablesKey) {
+        AsyncStorage.getItem(tablesKey).then((val) => {
+          if (val) setActiveTablesCount(val);
+        });
       }
+      if (qrisKey) {
+        AsyncStorage.getItem(qrisKey).then((val) => {
+          if (val) setQrisImageUrl(val);
+        });
+      }
+
+      fetchStoreFnbConfig(storeId)
+        .then((cfg) => {
+          if (cfg.qrisImageUrl) {
+            setQrisImageUrl(cfg.qrisImageUrl);
+            if (qrisKey) {
+              AsyncStorage.setItem(qrisKey, cfg.qrisImageUrl).catch(() => {});
+            }
+          }
+          if (cfg.activeTables) {
+            setActiveTablesCount(String(cfg.activeTables));
+            if (tablesKey) {
+              AsyncStorage.setItem(tablesKey, String(cfg.activeTables)).catch(() => {});
+            }
+          }
+        })
+        .catch(() => {});
     }
   }, [storeId, businessMode]);
 
@@ -256,7 +273,10 @@ const PengaturanScreen = ({ navigation }) => {
     try {
       const publicUrl = await uploadImageToBucket(localUri, "store_qris", "qris");
       setQrisImageUrl(publicUrl);
-      await AsyncStorage.setItem("@TokoKelontong:FnbQrisUrl", publicUrl);
+      const qrisKey = getFnbQrisKey(storeId);
+      if (qrisKey) {
+        await AsyncStorage.setItem(qrisKey, publicUrl);
+      }
 
       const res = await updateStoreQrisImage(storeId, publicUrl);
       if (res && !res.success) {
@@ -288,7 +308,10 @@ const PengaturanScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               setQrisImageUrl("");
-              await AsyncStorage.removeItem("@TokoKelontong:FnbQrisUrl");
+              const qrisKey = getFnbQrisKey(storeId);
+              if (qrisKey) {
+                await AsyncStorage.removeItem(qrisKey);
+              }
               if (storeId) {
                 await updateStoreQrisImage(storeId, "");
               }
@@ -309,8 +332,11 @@ const PengaturanScreen = ({ navigation }) => {
     }
     setSavingTables(true);
     try {
-      // 1. Selalu simpan di cache lokal HP agar langsung aktif
-      await AsyncStorage.setItem("@TokoKelontong:FnbActiveTables", String(count));
+      // 1. Selalu simpan di cache lokal HP terisolasi per toko agar langsung aktif
+      const tablesKey = getFnbTablesKey(storeId);
+      if (tablesKey) {
+        await AsyncStorage.setItem(tablesKey, String(count));
+      }
 
       // 2. Simpan ke cloud jika terhubung
       if (storeId) {
@@ -419,7 +445,14 @@ const PengaturanScreen = ({ navigation }) => {
     setPrinterInput(state.printerAddress || "");
     setPrinterNameInput(state.printerName || "");
     setLogoUri(state.storeLogo || null);
-  }, [state.storeName, state.printerAddress, state.printerName, state.storeLogo]);
+    setBusinessModeState(state.businessMode || "retail");
+  }, [
+    state.storeName,
+    state.printerAddress,
+    state.printerName,
+    state.storeLogo,
+    state.businessMode,
+  ]);
 
   useEffect(() => {
     if (profile?.stores?.store_name) {
@@ -429,10 +462,12 @@ const PengaturanScreen = ({ navigation }) => {
 
   const syncPrinterProfileStorage = async (saved) => {
     try {
-      const raw = await AsyncStorage.getItem("@TokoKelontong:StoreProfile");
+      const profileKey = getStoreProfileKey(storeId);
+      if (!profileKey) return;
+      const raw = await AsyncStorage.getItem(profileKey);
       const existing = raw ? JSON.parse(raw) : {};
       await AsyncStorage.setItem(
-        "@TokoKelontong:StoreProfile",
+        profileKey,
         JSON.stringify({
           ...existing,
           printerAddress: saved?.address || null,
@@ -714,7 +749,15 @@ const PengaturanScreen = ({ navigation }) => {
       return;
     }
     try {
-      await AsyncStorage.setItem("storeName", storeNameInput.trim());
+      const activeStoreId = storeId || profile?.stores?.id || null;
+      const nameKey = getStoreNameKey(activeStoreId);
+      const logoKey = getStoreLogoKey(activeStoreId);
+      const profileKey = getStoreProfileKey(activeStoreId);
+      const modeKey = getBusinessModeKey(activeStoreId);
+
+      if (nameKey) {
+        await AsyncStorage.setItem(nameKey, storeNameInput.trim());
+      }
       const normalizedAddr = normalizeMacAddress(printerInput);
       const savedPrinter = normalizedAddr
         ? await savePrinterSelection({
@@ -727,7 +770,10 @@ const PengaturanScreen = ({ navigation }) => {
       let finalLogoUri = logoUri;
       if (logoUri && !isCloudImageUri(logoUri)) {
         try {
-          finalLogoUri = await uploadProductImage(logoUri, "logos");
+          finalLogoUri = await uploadProductImage(
+            logoUri,
+            activeStoreId ? `logos/${activeStoreId}` : "logos",
+          );
         } catch (uploadErr) {
           Alert.alert(
             "Peringatan",
@@ -737,37 +783,42 @@ const PengaturanScreen = ({ navigation }) => {
           );
         }
       }
-      if (finalLogoUri) {
-        await AsyncStorage.setItem("storeLogo", finalLogoUri);
-      } else {
-        await AsyncStorage.removeItem("storeLogo");
+      if (logoKey) {
+        if (finalLogoUri) {
+          await AsyncStorage.setItem(logoKey, finalLogoUri);
+        } else {
+          await AsyncStorage.removeItem(logoKey);
+        }
       }
 
-      // Selaraskan ke StoreProfile object (format baku nota: storeName, dst.)
-      // Baca dulu profil lama agar field lain (alamat, kontak, footer,
-      // printerAddress) tidak hilang saat disimpan ulang.
+      // Selaraskan ke StoreProfile object terisolasi per toko (format baku nota: storeName, dst.)
       let existingProfile = {};
-      try {
-        const savedProfile = await AsyncStorage.getItem(
-          "@TokoKelontong:StoreProfile",
+      if (profileKey) {
+        try {
+          const savedProfile = await AsyncStorage.getItem(profileKey);
+          if (savedProfile) existingProfile = JSON.parse(savedProfile);
+        } catch (_) {
+          existingProfile = {};
+        }
+
+        const storeProfileObj = {
+          ...existingProfile,
+          storeName: storeNameInput.trim(),
+          name: storeNameInput.trim(), // alias format lama, dijaga sementara
+          printerAddress: savedPrinter.address,
+          printerName: savedPrinter.name,
+          logo: finalLogoUri || null,
+        };
+        await AsyncStorage.setItem(
+          profileKey,
+          JSON.stringify(storeProfileObj),
         );
-        if (savedProfile) existingProfile = JSON.parse(savedProfile);
-      } catch (_) {
-        existingProfile = {};
       }
 
-      const storeProfileObj = {
-        ...existingProfile,
-        storeName: storeNameInput.trim(),
-        name: storeNameInput.trim(), // alias format lama, dijaga sementara
-        printerAddress: savedPrinter.address,
-        printerName: savedPrinter.name,
-        logo: finalLogoUri || null,
-      };
-      await AsyncStorage.setItem(
-        "@TokoKelontong:StoreProfile",
-        JSON.stringify(storeProfileObj),
-      );
+      if (modeKey) {
+        await AsyncStorage.setItem(modeKey, businessMode);
+      }
+      await clearLegacyGlobalStoreKeys();
 
       dispatch({ type: "SET_STORE_NAME", payload: storeNameInput.trim() });
       dispatch({
@@ -780,7 +831,6 @@ const PengaturanScreen = ({ navigation }) => {
       });
       dispatch({ type: "SET_STORE_LOGO", payload: finalLogoUri || null });
       dispatch({ type: "SET_BUSINESS_MODE", payload: businessMode });
-      await AsyncStorage.setItem("@TokoKelontong:BusinessMode", businessMode);
 
       // Simpan nama toko ke cloud agar terbaca di semua HP toko yang sama
       try {
@@ -842,7 +892,10 @@ const PengaturanScreen = ({ navigation }) => {
 
     setBusinessModeState(mode);
     dispatch({ type: "SET_BUSINESS_MODE", payload: mode });
-    await AsyncStorage.setItem("@TokoKelontong:BusinessMode", mode);
+    const modeKey = getBusinessModeKey(storeId);
+    if (modeKey) {
+      await AsyncStorage.setItem(modeKey, mode);
+    }
   };
 
   const handleUpgradePlan = async () => {

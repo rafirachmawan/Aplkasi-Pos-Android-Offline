@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   Linking,
   Modal,
   Platform,
@@ -62,14 +63,23 @@ export async function openUpgradeChat() {
 /**
  * Isi kartu kunci (tanpa pembungkus), dipakai ProLock dan ProLockModal.
  */
-function ProLockCard({ feature, plan }) {
+function ProLockCard({ feature, plan, onClose }) {
   const meta = PRO_FEATURES[feature] || {
     title: "Fitur Pro",
     description: "Fitur ini tersedia pada paket Pro.",
   };
+  const isModal = typeof onClose === "function";
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, isModal && styles.cardModal]}>
+      <View style={styles.iconCircle}>
+        <MaterialCommunityIcons
+          name="crown-outline"
+          size={24}
+          color={colors.primaryDark}
+        />
+      </View>
+
       <View style={styles.proPill}>
         <Text style={styles.proPillText}>FITUR PRO</Text>
       </View>
@@ -79,6 +89,11 @@ function ProLockCard({ feature, plan }) {
 
       {plan.expired ? (
         <View style={styles.expiredTag}>
+          <MaterialCommunityIcons
+            name="clock-alert-outline"
+            size={15}
+            color={colors.warningTextDark}
+          />
           <Text style={styles.expiredText}>
             Masa aktif Pro Anda sudah berakhir
           </Text>
@@ -90,7 +105,18 @@ function ProLockCard({ feature, plan }) {
         onPress={() => void openUpgradeChat()}
         activeOpacity={0.85}
         disabled={!SUPPORT_WHATSAPP}
+        accessibilityRole="button"
+        accessibilityLabel={
+          SUPPORT_WHATSAPP ? "Upgrade ke Pro via WhatsApp" : "Hubungi pengelola"
+        }
       >
+        {SUPPORT_WHATSAPP ? (
+          <MaterialCommunityIcons
+            name="whatsapp"
+            size={18}
+            color={colors.onPrimary}
+          />
+        ) : null}
         <Text style={styles.upgradeText}>
           {SUPPORT_WHATSAPP ? "Upgrade ke Pro via WhatsApp" : "Hubungi pengelola"}
         </Text>
@@ -107,6 +133,18 @@ function ProLockCard({ feature, plan }) {
           }
         </Text>
       )}
+
+      {isModal ? (
+        <TouchableOpacity
+          style={styles.closeBtn}
+          onPress={onClose}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Tutup panel fitur Pro"
+        >
+          <Text style={styles.closeBtnText}>Tutup</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -154,16 +192,9 @@ export function ProLockModal({ visible, feature, onClose }) {
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.modalInner}>
-          <ProLockCard feature={feature} plan={plan} />
-
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={onClose}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.closeBtnText}>Tutup</Text>
-          </TouchableOpacity>
+          <ProLockCard feature={feature} plan={plan} onClose={onClose} />
         </View>
       </View>
     </Modal>
@@ -178,92 +209,114 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 26,
+    paddingVertical: 24,
     paddingHorizontal: 20,
     alignItems: "center",
   },
-  proPill: {
-    backgroundColor: "#FFF7ED",
+  cardModal: {
+    width: "100%",
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.primaryContainer,
     borderWidth: 1,
-    borderColor: "#FED7AA",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    borderColor: colors.primaryBorder,
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 12,
+  },
+  proPill: {
+    backgroundColor: colors.primaryContainer,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 10,
   },
   proPillText: {
     fontFamily: fonts.bold,
-    fontSize: 10,
-    letterSpacing: 0.8,
-    color: colors.primary,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    color: colors.primaryTextDark,
   },
   title: {
     fontFamily: fonts.bold,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "800",
     color: colors.text,
     textAlign: "center",
   },
   desc: {
     fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.textSecondary,
+    fontSize: 14,
+    color: colors.textBodySecondary,
     textAlign: "center",
-    marginTop: 7,
-    lineHeight: 19,
+    marginTop: 6,
+    lineHeight: 20,
   },
   expiredTag: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBannerBg,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    marginTop: 14,
+    marginTop: 12,
   },
   expiredText: {
     fontFamily: fonts.semiBold,
-    fontSize: 11.5,
-    color: "#92400E",
+    fontSize: 12,
+    color: colors.warningTextDark,
   },
   upgradeBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: colors.primary,
+    minHeight: 48,
+    backgroundColor: colors.primaryDark,
     borderRadius: 12,
     paddingVertical: 13,
-    paddingHorizontal: 22,
+    paddingHorizontal: 20,
     marginTop: 20,
     alignSelf: "stretch",
     ...Platform.select({
       android: { elevation: 2 },
-      ios: { shadowColor: colors.primary, shadowOpacity: 0.2, shadowRadius: 6 },
+      ios: { shadowColor: colors.primaryDark, shadowOpacity: 0.2, shadowRadius: 6 },
     }),
   },
   upgradeText: {
     fontFamily: fonts.bold,
     fontSize: 14.5,
-    color: "#FFFFFF",
+    color: colors.onPrimary,
   },
   hint: {
     fontFamily: fonts.regular,
-    fontSize: 11.5,
+    fontSize: 12,
     color: colors.textSecondary,
     textAlign: "center",
-    marginTop: 12,
-    lineHeight: 17,
+    marginTop: 10,
+    lineHeight: 18,
   },
 
   // ── Varian modal (dipakai di dalam layar read-only) ──
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    backgroundColor: colors.overlayBackdrop,
     justifyContent: "center",
     paddingHorizontal: 20,
   },
@@ -273,15 +326,20 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   closeBtn: {
-    marginTop: 12,
+    marginTop: 14,
+    minHeight: 44,
+    alignSelf: "stretch",
     alignItems: "center",
-    paddingVertical: 12,
+    justifyContent: "center",
+    paddingVertical: 11,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.14)",
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   closeBtnText: {
     fontFamily: fonts.bold,
     fontSize: 14,
-    color: "#FFFFFF",
+    color: colors.textDark,
   },
 });

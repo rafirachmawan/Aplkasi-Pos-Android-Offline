@@ -19,22 +19,49 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import debtRepository from "../database/debtRepository";
-import { formatRupiah } from "../utils/helpers";
+import {
+  formatRupiah,
+  formatToRpInput,
+  parseRpInput,
+  parseFlexibleDueDate,
+  formatDueDateDisplay,
+} from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
+import { useAuth } from "../context/AuthContext";
+import { getStoreNameKey } from "../services/sessionStore";
 
-const formatToRp = (raw) => {
-  const num = String(raw).replace(/\D/g, "");
-  if (!num) return "";
-  return parseInt(num, 10).toLocaleString("id-ID");
-};
-
-const parseRp = (formatted) => {
-  if (!formatted) return 0;
-  const cleaned = String(formatted).replace(/\D/g, "");
-  return parseInt(cleaned, 10) || 0;
-};
+/**
+ * Shared header for Buku Kasbon modals with 44x44dp accessible close target.
+ */
+function ModalHeader({ title, subtitle, onClose, closeLabel }) {
+  return (
+    <View style={styles.modalHeader}>
+      <View style={styles.modalHeaderTextWrap}>
+        <Text style={styles.modalTitle}>{title}</Text>
+        {subtitle ? (
+          <Text style={styles.modalSubtitle} numberOfLines={2}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <TouchableOpacity
+        onPress={onClose}
+        style={styles.modalCloseBtn}
+        hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}
+        accessibilityRole="button"
+        accessibilityLabel={closeLabel || `Tutup ${title}`}
+      >
+        <MaterialCommunityIcons
+          name="close"
+          size={20}
+          color={colors.textBodySecondary}
+        />
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 const BukuKasbonScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -47,6 +74,7 @@ const BukuKasbonScreen = ({ navigation }) => {
   const [selectedDebt, setSelectedDebt] = useState(null);
   const [showPayModal, setShowPayModal] = useState(false);
   const [payAmountInput, setPayAmountInput] = useState("");
+  const [payError, setPayError] = useState("");
   const [payMethod, setPayMethod] = useState("cash");
   const [payNotes, setPayNotes] = useState("");
   const [paying, setPaying] = useState(false);
@@ -58,6 +86,13 @@ const BukuKasbonScreen = ({ navigation }) => {
   const [newAmount, setNewAmount] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [newNotes, setNewNotes] = useState("");
+  const [notesInputHeight, setNotesInputHeight] = useState(54);
+  const [addErrors, setAddErrors] = useState({
+    name: "",
+    amount: "",
+    dueDate: "",
+    submit: "",
+  });
   const [savingNew, setSavingNew] = useState(false);
 
   // Modal Detail Riwayat Cicilan
@@ -72,15 +107,24 @@ const BukuKasbonScreen = ({ navigation }) => {
   const plan = usePlan();
   const isReadOnly = !plan.isPro;
 
-  const [storeName, setStoreName] = useState("MarketPos");
+  const { profile } = useAuth();
+  const activeStoreId = profile?.store_id || profile?.stores?.id || null;
+  const [storeName, setStoreName] = useState(
+    profile?.stores?.store_name || "MarketPos",
+  );
 
   useFocusEffect(
     useCallback(() => {
       loadData();
-      AsyncStorage.getItem("storeName").then((val) => {
-        if (val) setStoreName(val);
-      });
-    }, []),
+      const nameKey = getStoreNameKey(activeStoreId);
+      if (nameKey) {
+        AsyncStorage.getItem(nameKey).then((val) => {
+          setStoreName(val || profile?.stores?.store_name || "MarketPos");
+        });
+      } else {
+        setStoreName(profile?.stores?.store_name || "MarketPos");
+      }
+    }, [activeStoreId, profile?.stores?.store_name]),
   );
 
   const loadData = async () => {
@@ -127,15 +171,8 @@ const BukuKasbonScreen = ({ navigation }) => {
     return matchName || matchPhone || matchInvoice;
   });
 
-  // ── Helper Cepat Jatuh Tempo ──
-  const setQuickDueDate = (days) => {
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    setNewDueDate(`${yyyy}-${mm}-${dd}`);
-  };
+  // ── Pratinjau parsing tanggal jatuh tempo bebas (mis. "12 januari" -> "12 Jan 2027") ──
+  const parsedDuePreview = parseFlexibleDueDate(newDueDate);
 
   // ── Kirim Pengingat Tagihan via WhatsApp ──
   const handleSendReminderWA = (item) => {
@@ -156,7 +193,8 @@ const BukuKasbonScreen = ({ navigation }) => {
       cleanPhone = "62" + cleanPhone.substring(1);
     }
 
-    const dueDateText = item.due_date ? `📅 Jatuh Tempo: ${item.due_date}\n` : "";
+    const formattedDue = formatDueDateDisplay(item.due_date);
+    const dueDateText = formattedDue ? `📅 Jatuh Tempo: ${formattedDue}\n` : "";
     const noteText = item.notes ? `📝 Catatan: ${item.notes}\n` : "";
     const invoiceText = item.invoice_number
       ? `📋 No. Nota: ${item.invoice_number}\n`
@@ -188,7 +226,8 @@ const BukuKasbonScreen = ({ navigation }) => {
   // ── Buka Modal Bayar Kasbon ──
   const openPayModal = (item) => {
     setSelectedDebt(item);
-    setPayAmountInput(formatToRp(String(item.remaining_debt)));
+    setPayAmountInput(formatToRpInput(String(item.remaining_debt || "")));
+    setPayError("");
     setPayMethod("cash");
     setPayNotes("");
     setShowPayModal(true);
@@ -196,20 +235,20 @@ const BukuKasbonScreen = ({ navigation }) => {
 
   // ── Simpan Pembayaran Kasbon ──
   const handleSavePayment = async () => {
-    if (!selectedDebt) return;
-    const amount = parseRp(payAmountInput);
+    if (!selectedDebt || paying) return;
+    const amount = parseRpInput(payAmountInput);
     if (amount <= 0) {
-      Alert.alert("Nominal Salah", "Masukkan nominal pembayaran yang valid.");
+      setPayError("Masukkan nominal pembayaran terlebih dahulu.");
       return;
     }
     if (amount > selectedDebt.remaining_debt) {
-      Alert.alert(
-        "Nominal Lebih",
-        `Pembayaran melebihi sisa hutang (${formatRupiah(selectedDebt.remaining_debt)}).`,
+      setPayError(
+        `Nominal melebihi sisa tagihan (${formatRupiah(selectedDebt.remaining_debt)}).`,
       );
       return;
     }
 
+    setPayError("");
     setPaying(true);
     try {
       await debtRepository.recordPayment(selectedDebt.id, {
@@ -223,7 +262,7 @@ const BukuKasbonScreen = ({ navigation }) => {
       Alert.alert("✅ Berhasil", "Pembayaran kasbon berhasil dicatat.");
       loadData();
     } catch (e) {
-      Alert.alert("Gagal", e.message || "Gagal mencatat pembayaran kasbon.");
+      setPayError(e.message || "Gagal mencatat pembayaran. Silakan coba lagi.");
     } finally {
       setPaying(false);
     }
@@ -231,24 +270,32 @@ const BukuKasbonScreen = ({ navigation }) => {
 
   // ── Tambah Kasbon Baru Manual ──
   const handleSaveNewDebt = async () => {
-    if (!newName.trim()) {
-      Alert.alert("Nama Wajib Diisi", "Masukkan nama pelanggan.");
-      return;
-    }
-    const amount = parseRp(newAmount);
-    if (amount <= 0) {
-      Alert.alert("Nominal Salah", "Masukkan nominal kasbon.");
+    if (savingNew) return;
+    const trimmedName = newName.trim();
+    const amount = parseRpInput(newAmount);
+    const dueResult = parseFlexibleDueDate(newDueDate);
+
+    const nextErrors = {
+      name: trimmedName ? "" : "Nama pelanggan wajib diisi.",
+      amount: amount > 0 ? "" : "Masukkan nominal kasbon lebih dari Rp0.",
+      dueDate: dueResult.valid ? "" : dueResult.error,
+      submit: "",
+    };
+
+    if (nextErrors.name || nextErrors.amount || nextErrors.dueDate) {
+      setAddErrors(nextErrors);
       return;
     }
 
+    setAddErrors({ name: "", amount: "", dueDate: "", submit: "" });
     setSavingNew(true);
     try {
       await debtRepository.createDebt({
-        customer_name: newName.trim(),
+        customer_name: trimmedName,
         customer_phone: newPhone.trim(),
         total_debt: amount,
         remaining_debt: amount,
-        due_date: newDueDate.trim() || null,
+        due_date: dueResult.iso,
         notes: newNotes.trim(),
       });
 
@@ -258,10 +305,14 @@ const BukuKasbonScreen = ({ navigation }) => {
       setNewAmount("");
       setNewDueDate("");
       setNewNotes("");
+      setNotesInputHeight(54);
       Alert.alert("✅ Sukses", "Catatan kasbon baru berhasil disimpan.");
       loadData();
     } catch (e) {
-      Alert.alert("Error", e.message || "Gagal menyimpan kasbon baru.");
+      setAddErrors((prev) => ({
+        ...prev,
+        submit: e.message || "Gagal menyimpan kasbon. Data masih aman, silakan coba lagi.",
+      }));
     } finally {
       setSavingNew(false);
     }
@@ -376,7 +427,9 @@ const BukuKasbonScreen = ({ navigation }) => {
             </Text>
             {item.due_date ? (
               <View style={styles.dueDateBadge}>
-                <Text style={styles.dueDateText}>Jatuh Tempo: {item.due_date}</Text>
+                <Text style={styles.dueDateText}>
+                  Jatuh Tempo: {formatDueDateDisplay(item.due_date)}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -632,6 +685,8 @@ const BukuKasbonScreen = ({ navigation }) => {
           setNewAmount("");
           setNewDueDate("");
           setNewNotes("");
+          setNotesInputHeight(54);
+          setAddErrors({ name: "", amount: "", dueDate: "", submit: "" });
           setShowAddModal(true);
         }}
         activeOpacity={0.88}
@@ -647,118 +702,149 @@ const BukuKasbonScreen = ({ navigation }) => {
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => setShowPayModal(false)}
+        onRequestClose={() => !paying && setShowPayModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalOverlay}
         >
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>Bayar / Cicil Kasbon</Text>
-                <Text style={styles.modalSubtitle}>
-                  Pelanggan: {selectedDebt?.customer_name}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setShowPayModal(false)}
-                style={styles.modalCloseBtn}
-              >
-                <MaterialCommunityIcons name="close" size={20} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.sisaHutangBanner}>
-              <View>
-                <Text style={styles.sisaHutangLabel}>Sisa Hutang Saat Ini</Text>
-                <Text style={styles.sisaHutangVal}>
-                  {formatRupiah(selectedDebt?.remaining_debt || 0)}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.quickPayFullBtn}
-                onPress={() =>
-                  setPayAmountInput(
-                    formatToRp(String(selectedDebt?.remaining_debt || 0)),
-                  )
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.modalCard}>
+              <ModalHeader
+                title="Bayar / Cicil Kasbon"
+                subtitle={
+                  selectedDebt?.customer_name
+                    ? `Pelanggan: ${selectedDebt.customer_name}`
+                    : ""
                 }
-                activeOpacity={0.8}
-              >
-                <Text style={styles.quickPayFullText}>Bayar Lunas</Text>
-              </TouchableOpacity>
-            </View>
+                onClose={() => !paying && setShowPayModal(false)}
+                closeLabel="Tutup modal pembayaran kasbon"
+              />
 
-            <Text style={styles.inputLabel}>NOMINAL PEMBAYARAN (RP) *</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={payAmountInput}
-              onChangeText={(val) => setPayAmountInput(formatToRp(val))}
-              keyboardType="number-pad"
-              placeholder="0"
-              placeholderTextColor="#94A3B8"
-            />
+              <View style={styles.sisaHutangBanner}>
+                <View style={styles.sisaHutangTextWrap}>
+                  <Text style={styles.sisaHutangLabel}>
+                    Sisa hutang saat ini
+                  </Text>
+                  <Text style={styles.sisaHutangVal}>
+                    {formatRupiah(selectedDebt?.remaining_debt || 0)}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.quickPayFullBtn}
+                  onPress={() => {
+                    setPayAmountInput(
+                      formatToRpInput(String(selectedDebt?.remaining_debt || 0)),
+                    );
+                    if (payError) setPayError("");
+                  }}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Isi nominal bayar lunas"
+                >
+                  <Text style={styles.quickPayFullText}>Bayar Lunas</Text>
+                </TouchableOpacity>
+              </View>
 
-            <Text style={styles.inputLabel}>METODE PEMBAYARAN</Text>
-            <View style={styles.methodsRow}>
-              {[
-                { id: "cash", label: "Tunai" },
-                { id: "transfer", label: "Transfer" },
-                { id: "qris", label: "QRIS" },
-              ].map((m) => {
-                const isSelected = payMethod === m.id;
-                return (
-                  <TouchableOpacity
-                    key={m.id}
-                    style={[
-                      styles.methodChip,
-                      isSelected && styles.methodChipActive,
-                    ]}
-                    onPress={() => setPayMethod(m.id)}
-                    activeOpacity={0.75}
-                  >
-                    <Text
-                      style={[
-                        styles.methodChipText,
-                        isSelected && styles.methodChipTextActive,
-                      ]}
-                    >
-                      {m.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={styles.inputLabel}>CATATAN (OPSIONAL)</Text>
-            <TextInput
-              style={[styles.modalInput, { minHeight: 44 }]}
-              value={payNotes}
-              onChangeText={setPayNotes}
-              placeholder="Misal: Cicilan ke-1"
-              placeholderTextColor="#94A3B8"
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setShowPayModal(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.modalCancelText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalSubmitBtn, paying && { opacity: 0.7 }]}
-                onPress={handleSavePayment}
-                disabled={paying}
-                activeOpacity={0.88}
-              >
-                <Text style={styles.modalSubmitText}>
-                  {paying ? "Menyimpan..." : "Simpan Pembayaran"}
+              <Text style={styles.inputLabel}>
+                Nominal pembayaran <Text style={styles.requiredMark}>*</Text>
+              </Text>
+              <TextInput
+                style={[
+                  styles.modalInput,
+                  styles.modalInputAmount,
+                  Boolean(payError) && styles.modalInputError,
+                ]}
+                value={payAmountInput}
+                onChangeText={(val) => {
+                  setPayAmountInput(formatToRpInput(val));
+                  if (payError) setPayError("");
+                }}
+                keyboardType="number-pad"
+                placeholder="Rp0"
+                placeholderTextColor={colors.textMuted}
+              />
+              {payError ? (
+                <Text style={styles.fieldError}>{payError}</Text>
+              ) : (
+                <Text style={styles.fieldHelper}>
+                  Otomatis diformat ke Rupiah, contoh: Rp50.000
                 </Text>
-              </TouchableOpacity>
+              )}
+
+              <Text style={styles.inputLabel}>Metode pembayaran</Text>
+              <View style={styles.methodsRow}>
+                {[
+                  { id: "cash", label: "Tunai" },
+                  { id: "transfer", label: "Transfer" },
+                  { id: "qris", label: "QRIS" },
+                ].map((m) => {
+                  const isSelected = payMethod === m.id;
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={[
+                        styles.methodChip,
+                        isSelected && styles.methodChipActive,
+                      ]}
+                      onPress={() => setPayMethod(m.id)}
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                    >
+                      <Text
+                        style={[
+                          styles.methodChipText,
+                          isSelected && styles.methodChipTextActive,
+                        ]}
+                      >
+                        {m.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.inputLabel}>Catatan (opsional)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={payNotes}
+                onChangeText={setPayNotes}
+                placeholder="Misal: Cicilan ke-1"
+                placeholderTextColor={colors.textMuted}
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setShowPayModal(false)}
+                  disabled={paying}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.modalCancelText}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSubmitBtn, paying && { opacity: 0.85 }]}
+                  onPress={handleSavePayment}
+                  disabled={paying}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                >
+                  {paying ? (
+                    <ActivityIndicator size="small" color={colors.onPrimary} />
+                  ) : null}
+                  <Text style={styles.modalSubmitText}>
+                    {paying ? "Menyimpan..." : "Simpan Pembayaran"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -768,10 +854,10 @@ const BukuKasbonScreen = ({ navigation }) => {
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => setShowAddModal(false)}
+        onRequestClose={() => !savingNew && setShowAddModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalOverlay}
         >
           <ScrollView
@@ -780,110 +866,187 @@ const BukuKasbonScreen = ({ navigation }) => {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <View>
-                  <Text style={styles.modalTitle}>Catat Kasbon Baru</Text>
-                  <Text style={styles.modalSubtitle}>
-                    Pencatatan piutang pelanggan langsung
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowAddModal(false)}
-                  style={styles.modalCloseBtn}
-                >
-                  <MaterialCommunityIcons
-                    name="close"
-                    size={20}
-                    color="#64748B"
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.inputLabel}>NAMA PELANGGAN *</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={newName}
-                onChangeText={setNewName}
-                placeholder="Contoh: Pak Budi"
-                placeholderTextColor="#94A3B8"
+              <ModalHeader
+                title="Catat Kasbon Baru"
+                subtitle="Catat piutang pelanggan secara manual"
+                onClose={() => !savingNew && setShowAddModal(false)}
+                closeLabel="Tutup modal catat kasbon"
               />
+
+              <Text style={styles.formSectionLabel}>Data utama</Text>
 
               <Text style={styles.inputLabel}>
-                NO. WHATSAPP / TELEPON (OPSIONAL)
+                Nama pelanggan <Text style={styles.requiredMark}>*</Text>
               </Text>
               <TextInput
-                style={styles.modalInput}
-                value={newPhone}
-                onChangeText={setNewPhone}
-                keyboardType="phone-pad"
-                placeholder="Contoh: 08123456789"
-                placeholderTextColor="#94A3B8"
+                style={[
+                  styles.modalInput,
+                  Boolean(addErrors.name) && styles.modalInputError,
+                ]}
+                value={newName}
+                onChangeText={(v) => {
+                  setNewName(v);
+                  if (addErrors.name || addErrors.submit) {
+                    setAddErrors((prev) => ({
+                      ...prev,
+                      name: "",
+                      submit: "",
+                    }));
+                  }
+                }}
+                autoCapitalize="words"
+                returnKeyType="next"
+                placeholder="Misal: Pak Budi"
+                placeholderTextColor={colors.textMuted}
               />
+              {addErrors.name ? (
+                <Text style={styles.fieldError}>{addErrors.name}</Text>
+              ) : null}
 
-              <Text style={styles.inputLabel}>NOMINAL KASBON (RP) *</Text>
+              <Text style={styles.inputLabel}>
+                Nominal kasbon <Text style={styles.requiredMark}>*</Text>
+              </Text>
               <TextInput
-                style={styles.modalInput}
+                style={[
+                  styles.modalInput,
+                  styles.modalInputAmount,
+                  Boolean(addErrors.amount) && styles.modalInputError,
+                ]}
                 value={newAmount}
-                onChangeText={(v) => setNewAmount(formatToRp(v))}
+                onChangeText={(v) => {
+                  setNewAmount(formatToRpInput(v));
+                  if (addErrors.amount || addErrors.submit) {
+                    setAddErrors((prev) => ({
+                      ...prev,
+                      amount: "",
+                      submit: "",
+                    }));
+                  }
+                }}
                 keyboardType="number-pad"
-                placeholder="0"
-                placeholderTextColor="#94A3B8"
+                placeholder="Rp0"
+                placeholderTextColor={colors.textMuted}
               />
+              {addErrors.amount ? (
+                <Text style={styles.fieldError}>{addErrors.amount}</Text>
+              ) : (
+                <Text style={styles.fieldHelper}>
+                  Otomatis diformat ke Rupiah, contoh: Rp50.000
+                </Text>
+              )}
 
-              <View style={styles.fieldHeaderBetween}>
-                <Text style={styles.inputLabel}>JATUH TEMPO (OPSIONAL)</Text>
+              <View style={styles.optionalSection}>
+                <Text style={styles.formSectionLabel}>
+                  Detail tambahan (opsional)
+                </Text>
+
+                <Text style={styles.inputLabel}>No. WhatsApp / HP</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={newPhone}
+                  onChangeText={setNewPhone}
+                  keyboardType="phone-pad"
+                  placeholder="Misal: 08123456789"
+                  placeholderTextColor={colors.textMuted}
+                />
+                <Text style={styles.fieldHelper}>
+                  Untuk mengirim pengingat tagihan via WhatsApp
+                </Text>
+
+                <Text style={styles.inputLabel}>Jatuh tempo (opsional)</Text>
+                <TextInput
+                  style={[
+                    styles.modalInput,
+                    Boolean(addErrors.dueDate) && styles.modalInputError,
+                  ]}
+                  value={newDueDate}
+                  onChangeText={(v) => {
+                    setNewDueDate(v);
+                    if (addErrors.dueDate || addErrors.submit) {
+                      setAddErrors((prev) => ({
+                        ...prev,
+                        dueDate: "",
+                        submit: "",
+                      }));
+                    }
+                  }}
+                  onBlur={() => {
+                    const res = parseFlexibleDueDate(newDueDate);
+                    if (!res.valid) {
+                      setAddErrors((prev) => ({ ...prev, dueDate: res.error }));
+                    }
+                  }}
+                  autoCapitalize="none"
+                  placeholder="Misal: 12 Januari atau 12-01"
+                  placeholderTextColor={colors.textMuted}
+                />
+                {addErrors.dueDate ? (
+                  <Text style={styles.fieldError}>{addErrors.dueDate}</Text>
+                ) : newDueDate.trim() &&
+                  parsedDuePreview.valid &&
+                  parsedDuePreview.display ? (
+                  <Text style={styles.fieldSuccess}>
+                    Terjadwal jatuh tempo: {parsedDuePreview.display}
+                  </Text>
+                ) : (
+                  <Text style={styles.fieldHelper}>
+                    Boleh kosong, atau tulis bebas seperti 12 Januari, 12-01, atau besok
+                  </Text>
+                )}
+
+                <Text style={styles.inputLabel}>Catatan</Text>
+                <TextInput
+                  style={[
+                    styles.modalInput,
+                    styles.notesInput,
+                    { height: Math.max(54, notesInputHeight) },
+                  ]}
+                  value={newNotes}
+                  onChangeText={setNewNotes}
+                  multiline
+                  textAlignVertical="top"
+                  onContentSizeChange={(e) => {
+                    const nextH = Math.round(
+                      e.nativeEvent.contentSize.height + 16,
+                    );
+                    setNotesInputHeight(Math.min(110, Math.max(54, nextH)));
+                  }}
+                  placeholder="Misal: Ambil beras 1 karung & minyak"
+                  placeholderTextColor={colors.textMuted}
+                />
               </View>
 
-              {/* Quick Preset Buttons untuk Jatuh Tempo */}
-              <View style={styles.quickPresetRow}>
-                {[
-                  { label: "+3 Hari", days: 3 },
-                  { label: "+7 Hari", days: 7 },
-                  { label: "+14 Hari", days: 14 },
-                  { label: "+30 Hari", days: 30 },
-                ].map((p) => (
-                  <TouchableOpacity
-                    key={p.label}
-                    style={styles.presetChip}
-                    onPress={() => setQuickDueDate(p.days)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.presetChipText}>{p.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <TextInput
-                style={styles.modalInput}
-                value={newDueDate}
-                onChangeText={setNewDueDate}
-                placeholder="YYYY-MM-DD (Misal: 2026-11-15)"
-                placeholderTextColor="#94A3B8"
-              />
-
-              <Text style={styles.inputLabel}>CATATAN KASBON (OPSIONAL)</Text>
-              <TextInput
-                style={[styles.modalInput, { minHeight: 44 }]}
-                value={newNotes}
-                onChangeText={setNewNotes}
-                placeholder="Misal: Ambil beras 1 karung & minyak"
-                placeholderTextColor="#94A3B8"
-              />
+              {addErrors.submit ? (
+                <View style={styles.submitErrorBox}>
+                  <MaterialCommunityIcons
+                    name="alert-circle-outline"
+                    size={16}
+                    color={colors.errorDark}
+                  />
+                  <Text style={styles.submitErrorText}>{addErrors.submit}</Text>
+                </View>
+              ) : null}
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
                   style={styles.modalCancelBtn}
                   onPress={() => setShowAddModal(false)}
+                  disabled={savingNew}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
                 >
                   <Text style={styles.modalCancelText}>Batal</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalSubmitBtn, savingNew && { opacity: 0.7 }]}
+                  style={[styles.modalSubmitBtn, savingNew && { opacity: 0.85 }]}
                   onPress={handleSaveNewDebt}
                   disabled={savingNew}
                   activeOpacity={0.88}
+                  accessibilityRole="button"
                 >
+                  {savingNew ? (
+                    <ActivityIndicator size="small" color={colors.onPrimary} />
+                  ) : null}
                   <Text style={styles.modalSubmitText}>
                     {savingNew ? "Menyimpan..." : "Simpan Kasbon"}
                   </Text>
@@ -904,20 +1067,12 @@ const BukuKasbonScreen = ({ navigation }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { maxHeight: "85%" }]}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>Detail Catatan Kasbon</Text>
-                <Text style={styles.modalSubtitle}>
-                  {detailDebt?.customer_name}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setShowDetailModal(false)}
-                style={styles.modalCloseBtn}
-              >
-                <MaterialCommunityIcons name="close" size={20} color="#64748B" />
-              </TouchableOpacity>
-            </View>
+            <ModalHeader
+              title="Detail Catatan Kasbon"
+              subtitle={detailDebt?.customer_name}
+              onClose={() => setShowDetailModal(false)}
+              closeLabel="Tutup detail kasbon"
+            />
 
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={styles.detailBox}>
@@ -958,7 +1113,7 @@ const BukuKasbonScreen = ({ navigation }) => {
                   <View style={styles.detailRow}>
                     <Text style={styles.detailKey}>Jatuh Tempo</Text>
                     <Text style={[styles.detailVal, { color: "#D97706" }]}>
-                      {detailDebt.due_date}
+                      {formatDueDateDisplay(detailDebt.due_date)}
                     </Text>
                   </View>
                 ) : null}
@@ -1549,21 +1704,27 @@ const styles = StyleSheet.create({
   // ── Modals Common ──
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    backgroundColor: colors.overlayBackdrop,
     justifyContent: "center",
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
   },
   modalScrollContent: {
     flexGrow: 1,
     justifyContent: "center",
   },
   modalCard: {
-    backgroundColor: "#FFFFFF",
+    width: "100%",
+    maxWidth: 460,
+    alignSelf: "center",
+    backgroundColor: colors.surface,
     borderRadius: 20,
     padding: 20,
-    shadowColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.14,
     shadowRadius: 16,
     elevation: 6,
   },
@@ -1571,85 +1732,163 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 14,
+    gap: 12,
+    marginBottom: 16,
+  },
+  modalHeaderTextWrap: {
+    flex: 1,
   },
   modalTitle: {
     fontFamily: fonts.bold,
-    fontSize: 17,
-    color: "#0F172A",
+    fontSize: 18,
+    color: colors.text,
   },
   modalSubtitle: {
     fontFamily: fonts.regular,
-    fontSize: 12,
-    color: "#64748B",
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   modalCloseBtn: {
-    padding: 4,
-    borderRadius: 8,
-    backgroundColor: "#F1F5F9",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sisaHutangBanner: {
-    backgroundColor: "#FEF2F2",
+    backgroundColor: colors.errorSoftBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#FEE2E2",
+    borderColor: colors.errorBannerBg,
     padding: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 10,
     marginBottom: 12,
+  },
+  sisaHutangTextWrap: {
+    flex: 1,
   },
   sisaHutangLabel: {
     fontFamily: fonts.medium,
-    fontSize: 11,
-    color: "#991B1B",
+    fontSize: 12,
+    color: colors.errorTextDark,
   },
   sisaHutangVal: {
     fontFamily: fonts.extraBold,
-    fontSize: 16,
-    color: "#DC2626",
-    marginTop: 1,
+    fontSize: 17,
+    color: colors.errorDark,
+    marginTop: 2,
   },
   quickPayFullBtn: {
+    minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#DCFCE7",
+    justifyContent: "center",
+    backgroundColor: colors.successBadgeBg,
     borderWidth: 1,
-    borderColor: "#BBF7D0",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    borderColor: colors.successSoftBorder,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
   },
   quickPayFullText: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "#15803D",
+    fontSize: 12,
+    color: colors.successDark,
+  },
+  formSectionLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  optionalSection: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: 16,
+    paddingTop: 14,
   },
   inputLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    color: "#475569",
-    letterSpacing: 0.4,
-    marginBottom: 6,
-    marginTop: 8,
-  },
-  fieldHeaderBetween: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  modalInput: {
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
     fontFamily: fonts.semiBold,
     fontSize: 13,
-    color: "#0F172A",
+    color: colors.textDark,
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  requiredMark: {
+    color: colors.errorDark,
+    fontFamily: fonts.bold,
+  },
+  modalInput: {
+    minHeight: 48,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.text,
+  },
+  modalInputAmount: {
+    minHeight: 52,
+    fontFamily: fonts.bold,
+    fontSize: 17,
+    color: colors.text,
+  },
+  modalInputError: {
+    borderColor: colors.errorDark,
+    backgroundColor: colors.errorContainer,
+  },
+  notesInput: {
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  fieldHelper: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    marginTop: 5,
+  },
+  fieldSuccess: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.successText,
+    marginTop: 5,
+  },
+  fieldError: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.errorDark,
+    marginTop: 5,
+  },
+  submitErrorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.errorContainer,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 14,
+  },
+  submitErrorText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.errorTextDark,
   },
   methodsRow: {
     flexDirection: "row",
@@ -1658,79 +1897,67 @@ const styles = StyleSheet.create({
   },
   methodChip: {
     flex: 1,
+    minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#F8FAFC",
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceMuted,
   },
   methodChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.primaryDark,
+    borderColor: colors.primaryDark,
   },
   methodChipText: {
     fontFamily: fonts.semiBold,
-    fontSize: 11,
-    color: "#64748B",
+    fontSize: 13,
+    color: colors.textDark,
   },
   methodChipTextActive: {
-    color: "#FFFFFF",
+    color: colors.onPrimary,
     fontFamily: fonts.bold,
-  },
-  quickPresetRow: {
-    flexDirection: "row",
-    gap: 6,
-    marginBottom: 8,
-  },
-  presetChip: {
-    flex: 1,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#FFF7ED",
-    borderWidth: 1,
-    borderColor: "#FED7AA",
-    alignItems: "center",
-  },
-  presetChipText: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    color: colors.primary,
   },
   modalActions: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 18,
+    marginTop: 20,
   },
   modalCancelBtn: {
     flex: 1,
-    paddingVertical: 11,
-    borderRadius: 10,
+    minHeight: 48,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
   },
   modalCancelText: {
     fontFamily: fonts.semiBold,
-    fontSize: 13,
-    color: "#64748B",
+    fontSize: 14,
+    color: colors.textDark,
   },
   modalSubmitBtn: {
     flex: 1.5,
-    paddingVertical: 11,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: colors.primaryDark,
+    flexDirection: "row",
+    gap: 8,
     alignItems: "center",
     justifyContent: "center",
   },
   modalSubmitText: {
     fontFamily: fonts.bold,
-    fontSize: 13,
-    color: "#FFFFFF",
+    fontSize: 14,
+    color: colors.onPrimary,
   },
 
   // Detail Riwayat Box

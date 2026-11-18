@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "./supabaseClient";
 import { SUPABASE_URL } from "../config/supabaseConfig";
+import { LEGACY_GLOBAL_STORE_KEYS } from "./sessionStore";
 
 // Semua username disimpan sebagai email internal di Supabase Auth,
 // sehingga pengguna tidak butuh email asli.
@@ -20,15 +21,13 @@ export const toAuthEmail = (username) =>
  */
 export async function clearStoreLocalSession({ full = false } = {}) {
   try {
-    const keys = ["@TokoKelontong:SecurityPin", "@TokoKelontong:LockedMenus"];
+    const keys = [
+      "@TokoKelontong:SecurityPin",
+      "@TokoKelontong:LockedMenus",
+      ...LEGACY_GLOBAL_STORE_KEYS,
+    ];
     if (full) {
-      keys.push(
-        "@TokoKelontong:StoreProfile",
-        "@TokoKelontong:HeldOrders",
-        "@TokoKelontong:BusinessMode",
-        "storeName",
-        "storeLogo",
-      );
+      keys.push("@TokoKelontong:HeldOrders");
     }
     await AsyncStorage.multiRemove(keys);
   } catch (err) {

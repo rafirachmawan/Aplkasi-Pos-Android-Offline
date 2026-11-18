@@ -159,7 +159,11 @@ export function AuthProvider({ children }) {
 
     const { data } = supabase.auth.onAuthStateChange((event, s) => {
       if (s) {
-        userIdRef.current = s.user?.id || null;
+        const nextUid = s.user?.id || null;
+        if (userIdRef.current && userIdRef.current !== nextUid) {
+          setProfile(null);
+        }
+        userIdRef.current = nextUid;
         setSession(s);
         setOfflineAuthed(false);
         loadProfile();

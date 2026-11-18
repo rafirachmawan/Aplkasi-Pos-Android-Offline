@@ -27,6 +27,7 @@ import {
   generateReceiptHTML,
   generateWAMessage,
   generateDailyClosingWAMessage,
+  resolveReceiptProfile,
 } from "../utils/receiptGenerator";
 import {
   isPrinterConfigured,
@@ -34,6 +35,12 @@ import {
   printReceiptViaBluetooth,
 } from "../utils/bluetoothPrinter";
 import { colors, fonts } from "../theme/colors";
+import { useAuth } from "../context/AuthContext";
+import {
+  getScopedStoreProfile,
+  getStoreNameKey,
+  getStoreLogoKey,
+} from "../services/sessionStore";
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
 
@@ -77,6 +84,7 @@ const LaporanScreen = ({ navigation, route }) => {
   });
 
   // Tier langganan toko. Gratis = hanya laporan hari ini, CSV dikunci.
+  const { profile } = useAuth();
   const plan = usePlan();
   const isReadOnly = !plan.isPro;
   const [showLockModal, setShowLockModal] = useState(false);
@@ -286,21 +294,25 @@ const LaporanScreen = ({ navigation, route }) => {
 
   const getStoreProfile = async () => {
     try {
-      const saved = await AsyncStorage.getItem("@TokoKelontong:StoreProfile");
-      if (saved) {
-        const data = JSON.parse(saved);
-        if (data.name && !data.storeName) {
-          data.storeName = data.name;
-        }
-        return data;
+      const storeId = profile?.store_id || profile?.stores?.id || null;
+      const scoped = await getScopedStoreProfile(storeId);
+      if (Object.keys(scoped).length > 0) {
+        return resolveReceiptProfile(scoped, plan.isPro);
       }
+      const nameKey = getStoreNameKey(storeId);
+      const logoKey = getStoreLogoKey(storeId);
       const storeName =
-        (await AsyncStorage.getItem("storeName")) || "Toko Kelontong";
-      const logo = await AsyncStorage.getItem("storeLogo");
+        (nameKey && (await AsyncStorage.getItem(nameKey))) ||
+        profile?.stores?.store_name ||
+        "MarketPos";
+      const logo = logoKey ? await AsyncStorage.getItem(logoKey) : null;
       const printerAddress = await AsyncStorage.getItem("printerAddress");
-      return { name: storeName, logo, printerAddress };
+      return resolveReceiptProfile(
+        { storeName, name: storeName, logo, printerAddress },
+        plan.isPro,
+      );
     } catch {
-      return {};
+      return resolveReceiptProfile({}, plan.isPro);
     }
   };
 
@@ -894,7 +906,7 @@ const LaporanScreen = ({ navigation, route }) => {
               {selectedTx && (
                 <View style={styles.receiptPaper}>
                   <Text style={styles.receiptStoreName}>
-                    {storeProfile.storeName || "Toko Kelontong"}
+                    {storeProfile.storeName || "MarketPos"}
                   </Text>
                   {!!storeProfile.storeAddress && (
                     <Text style={styles.receiptMetaCenter}>

@@ -1,9 +1,15 @@
 import React, { createContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './AuthContext';
+import {
+  getStoreLogoKey,
+  getStoreNameKey,
+  getStoreProfileKey,
+  getBusinessModeKey,
+  clearLegacyGlobalStoreKeys,
+} from '../services/sessionStore';
 
 export const AppContext = createContext();
-
-const BUSINESS_MODE_KEY = '@TokoKelontong:BusinessMode';
 
 const initialState = {
   cart: [],
@@ -58,6 +64,14 @@ const reducer = (state, action) => {
       return { ...state, businessMode: action.payload };
     case 'LOAD_SETTINGS':
       return { ...state, ...action.payload };
+    case 'RESET_STORE_STATE':
+      return {
+        ...state,
+        cart: [],
+        storeName: 'MarketPos',
+        storeLogo: null,
+        businessMode: 'retail',
+      };
     default:
       return state;
   }
@@ -65,32 +79,107 @@ const reducer = (state, action) => {
 
 export const AppProvider = ({ children }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const { session, profile } = useAuth();
+  const sessionUserId = session?.user?.id || null;
+  const activeStoreId = profile?.store_id || profile?.stores?.id || null;
+  const cloudStoreName = profile?.stores?.store_name || null;
 
-  // Load settings from AsyncStorage on startup
+  // Pengaturan printer bersifat per perangkat fisik, dimuat sekali saat awal.
   useEffect(() => {
-    const loadSettings = async () => {
+    let cancelled = false;
+    const loadDevicePrinter = async () => {
       try {
-        const storeName = await AsyncStorage.getItem('storeName');
-        const storeLogo = await AsyncStorage.getItem('storeLogo');
         const printerAddress = await AsyncStorage.getItem('printerAddress');
         const printerName = await AsyncStorage.getItem('printerName');
-        const businessMode = await AsyncStorage.getItem(BUSINESS_MODE_KEY);
+        if (cancelled) return;
         dispatch({
           type: 'LOAD_SETTINGS',
           payload: {
-            storeName: storeName || 'MarketPos',
-            storeLogo: storeLogo || null,
             printerAddress: printerAddress || null,
             printerName: printerName || null,
-            businessMode: businessMode === 'fnb' ? 'fnb' : 'retail',
-          }
+          },
         });
       } catch (error) {
-        console.error("Failed to load settings", error);
+        console.error('Failed to load printer settings', error);
       }
     };
-    loadSettings();
+    loadDevicePrinter();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Identitas toko (logo, nama, mode bisnis) wajib terisolasi per store_id
+  // agar pergantian akun pada HP yang sama tidak pernah membocorkan logo/profil toko lain.
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!sessionUserId) {
+      dispatch({ type: 'RESET_STORE_STATE' });
+      void clearLegacyGlobalStoreKeys();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!activeStoreId) {
+      dispatch({
+        type: 'LOAD_SETTINGS',
+        payload: {
+          storeName: cloudStoreName || 'MarketPos',
+          storeLogo: null,
+          businessMode: 'retail',
+        },
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const loadScopedStoreSettings = async () => {
+      try {
+        await clearLegacyGlobalStoreKeys();
+        const logoKey = getStoreLogoKey(activeStoreId);
+        const nameKey = getStoreNameKey(activeStoreId);
+        const profileKey = getStoreProfileKey(activeStoreId);
+        const modeKey = getBusinessModeKey(activeStoreId);
+
+        const [storeLogo, scopedName, rawProfile, businessMode] = await Promise.all([
+          logoKey ? AsyncStorage.getItem(logoKey) : null,
+          nameKey ? AsyncStorage.getItem(nameKey) : null,
+          profileKey ? AsyncStorage.getItem(profileKey) : null,
+          modeKey ? AsyncStorage.getItem(modeKey) : null,
+        ]);
+
+        let profileLogo = null;
+        if (rawProfile) {
+          try {
+            const parsed = JSON.parse(rawProfile);
+            profileLogo = parsed?.logo || null;
+          } catch {
+            profileLogo = null;
+          }
+        }
+
+        if (cancelled) return;
+        dispatch({
+          type: 'LOAD_SETTINGS',
+          payload: {
+            storeName: cloudStoreName || scopedName || 'MarketPos',
+            storeLogo: storeLogo || profileLogo || null,
+            businessMode: businessMode === 'fnb' ? 'fnb' : 'retail',
+          },
+        });
+      } catch (error) {
+        console.error('Failed to load scoped store settings', error);
+      }
+    };
+
+    loadScopedStoreSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionUserId, activeStoreId, cloudStoreName]);
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>

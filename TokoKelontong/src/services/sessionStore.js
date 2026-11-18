@@ -7,6 +7,56 @@ import { supabase } from "./supabaseClient";
 const SNAPSHOT_KEY = "@TokoKelontong:AuthSnapshot";
 const LAST_STORE_KEY = "@TokoKelontong:LastStoreId";
 
+// Key global versi lama sebelum isolasi per-toko diterapkan.
+// Dihapus saat logout/ganti toko/simpan agar logo & profil toko lama
+// tidak pernah terbawa ke akun lain di HP yang sama.
+export const LEGACY_GLOBAL_STORE_KEYS = [
+  "storeName",
+  "storeLogo",
+  "@TokoKelontong:StoreProfile",
+  "@TokoKelontong:BusinessMode",
+  "@TokoKelontong:FnbActiveTables",
+  "@TokoKelontong:FnbQrisUrl",
+];
+
+export const getStoreLogoKey = (storeId) =>
+  storeId ? `@TokoKelontong:StoreLogo:${storeId}` : null;
+export const getStoreNameKey = (storeId) =>
+  storeId ? `@TokoKelontong:StoreName:${storeId}` : null;
+export const getStoreProfileKey = (storeId) =>
+  storeId ? `@TokoKelontong:StoreProfile:${storeId}` : null;
+export const getBusinessModeKey = (storeId) =>
+  storeId ? `@TokoKelontong:BusinessMode:${storeId}` : null;
+export const getFnbTablesKey = (storeId) =>
+  storeId ? `@TokoKelontong:FnbActiveTables:${storeId}` : null;
+export const getFnbQrisKey = (storeId) =>
+  storeId ? `@TokoKelontong:FnbQrisUrl:${storeId}` : null;
+
+export async function clearLegacyGlobalStoreKeys() {
+  try {
+    await AsyncStorage.multiRemove(LEGACY_GLOBAL_STORE_KEYS);
+  } catch {
+    // abaikan
+  }
+}
+
+export async function getScopedStoreProfile(explicitStoreId = null) {
+  try {
+    const storeId = explicitStoreId || (await getActiveStoreId().catch(() => null));
+    const profileKey = getStoreProfileKey(storeId);
+    if (!profileKey) return {};
+    const saved = await AsyncStorage.getItem(profileKey);
+    if (!saved) return {};
+    const data = JSON.parse(saved);
+    if (data && data.name && !data.storeName) {
+      data.storeName = data.name;
+    }
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
 let memorySnapshot = null;
 
 export async function getAuthSnapshot() {

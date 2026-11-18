@@ -56,7 +56,8 @@ export const PRO_FEATURES = {
   },
   customNota: {
     title: "Kustomisasi Nota",
-    description: "Logo, footer, dan detail toko khusus di struk.",
+    description:
+      "Atur nama toko, alamat, nomor telepon, dan pesan penutup khusus di struk.",
   },
 };
 

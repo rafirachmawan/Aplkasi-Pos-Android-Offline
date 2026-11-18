@@ -1,11 +1,52 @@
 import { formatRupiah } from './helpers';
 
+export const FREE_RECEIPT_DEFAULTS = {
+  storeName: 'MarketPos',
+  storeAddress: '',
+  storeContact: '',
+  footerMessage: 'Terima kasih telah berbelanja!',
+};
+
+/**
+ * Menyelesaikan profil nota berdasarkan paket aktif toko.
+ * Pada paket Gratis (`!isPro`), nota selalu memakai nama "MarketPos",
+ * tanpa alamat/telepon toko, dan pesan penutup bawaan tanpa menghapus
+ * data profil tersimpan apabila sebelumnya pernah memakai paket Pro.
+ */
+export const resolveReceiptProfile = (storeProfile = {}, isPro = false) => {
+  const safe =
+    storeProfile && typeof storeProfile === 'object' ? storeProfile : {};
+  if (!isPro) {
+    return {
+      ...safe,
+      storeName: FREE_RECEIPT_DEFAULTS.storeName,
+      name: FREE_RECEIPT_DEFAULTS.storeName,
+      storeAddress: FREE_RECEIPT_DEFAULTS.storeAddress,
+      storeContact: FREE_RECEIPT_DEFAULTS.storeContact,
+      footerMessage: FREE_RECEIPT_DEFAULTS.footerMessage,
+    };
+  }
+  const resolvedName =
+    String(safe.storeName || safe.name || '').trim() ||
+    FREE_RECEIPT_DEFAULTS.storeName;
+  return {
+    ...safe,
+    storeName: resolvedName,
+    name: resolvedName,
+    storeAddress: String(safe.storeAddress || '').trim(),
+    storeContact: String(safe.storeContact || '').trim(),
+    footerMessage:
+      String(safe.footerMessage || '').trim() ||
+      FREE_RECEIPT_DEFAULTS.footerMessage,
+  };
+};
+
 // ── WhatsApp text message generator ─────────────────────────────────────────
 export const generateWAMessage = (transaction, details, storeProfile) => {
-  const storeName    = storeProfile?.storeName    || 'Toko Kelontong';
-  const storeAddress = storeProfile?.storeAddress || '';
-  const storeContact = storeProfile?.storeContact || '';
-  const footerMessage = storeProfile?.footerMessage || 'Terima kasih telah berbelanja!';
+  const storeName     = storeProfile?.storeName    || storeProfile?.name || FREE_RECEIPT_DEFAULTS.storeName;
+  const storeAddress  = storeProfile?.storeAddress || '';
+  const storeContact  = storeProfile?.storeContact || '';
+  const footerMessage = storeProfile?.footerMessage || FREE_RECEIPT_DEFAULTS.footerMessage;
 
   const date = new Date(transaction.created_at).toLocaleString('id-ID', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -118,7 +159,7 @@ export const generateKitchenWAMessage = (transaction, details, storeProfile) => 
 
 // ── WhatsApp daily closing report generator ─────────────────────────────────
 export const generateDailyClosingWAMessage = (summary, storeProfile, dateStr) => {
-  const storeName = storeProfile?.storeName || storeProfile?.name || 'Toko Kelontong';
+  const storeName = storeProfile?.storeName || storeProfile?.name || FREE_RECEIPT_DEFAULTS.storeName;
   const SEP  = '━━━━━━━━━━━━━━━━━━━━━━';
   const LINE = '─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─';
 
@@ -154,10 +195,10 @@ export const generateDailyClosingWAMessage = (summary, storeProfile, dateStr) =>
 
 // ── HTML receipt generator for Printing / PDF ────────────────────────────────
 export const generateReceiptHTML = (transaction, details, storeProfile) => {
-  const storeName    = storeProfile?.storeName    || 'MarketPos';
-  const storeAddress = storeProfile?.storeAddress || '';
-  const storeContact = storeProfile?.storeContact || '';
-  const footerMessage = storeProfile?.footerMessage || 'Terima kasih telah berbelanja!';
+  const storeName     = storeProfile?.storeName    || storeProfile?.name || FREE_RECEIPT_DEFAULTS.storeName;
+  const storeAddress  = storeProfile?.storeAddress || '';
+  const storeContact  = storeProfile?.storeContact || '';
+  const footerMessage = storeProfile?.footerMessage || FREE_RECEIPT_DEFAULTS.footerMessage;
 
   const date = new Date(transaction.created_at).toLocaleString('id-ID', {
     weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',

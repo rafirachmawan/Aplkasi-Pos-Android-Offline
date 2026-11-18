@@ -26,12 +26,17 @@ import { AppContext } from "../context/AppContext";
 import ProductRepository from "../database/productRepository";
 import TransactionRepository from "../database/transactionRepository";
 import debtRepository from "../database/debtRepository";
-import { formatRupiah } from "../utils/helpers";
+import {
+  formatRupiah,
+  formatToRpInput as formatToRpDisplay,
+  parseRpInput as parseRpToNumber,
+} from "../utils/helpers";
 import {
   generateReceiptHTML,
   generateWAMessage,
   generateKitchenWAMessage,
   generateKitchenReceiptHTML,
+  resolveReceiptProfile,
 } from "../utils/receiptGenerator";
 import {
   isPrinterConfigured,
@@ -46,6 +51,7 @@ import ConnectionStatusPill from "../components/ConnectionStatusPill";
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
 import { useAuth } from "../context/AuthContext";
+import { getScopedStoreProfile } from "../services/sessionStore";
 import {
   fetchPendingTableOrders,
   updateTableOrderStatus,
@@ -54,19 +60,6 @@ import {
 
 const { width } = Dimensions.get("window");
 const isTablet = width > 600;
-
-// ── Helper: Format angka ke tampilan Rp (Rp50.000) ──
-const formatToRpDisplay = (raw) => {
-  const num = String(raw).replace(/\D/g, "").replace(/^0+/, "");
-  if (!num) return "";
-  return "Rp" + num.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-};
-
-// ── Helper: Ambil angka murni dari string Rp (Rp50.000 → 50000) ──
-const parseRpToNumber = (formatted) => {
-  const num = String(formatted).replace(/\D/g, "");
-  return parseInt(num) || 0;
-};
 
 const KasirScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -799,17 +792,11 @@ const KasirScreen = ({ navigation }) => {
 
   const getStoreProfile = async () => {
     try {
-      const saved = await AsyncStorage.getItem("@TokoKelontong:StoreProfile");
-      if (!saved) return {};
-      const data = JSON.parse(saved);
-      // Migrasi format lama dari menu Pengaturan ({name, printerAddress, logo})
-      // ke format nota baku ({storeName, storeAddress, ...})
-      if (data.name && !data.storeName) {
-        data.storeName = data.name;
-      }
-      return data;
+      const storeId = profile?.store_id || profile?.stores?.id || null;
+      const data = await getScopedStoreProfile(storeId);
+      return resolveReceiptProfile(data, plan.isPro);
     } catch {
-      return {};
+      return resolveReceiptProfile({}, plan.isPro);
     }
   };
 
@@ -2281,7 +2268,7 @@ const KasirScreen = ({ navigation }) => {
               {/* ── Pratinjau Nota (format struk termal) ── */}
               <View style={styles.receiptPaper}>
                 <Text style={styles.receiptStoreName}>
-                  {storeProfile.storeName || "Toko Kelontong"}
+                  {storeProfile.storeName || "MarketPos"}
                 </Text>
                 {!!storeProfile.storeAddress && (
                   <Text style={styles.receiptMetaCenter}>

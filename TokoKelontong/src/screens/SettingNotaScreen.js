@@ -17,7 +17,15 @@ import { colors, fonts } from "../theme/colors";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { updateStoreName } from "../services/authService";
-import { generateReceiptHTML } from "../utils/receiptGenerator";
+import {
+  getStoreNameKey,
+  getStoreProfileKey,
+} from "../services/sessionStore";
+import {
+  FREE_RECEIPT_DEFAULTS,
+  generateReceiptHTML,
+  resolveReceiptProfile,
+} from "../utils/receiptGenerator";
 import {
   isPrinterConfigured,
   isBluetoothPrintingSupported,
@@ -26,7 +34,6 @@ import {
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
 
-const STORE_PROFILE_KEY = "@TokoKelontong:StoreProfile";
 const getCustomPresetsKey = (storeId) =>
   `@TokoKelontong:FooterPresets:${storeId || "default"}`;
 
@@ -36,6 +43,20 @@ const DEFAULT_FOOTER_PRESETS = [
   "Terima kasih atas kunjungan Anda",
   "Selamat Berbelanja Kembali!",
 ];
+
+function LockedFieldBox({ isReadOnly, onLockedPress, children }) {
+  if (!isReadOnly) return children;
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onLockedPress}
+      accessibilityRole="button"
+      accessibilityLabel="Fitur paket Pro, ketuk untuk informasi upgrade"
+    >
+      <View pointerEvents="none">{children}</View>
+    </TouchableOpacity>
+  );
+}
 
 const SettingNotaScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -57,13 +78,28 @@ const SettingNotaScreen = ({ navigation }) => {
   const [saving, setSaving] = useState(false);
   const [btPrinterReady, setBtPrinterReady] = useState(false);
 
-  // Tier langganan toko. Gratis = template nota standar.
+  // Tier langganan toko. Gratis = template nota standar (MarketPos, tanpa alamat/telepon/custom footer).
   const plan = usePlan();
   const isReadOnly = !plan.isPro;
   const [showLockModal, setShowLockModal] = useState(false);
 
   useEffect(() => {
-    loadSettings();
+    if (isReadOnly) {
+      setShowPresetDropdown(false);
+      setShowAddPresetInput(false);
+    }
+  }, [isReadOnly]);
+
+  const effectivePreviewProfile = resolveReceiptProfile(
+    { storeName, storeAddress, storeContact, footerMessage },
+    plan.isPro,
+  );
+
+  const handleLockedTap = () => {
+    if (isReadOnly) setShowLockModal(true);
+  };
+
+  useEffect(() => {
     if (isBluetoothPrintingSupported()) {
       isPrinterConfigured()
         .then(setBtPrinterReady)
@@ -72,6 +108,7 @@ const SettingNotaScreen = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
+    loadSettings(activeStoreId);
     loadCustomPresets(activeStoreId);
   }, [activeStoreId]);
 
@@ -93,6 +130,10 @@ const SettingNotaScreen = ({ navigation }) => {
   };
 
   const handleAddCustomPreset = async () => {
+    if (isReadOnly) {
+      setShowLockModal(true);
+      return;
+    }
     const trimmed = newPresetText.trim();
     if (!trimmed) {
       Alert.alert("Perhatian", "Tulis teks pilihan cepat terlebih dahulu.");
@@ -123,6 +164,10 @@ const SettingNotaScreen = ({ navigation }) => {
   };
 
   const handleDeleteCustomPreset = (presetToDelete) => {
+    if (isReadOnly) {
+      setShowLockModal(true);
+      return;
+    }
     Alert.alert(
       "Hapus Pilihan Cepat",
       `Hapus "${presetToDelete}" dari daftar pilihan toko ini?`,
@@ -151,9 +196,13 @@ const SettingNotaScreen = ({ navigation }) => {
     );
   };
 
-  const loadSettings = async () => {
+  const loadSettings = async (targetStoreId = activeStoreId) => {
     try {
-      const savedProfile = await AsyncStorage.getItem(STORE_PROFILE_KEY);
+      const profileKey = getStoreProfileKey(targetStoreId);
+      const nameKey = getStoreNameKey(targetStoreId);
+      const savedProfile = profileKey
+        ? await AsyncStorage.getItem(profileKey)
+        : null;
       if (savedProfile !== null) {
         const data = JSON.parse(savedProfile);
         setStoreName(data.storeName || data.name || "");
@@ -163,8 +212,11 @@ const SettingNotaScreen = ({ navigation }) => {
           data.footerMessage || "Terima kasih telah berbelanja!",
         );
       } else {
-        const legacyName = await AsyncStorage.getItem("storeName");
-        if (legacyName) setStoreName(legacyName);
+        setStoreAddress("");
+        setStoreContact("");
+        setFooterMessage("Terima kasih telah berbelanja!");
+        const scopedName = nameKey ? await AsyncStorage.getItem(nameKey) : null;
+        setStoreName(scopedName || profile?.stores?.store_name || "");
       }
     } catch (error) {
       console.error("Error loading settings:", error);
@@ -178,12 +230,16 @@ const SettingNotaScreen = ({ navigation }) => {
     }
     setSaving(true);
     try {
+      const profileKey = getStoreProfileKey(activeStoreId);
+      const nameKey = getStoreNameKey(activeStoreId);
       let existing = {};
-      try {
-        const savedExisting = await AsyncStorage.getItem(STORE_PROFILE_KEY);
-        if (savedExisting) existing = JSON.parse(savedExisting);
-      } catch (_) {
-        existing = {};
+      if (profileKey) {
+        try {
+          const savedExisting = await AsyncStorage.getItem(profileKey);
+          if (savedExisting) existing = JSON.parse(savedExisting);
+        } catch (_) {
+          existing = {};
+        }
       }
 
       const trimmedName = storeName.trim();
@@ -196,10 +252,14 @@ const SettingNotaScreen = ({ navigation }) => {
         name: trimmedName,
       };
 
-      await AsyncStorage.setItem(STORE_PROFILE_KEY, JSON.stringify(data));
+      if (profileKey) {
+        await AsyncStorage.setItem(profileKey, JSON.stringify(data));
+      }
 
       if (trimmedName) {
-        await AsyncStorage.setItem("storeName", trimmedName);
+        if (nameKey) {
+          await AsyncStorage.setItem(nameKey, trimmedName);
+        }
         dispatch({ type: "SET_STORE_NAME", payload: trimmedName });
         try {
           await updateStoreName(trimmedName);
@@ -242,12 +302,10 @@ const SettingNotaScreen = ({ navigation }) => {
       { product_name: "Contoh Produk B", quantity: 2, price_at_sale: 10000 },
     ];
 
-    const profile = {
-      storeName: storeName.trim() || "Toko Kelontong",
-      storeAddress: storeAddress.trim(),
-      storeContact: storeContact.trim(),
-      footerMessage: footerMessage.trim() || "Terima kasih telah berbelanja!",
-    };
+    const profile = resolveReceiptProfile(
+      { storeName, storeAddress, storeContact, footerMessage },
+      plan.isPro,
+    );
 
     if (btPrinterReady && Platform.OS === "android") {
       try {
@@ -281,10 +339,18 @@ const SettingNotaScreen = ({ navigation }) => {
             style={styles.readOnlyBanner}
             activeOpacity={0.85}
             onPress={() => setShowLockModal(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Informasi paket Gratis untuk pengaturan nota"
           >
+            <MaterialCommunityIcons
+              name="lock-outline"
+              size={18}
+              color={colors.warningTextDark}
+            />
             <Text style={styles.readOnlyBannerText}>
-              Paket Gratis: menggunakan template nota bawaan. Kustomisasi nota,
-              logo, dan pesan footer tersedia di paket Pro.
+              Paket Gratis: nota memakai nama MarketPos dengan pesan penutup
+              bawaan. Alamat toko, no. telepon, dan pesan khusus tersedia di
+              paket Pro.
             </Text>
             <Text style={styles.readOnlyBannerAction}>Upgrade</Text>
           </TouchableOpacity>
@@ -292,84 +358,166 @@ const SettingNotaScreen = ({ navigation }) => {
 
         {/* ── KARTU 1: IDENTITAS TOKO ── */}
         <View style={styles.formCard}>
-          <View style={styles.cardHeaderRow}>
+          <View style={styles.cardHeaderRowBetween}>
             <Text style={styles.cardHeaderTitle}>IDENTITAS TOKO DI STRUK</Text>
+            {isReadOnly && (
+              <View style={styles.proLockChip}>
+                <MaterialCommunityIcons
+                  name="lock"
+                  size={12}
+                  color={colors.warningTextDark}
+                />
+                <Text style={styles.proLockChipText}>Pro</Text>
+              </View>
+            )}
           </View>
 
           {/* Nama Toko */}
           <View style={styles.formGroup}>
             <Text style={styles.fieldLabel}>NAMA TOKO *</Text>
-            <TextInput
-              style={styles.textInputClean}
-              value={storeName}
-              onChangeText={setStoreName}
-              placeholder="Misal: Toko Berkah Jaya"
-              placeholderTextColor="#94A3B8"
-            />
+            <LockedFieldBox isReadOnly={isReadOnly} onLockedPress={handleLockedTap}>
+              <TextInput
+                style={[
+                  styles.textInputClean,
+                  isReadOnly && styles.textInputLocked,
+                ]}
+                value={isReadOnly ? FREE_RECEIPT_DEFAULTS.storeName : storeName}
+                onChangeText={setStoreName}
+                editable={!isReadOnly}
+                placeholder="Misal: Toko Berkah Jaya"
+                placeholderTextColor={colors.textMuted}
+              />
+            </LockedFieldBox>
+            {isReadOnly && (
+              <Text style={styles.lockedFieldHint}>
+                Default paket Gratis menggunakan nama MarketPos.
+              </Text>
+            )}
           </View>
 
           {/* Alamat Toko */}
           <View style={styles.formGroup}>
             <Text style={styles.fieldLabel}>ALAMAT TOKO</Text>
-            <TextInput
-              style={[styles.textInputClean, styles.textAreaClean]}
-              value={storeAddress}
-              onChangeText={setStoreAddress}
-              placeholder="Misal: Jl. Pandean No. 13, Kota"
-              placeholderTextColor="#94A3B8"
-              multiline
-            />
+            <LockedFieldBox isReadOnly={isReadOnly} onLockedPress={handleLockedTap}>
+              <TextInput
+                style={[
+                  styles.textInputClean,
+                  styles.textAreaClean,
+                  isReadOnly && styles.textInputLocked,
+                ]}
+                value={isReadOnly ? "" : storeAddress}
+                onChangeText={setStoreAddress}
+                editable={!isReadOnly}
+                placeholder={
+                  isReadOnly
+                    ? "Hanya dapat diisi di paket Pro"
+                    : "Misal: Jl. Pandean No. 13, Kota"
+                }
+                placeholderTextColor={colors.textMuted}
+                multiline
+              />
+            </LockedFieldBox>
           </View>
 
           {/* Nomor Telepon / WA */}
           <View style={[styles.formGroup, { marginBottom: 0 }]}>
             <Text style={styles.fieldLabel}>NOMOR TELEPON / WA (OPSIONAL)</Text>
-            <TextInput
-              style={styles.textInputClean}
-              value={storeContact}
-              onChangeText={setStoreContact}
-              placeholder="Misal: 085196221716"
-              placeholderTextColor="#94A3B8"
-              keyboardType="phone-pad"
-            />
+            <LockedFieldBox isReadOnly={isReadOnly} onLockedPress={handleLockedTap}>
+              <TextInput
+                style={[
+                  styles.textInputClean,
+                  isReadOnly && styles.textInputLocked,
+                ]}
+                value={isReadOnly ? "" : storeContact}
+                onChangeText={setStoreContact}
+                editable={!isReadOnly}
+                placeholder={
+                  isReadOnly
+                    ? "Hanya dapat diisi di paket Pro"
+                    : "Misal: 085196221716"
+                }
+                placeholderTextColor={colors.textMuted}
+                keyboardType="phone-pad"
+              />
+            </LockedFieldBox>
           </View>
         </View>
 
         {/* ── KARTU 2: FORMAT PESAN STRUK ── */}
         <View style={styles.formCard}>
-          <View style={styles.cardHeaderRow}>
+          <View style={styles.cardHeaderRowBetween}>
             <Text style={styles.cardHeaderTitle}>PESAN PENUTUP STRUK</Text>
+            {isReadOnly && (
+              <View style={styles.proLockChip}>
+                <MaterialCommunityIcons
+                  name="lock"
+                  size={12}
+                  color={colors.warningTextDark}
+                />
+                <Text style={styles.proLockChipText}>Pro</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.formGroup}>
             <Text style={styles.fieldLabel}>PESAN FOOTER STRUK</Text>
-            <TextInput
-              style={styles.textInputClean}
-              value={footerMessage}
-              onChangeText={setFooterMessage}
-              placeholder="Misal: Terima kasih telah berbelanja!"
-              placeholderTextColor="#94A3B8"
-            />
+            <LockedFieldBox isReadOnly={isReadOnly} onLockedPress={handleLockedTap}>
+              <TextInput
+                style={[
+                  styles.textInputClean,
+                  isReadOnly && styles.textInputLocked,
+                ]}
+                value={
+                  isReadOnly ? FREE_RECEIPT_DEFAULTS.footerMessage : footerMessage
+                }
+                onChangeText={setFooterMessage}
+                editable={!isReadOnly}
+                placeholder="Misal: Terima kasih telah berbelanja!"
+                placeholderTextColor={colors.textMuted}
+              />
+            </LockedFieldBox>
           </View>
 
           {/* Preset Cepat Pesan Footer (Dropdown + Tambah Pilihan Per Toko) */}
           <View style={styles.presetHeaderRow}>
             <Text style={styles.presetLabel}>PILIHAN CEPAT:</Text>
             <TouchableOpacity
-              style={styles.addPresetBtnMini}
+              style={[
+                styles.addPresetBtnMini,
+                isReadOnly && styles.addPresetBtnLocked,
+              ]}
               onPress={() => {
+                if (isReadOnly) {
+                  handleLockedTap();
+                  return;
+                }
                 setShowAddPresetInput((prev) => !prev);
                 setShowPresetDropdown(false);
               }}
               activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isReadOnly
+                  ? "Tambah pilihan cepat terkunci untuk paket Pro"
+                  : "Tambah pilihan cepat baru"
+              }
             >
-              <Text style={styles.addPresetBtnMiniText}>
-                {showAddPresetInput ? "Batal" : "+ Tambah Pilihan"}
+              <Text
+                style={[
+                  styles.addPresetBtnMiniText,
+                  isReadOnly && { color: colors.textSecondary },
+                ]}
+              >
+                {isReadOnly
+                  ? "Khusus Pro"
+                  : showAddPresetInput
+                    ? "Batal"
+                    : "+ Tambah Pilihan"}
               </Text>
             </TouchableOpacity>
           </View>
 
-          {showAddPresetInput && (
+          {!isReadOnly && showAddPresetInput && (
             <View style={styles.addPresetBox}>
               <TextInput
                 style={styles.addPresetInput}
@@ -398,24 +546,51 @@ const SettingNotaScreen = ({ navigation }) => {
                 <TouchableOpacity
                   style={[
                     styles.presetDropdownTrigger,
-                    showPresetDropdown && styles.presetDropdownTriggerOpen,
+                    isReadOnly && styles.textInputLocked,
+                    !isReadOnly && showPresetDropdown && styles.presetDropdownTriggerOpen,
                   ]}
-                  onPress={() => setShowPresetDropdown((prev) => !prev)}
+                  onPress={() => {
+                    if (isReadOnly) {
+                      handleLockedTap();
+                      return;
+                    }
+                    setShowPresetDropdown((prev) => !prev);
+                  }}
                   activeOpacity={0.78}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isReadOnly
+                      ? "Pilihan cepat pesan footer terkunci untuk paket Pro"
+                      : "Pilih pesan footer cepat"
+                  }
                 >
                   <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={styles.presetDropdownTriggerLabel} numberOfLines={1}>
-                      {footerMessage.trim() || "Pilih pesan cepat..."}
+                    <Text
+                      style={[
+                        styles.presetDropdownTriggerLabel,
+                        isReadOnly && { color: colors.textSecondary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {isReadOnly
+                        ? FREE_RECEIPT_DEFAULTS.footerMessage
+                        : footerMessage.trim() || "Pilih pesan cepat..."}
                     </Text>
                   </View>
                   <MaterialCommunityIcons
-                    name={showPresetDropdown ? "chevron-up" : "chevron-down"}
-                    size={22}
-                    color="#64748B"
+                    name={
+                      isReadOnly
+                        ? "lock-outline"
+                        : showPresetDropdown
+                          ? "chevron-up"
+                          : "chevron-down"
+                    }
+                    size={20}
+                    color={colors.textSecondary}
                   />
                 </TouchableOpacity>
 
-                {showPresetDropdown && (
+                {!isReadOnly && showPresetDropdown && (
                   <View style={styles.presetDropdownList}>
                     {allPresets.map((item, idx) => {
                       const isActive = footerMessage === item.text;
@@ -506,14 +681,16 @@ const SettingNotaScreen = ({ navigation }) => {
 
           <View style={styles.receiptPaper}>
             <Text style={styles.receiptStoreName}>
-              {storeName.trim() || "NAMA TOKO ANDA"}
+              {effectivePreviewProfile.storeName}
             </Text>
-            {storeAddress.trim() ? (
-              <Text style={styles.receiptMetaCenter}>{storeAddress.trim()}</Text>
-            ) : null}
-            {storeContact.trim() ? (
+            {effectivePreviewProfile.storeAddress ? (
               <Text style={styles.receiptMetaCenter}>
-                Telp/WA: {storeContact.trim()}
+                {effectivePreviewProfile.storeAddress}
+              </Text>
+            ) : null}
+            {effectivePreviewProfile.storeContact ? (
+              <Text style={styles.receiptMetaCenter}>
+                Telp/WA: {effectivePreviewProfile.storeContact}
               </Text>
             ) : null}
 
@@ -539,16 +716,16 @@ const SettingNotaScreen = ({ navigation }) => {
             <View style={styles.receiptItem}>
               <Text style={styles.receiptItemName}>Contoh Produk 1</Text>
               <View style={styles.receiptMetaRow}>
-                <Text style={styles.receiptMeta}>1 x Rp 15.000</Text>
-                <Text style={styles.receiptItemTotal}>Rp 15.000</Text>
+                <Text style={styles.receiptMeta}>1 x Rp15.000</Text>
+                <Text style={styles.receiptItemTotal}>Rp15.000</Text>
               </View>
             </View>
 
             <View style={styles.receiptItem}>
               <Text style={styles.receiptItemName}>Contoh Produk 2</Text>
               <View style={styles.receiptMetaRow}>
-                <Text style={styles.receiptMeta}>2 x Rp 10.000</Text>
-                <Text style={styles.receiptItemTotal}>Rp 20.000</Text>
+                <Text style={styles.receiptMeta}>2 x Rp10.000</Text>
+                <Text style={styles.receiptItemTotal}>Rp20.000</Text>
               </View>
             </View>
 
@@ -556,23 +733,23 @@ const SettingNotaScreen = ({ navigation }) => {
 
             <View style={styles.receiptMetaRow}>
               <Text style={styles.receiptTotalLabel}>TOTAL</Text>
-              <Text style={styles.receiptTotalValue}>Rp 35.000</Text>
+              <Text style={styles.receiptTotalValue}>Rp35.000</Text>
             </View>
             <View style={styles.receiptMetaRow}>
               <Text style={styles.receiptMeta}>Tunai</Text>
-              <Text style={styles.receiptMeta}>Rp 50.000</Text>
+              <Text style={styles.receiptMeta}>Rp50.000</Text>
             </View>
             <View style={styles.receiptMetaRow}>
               <Text style={styles.receiptMeta}>Kembalian</Text>
               <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                Rp 15.000
+                Rp15.000
               </Text>
             </View>
 
             <View style={styles.receiptDash} />
 
             <Text style={styles.receiptFooter}>
-              {footerMessage.trim() || "Terima kasih telah berbelanja!"}
+              {effectivePreviewProfile.footerMessage}
             </Text>
           </View>
         </View>
@@ -594,6 +771,8 @@ const SettingNotaScreen = ({ navigation }) => {
           style={styles.dockedTestBtn}
           onPress={handleTestPrint}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Tes cetak struk"
         >
           <Text style={styles.dockedTestBtnText}>Tes Cetak</Text>
         </TouchableOpacity>
@@ -601,15 +780,35 @@ const SettingNotaScreen = ({ navigation }) => {
         <TouchableOpacity
           style={[
             styles.dockedSaveBtn,
-            saved && { backgroundColor: "#059669" },
+            isReadOnly && { backgroundColor: colors.primaryDark },
+            saved && { backgroundColor: colors.successButtonDark },
             saving && { opacity: 0.7 },
           ]}
           onPress={handleSave}
           disabled={saving}
           activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isReadOnly
+              ? "Simpan pengaturan nota khusus paket Pro"
+              : "Simpan pengaturan nota"
+          }
         >
+          {isReadOnly && !saved && !saving && (
+            <MaterialCommunityIcons
+              name="lock-outline"
+              size={16}
+              color={colors.onPrimary}
+            />
+          )}
           <Text style={styles.dockedSaveBtnText}>
-            {saved ? "TERSIMPAN!" : saving ? "MENYIMPAN..." : "SIMPAN PENGATURAN"}
+            {saved
+              ? "TERSIMPAN!"
+              : saving
+                ? "MENYIMPAN..."
+                : isReadOnly
+                  ? "Simpan (Khusus Pro)"
+                  : "SIMPAN PENGATURAN"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -739,6 +938,37 @@ const styles = StyleSheet.create({
     height: 68,
     textAlignVertical: "top",
     paddingTop: 10,
+  },
+  textInputLocked: {
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.border,
+    color: colors.textSecondary,
+  },
+  lockedFieldHint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  proLockChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.warningBannerBg,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  proLockChipText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.warningTextDark,
+  },
+  addPresetBtnLocked: {
+    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.border,
   },
 
   // ── Presets Dropdown & Custom Per-Store ──
