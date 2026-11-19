@@ -27,9 +27,8 @@ import { colors, fonts } from "../theme/colors";
 import PinModal from "../components/PinModal";
 import ConnectionStatusPill from "../components/ConnectionStatusPill";
 import {
-  isPinProtected,
+  getPinSecurityStatus,
   isScreenLocked,
-  getLockedMenus,
 } from "../utils/securityPin";
 import { getOfflineQueueCount } from "../utils/offlineQueue";
 import { refreshSyncCounts } from "../services/syncService";
@@ -91,10 +90,9 @@ const HomeScreen = ({ navigation }) => {
             // Offline: ringkasan server tidak tersedia, bagian lain tetap dimuat
             console.log("Ringkasan hari ini belum bisa dimuat:", summaryErr?.message);
           }
-          const hasPin = await isPinProtected();
-          setPinProtected(hasPin);
-          const currentLocked = await getLockedMenus();
-          setLockedMenus(currentLocked);
+          const pinStatus = await getPinSecurityStatus();
+          setPinProtected(pinStatus.hasPin);
+          setLockedMenus(pinStatus.lockedMenus);
           await getOfflineQueueCount(); // memindahkan antrean lama bila ada
           refreshSyncCounts();
         } catch (e) {
@@ -630,7 +628,7 @@ const HomeScreen = ({ navigation }) => {
         {/* ─── Tombol CS / Lapor Kendala via WhatsApp ─── */}
         <TouchableOpacity
           style={styles.csSupportButton}
-          activeOpacity={0.82}
+          activeOpacity={0.78}
           accessibilityRole="button"
           accessibilityLabel="Hubungi CS WhatsApp untuk lapor bug atau kendala"
           onPress={handleContactCS}
@@ -638,20 +636,27 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.csIconWrap}>
             <MaterialCommunityIcons
               name="whatsapp"
-              size={22}
-              color={colors.successDark}
+              size={20}
+              color={colors.successButtonDark}
             />
           </View>
           <View style={styles.csTextCol}>
-            <Text style={styles.csTitle}>Hubungi CS / Lapor Kendala</Text>
-            <Text style={styles.csSubtitle}>
-              Ada bug atau masalah? Chat WA 0851-9622-1716
+            <View style={styles.csTitleRow}>
+              <Text style={styles.csTitle} numberOfLines={1}>
+                Hubungi CS
+              </Text>
+              <View style={styles.csWaBadge}>
+                <Text style={styles.csWaBadgeText}>WhatsApp</Text>
+              </View>
+            </View>
+            <Text style={styles.csSubtitle} numberOfLines={1}>
+              Lapor bug · 0851-9622-1716
             </Text>
           </View>
           <MaterialCommunityIcons
             name="chevron-right"
             size={20}
-            color={colors.successText}
+            color={colors.textMuted}
           />
         </TouchableOpacity>
       </ScrollView>
@@ -1127,7 +1132,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 18,
     marginTop: 4,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   logoutBottomText: {
     fontFamily: fonts.bold,
@@ -1138,19 +1143,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: colors.successContainer,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.successBorder,
-    borderRadius: 16,
-    paddingVertical: 13,
-    paddingHorizontal: 16,
+    borderColor: colors.cardBorder,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     marginBottom: 24,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   csIconWrap: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    backgroundColor: colors.successPillBg,
+    borderRadius: 19,
+    backgroundColor: colors.successContainer,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1159,16 +1171,35 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  csTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 2,
+  },
   csTitle: {
     fontFamily: fonts.bold,
-    fontSize: 13.5,
-    color: colors.successDark,
+    fontSize: 14,
+    color: colors.text,
+  },
+  csWaBadge: {
+    backgroundColor: colors.successContainer,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  csWaBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.successText,
+    letterSpacing: 0.2,
   },
   csSubtitle: {
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: 12,
-    color: colors.successText,
-    marginTop: 2,
+    color: colors.textSecondary,
   },
 
   // ── Floating Bottom CTA: Buka Kasir POS ──

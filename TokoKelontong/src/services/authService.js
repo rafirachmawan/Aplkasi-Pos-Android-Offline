@@ -125,6 +125,7 @@ export async function signOut() {
 // Profile akun + toko milik user yang sedang login.
 export async function getProfile() {
   const selectVariants = [
+    "id, username, role, store_id, stores(id, store_name, security_pin, security_pin_hash, locked_menus)",
     "id, username, role, store_id, stores(id, store_name, security_pin, security_pin_hash)",
     "id, username, role, store_id, stores(id, store_name, security_pin)",
     "id, username, role, store_id, stores(id, store_name)",

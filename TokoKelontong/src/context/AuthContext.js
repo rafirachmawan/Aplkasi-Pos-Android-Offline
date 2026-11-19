@@ -67,6 +67,7 @@ function profileFromSnapshot(snap) {
       store_name: snap.store_name,
       security_pin_hash: snap.security_pin_hash || null,
       security_pin: snap.security_pin || null,
+      locked_menus: snap.locked_menus ?? null,
     },
   };
 }

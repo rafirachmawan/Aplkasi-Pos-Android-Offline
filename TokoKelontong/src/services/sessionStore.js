@@ -130,6 +130,13 @@ export async function saveAuthSnapshot(profile) {
     profile.stores?.security_pin_hash ||
     hashStorePin(profile.store_id, profile.stores?.security_pin) ||
     null;
+  const serverLockedMenus =
+    profile.stores?.locked_menus &&
+    typeof profile.stores.locked_menus === "object"
+      ? profile.stores.locked_menus
+      : memorySnapshot?.store_id === profile.store_id
+        ? memorySnapshot?.locked_menus ?? null
+        : null;
   const snap = {
     user_id: profile.id || null,
     store_id: profile.store_id,
@@ -137,6 +144,7 @@ export async function saveAuthSnapshot(profile) {
     role: profile.role || null,
     store_name: profile.stores?.store_name || null,
     security_pin_hash: computedPinHash,
+    locked_menus: serverLockedMenus,
     saved_at: Date.now(),
   };
   memorySnapshot = snap;
@@ -144,6 +152,49 @@ export async function saveAuthSnapshot(profile) {
     await AsyncStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snap));
   } catch (err) {
     console.warn("Gagal menyimpan snapshot sesi:", err);
+  }
+}
+
+/**
+ * Memperbarui hash PIN di snapshot lokal agar mode offline tidak membaca PIN lama
+ * yang baru saja diubah atau dinonaktifkan.
+ */
+export async function updateSnapshotPin(storeId, pinHash) {
+  if (!storeId) return;
+  const snap = await getAuthSnapshot();
+  if (!snap || String(snap.store_id) !== String(storeId)) return;
+  const nextSnap = {
+    ...snap,
+    security_pin_hash: pinHash || null,
+    security_pin: null,
+    saved_at: Date.now(),
+  };
+  memorySnapshot = nextSnap;
+  try {
+    await AsyncStorage.setItem(SNAPSHOT_KEY, JSON.stringify(nextSnap));
+  } catch (err) {
+    console.warn("Gagal menyelaraskan PIN snapshot:", err);
+  }
+}
+
+/**
+ * Memperbarui konfigurasi menu terkunci di snapshot lokal untuk akses offline.
+ */
+export async function updateSnapshotLockedMenus(storeId, lockedMenus) {
+  if (!storeId) return;
+  const snap = await getAuthSnapshot();
+  if (!snap || String(snap.store_id) !== String(storeId)) return;
+  const nextSnap = {
+    ...snap,
+    locked_menus:
+      lockedMenus && typeof lockedMenus === "object" ? { ...lockedMenus } : null,
+    saved_at: Date.now(),
+  };
+  memorySnapshot = nextSnap;
+  try {
+    await AsyncStorage.setItem(SNAPSHOT_KEY, JSON.stringify(nextSnap));
+  } catch (err) {
+    console.warn("Gagal menyelaraskan locked_menus snapshot:", err);
   }
 }
 

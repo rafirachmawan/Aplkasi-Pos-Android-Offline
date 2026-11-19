@@ -1,6 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../services/supabaseClient";
-import { getAuthSnapshot } from "../services/sessionStore";
+import {
+  getAuthSnapshot,
+  updateSnapshotPin,
+  updateSnapshotLockedMenus,
+} from "../services/sessionStore";
 import { hashStorePin } from "./helpers";
 
 const PIN_STORAGE_KEY = "@TokoKelontong:SecurityPin";
@@ -67,182 +71,363 @@ export const DEFAULT_LOCKED_MENUS = {
 
 const hashKeyFor = (storeId) => `${PIN_HASH_KEY_PREFIX}:${storeId}`;
 const legacyKeyFor = (storeId) => `${PIN_STORAGE_KEY}:${storeId}`;
+const lockedKeyFor = (storeId) => `${LOCKED_MENUS_STORAGE_KEY}:${storeId}`;
 
 function isHexSha256(val) {
   return typeof val === "string" && /^[0-9a-f]{64}$/i.test(val.trim());
 }
 
-function isMissingRpcError(err) {
+function isMissingRpcError(err, rpcName = "") {
   if (!err) return false;
   const code = String(err.code || "");
   const msg = String(err.message || "").toLowerCase();
-  return code === "PGRST202" || code === "42883" || msg.includes("set_store_security_pin");
+  return (
+    code === "PGRST202" ||
+    code === "42883" ||
+    (rpcName ? msg.includes(rpcName.toLowerCase()) : false)
+  );
 }
 
 /**
- * Mengambil data store aktif beserta hash PIN dari Supabase.
- * Mendukung fallback ke security_pin plaintext selama masa transisi APK lama.
+ * Menormalkan object/JSON konfigurasi menu terkunci terhadap DEFAULT_LOCKED_MENUS.
+ * Mengembalikan null bila nilai mentah kosong atau tidak valid.
+ */
+export function normalizeLockedMenusConfig(raw) {
+  if (!raw) return null;
+  let parsed = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+
+  const normalized = { ...DEFAULT_LOCKED_MENUS };
+  for (const key of Object.keys(DEFAULT_LOCKED_MENUS)) {
+    if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+      normalized[key] = Boolean(parsed[key]);
+    }
+  }
+  return normalized;
+}
+
+async function readLocalLockedMenus(storeId) {
+  const keys = storeId
+    ? [lockedKeyFor(storeId), LOCKED_MENUS_STORAGE_KEY]
+    : [LOCKED_MENUS_STORAGE_KEY];
+
+  for (const k of keys) {
+    try {
+      const raw = await AsyncStorage.getItem(k);
+      const parsed = normalizeLockedMenusConfig(raw);
+      if (parsed) return parsed;
+    } catch {
+      // lanjut ke key berikutnya
+    }
+  }
+  return null;
+}
+
+async function writeLocalLockedMenus(storeId, config) {
+  const payload = JSON.stringify(config);
+  if (storeId) {
+    await AsyncStorage.setItem(lockedKeyFor(storeId), payload);
+    await AsyncStorage.removeItem(LOCKED_MENUS_STORAGE_KEY);
+    await updateSnapshotLockedMenus(storeId, config);
+    return;
+  }
+  await AsyncStorage.setItem(LOCKED_MENUS_STORAGE_KEY, payload);
+}
+
+async function pushLockedMenusToServer(storeId, cleanConfig) {
+  try {
+    const { error: rpcErr } = await supabase.rpc("set_store_locked_menus", {
+      p_locked_menus: cleanConfig,
+    });
+    if (!rpcErr) return true;
+    if (isMissingRpcError(rpcErr, "set_store_locked_menus") && storeId) {
+      const { error: updErr } = await supabase
+        .from("stores")
+        .update({ locked_menus: cleanConfig })
+        .eq("id", storeId);
+      return !updErr;
+    }
+  } catch (err) {
+    console.warn("Gagal sinkron locked_menus ke server:", err?.message || err);
+  }
+  return false;
+}
+
+/**
+ * Mengambil data store aktif beserta hash PIN & konfigurasi menu terkunci dari Supabase.
+ * Mendukung fallback ke skema lama sebelum migrasi v11/v13 dijalankan.
  */
 async function fetchOnlineStoreData() {
   const { data: sess } = await supabase.auth.getSession();
   const uid = sess?.session?.user?.id;
   if (!uid) return null;
 
-  let res = await supabase
-    .from("profiles")
-    .select("store_id, stores(id, security_pin_hash, security_pin)")
-    .eq("id", uid)
-    .maybeSingle();
+  const variants = [
+    {
+      cols: "store_id, stores(id, security_pin_hash, security_pin, locked_menus)",
+      hasLockedCol: true,
+    },
+    {
+      cols: "store_id, stores(id, security_pin_hash, security_pin)",
+      hasLockedCol: false,
+    },
+    {
+      cols: "store_id, stores(id, security_pin)",
+      hasLockedCol: false,
+    },
+  ];
 
-  if (res.error) {
+  let res = null;
+  let hasServerLockedMenusColumn = false;
+  for (const variant of variants) {
     res = await supabase
       .from("profiles")
-      .select("store_id, stores(id, security_pin)")
+      .select(variant.cols)
       .eq("id", uid)
       .maybeSingle();
+    if (!res.error) {
+      hasServerLockedMenusColumn = variant.hasLockedCol;
+      break;
+    }
   }
 
-  if (res.error || !res.data) return null;
+  if (!res || res.error || !res.data) return null;
 
   const storeId = res.data.store_id || null;
   const serverHash = res.data.stores?.security_pin_hash || null;
   const legacyPin = res.data.stores?.security_pin || null;
-  const pinHash =
-    isHexSha256(serverHash)
-      ? serverHash.trim().toLowerCase()
-      : legacyPin && String(legacyPin).length >= 4
-        ? hashStorePin(storeId, legacyPin)
-        : null;
+  const pinHash = isHexSha256(serverHash)
+    ? serverHash.trim().toLowerCase()
+    : legacyPin && String(legacyPin).length >= 4
+      ? hashStorePin(storeId, legacyPin)
+      : null;
 
-  return { storeId, pinHash };
+  const lockedMenus = normalizeLockedMenusConfig(res.data.stores?.locked_menus);
+
+  return {
+    storeId,
+    pinHash,
+    lockedMenus,
+    hasServerLockedMenusColumn,
+    offline: false,
+  };
 }
 
-// Saat offline: baca hash PIN lokal toko ini, migrasikan format plaintext lama bila ada.
+// Saat offline: baca hash PIN & konfigurasi menu lokal toko ini.
 async function getOfflineStoreData() {
   try {
     const snap = await getAuthSnapshot();
     if (!snap?.store_id) return null;
     const storeId = snap.store_id;
 
+    let derivedHash = null;
     const storedHash = await AsyncStorage.getItem(hashKeyFor(storeId));
     if (isHexSha256(storedHash)) {
-      return { storeId, pinHash: storedHash.trim().toLowerCase(), offline: true };
+      derivedHash = storedHash.trim().toLowerCase();
+    } else {
+      const legacyScoped = await AsyncStorage.getItem(legacyKeyFor(storeId));
+      const plainFallback = legacyScoped || snap.security_pin || null;
+      derivedHash =
+        snap.security_pin_hash ||
+        (plainFallback && String(plainFallback).length >= 4
+          ? hashStorePin(storeId, plainFallback)
+          : null);
+
+      if (derivedHash) {
+        await AsyncStorage.setItem(hashKeyFor(storeId), derivedHash);
+        await AsyncStorage.multiRemove([
+          legacyKeyFor(storeId),
+          PIN_STORAGE_KEY,
+        ]);
+      }
     }
 
-    const legacyScoped = await AsyncStorage.getItem(legacyKeyFor(storeId));
-    const plainFallback = legacyScoped || snap.security_pin || null;
-    const derivedHash =
-      snap.security_pin_hash ||
-      (plainFallback && String(plainFallback).length >= 4
-        ? hashStorePin(storeId, plainFallback)
-        : null);
+    const localLocked =
+      (await readLocalLockedMenus(storeId)) ||
+      normalizeLockedMenusConfig(snap.locked_menus);
 
-    if (derivedHash) {
-      await AsyncStorage.setItem(hashKeyFor(storeId), derivedHash);
-      await AsyncStorage.multiRemove([legacyKeyFor(storeId), PIN_STORAGE_KEY]);
-    }
-
-    return { storeId, pinHash: derivedHash, offline: true };
+    return {
+      storeId,
+      pinHash: derivedHash,
+      lockedMenus: localLocked,
+      hasServerLockedMenusColumn: false,
+      offline: true,
+    };
   } catch {
     return null;
   }
 }
 
+let inFlightStoreFetch = null;
+
 export async function getCurrentStoreData() {
+  if (inFlightStoreFetch) return inFlightStoreFetch;
+  inFlightStoreFetch = (async () => {
+    try {
+      const online = await Promise.race([
+        fetchOnlineStoreData(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 5000),
+        ),
+      ]);
+      if (online) return online;
+    } catch {
+      // jatuh ke data lokal di bawah
+    }
+    return getOfflineStoreData();
+  })();
+
   try {
-    const online = await Promise.race([
-      fetchOnlineStoreData(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), 5000),
-      ),
-    ]);
-    if (online) return online;
-  } catch {
-    // jatuh ke data lokal di bawah
+    return await inFlightStoreFetch;
+  } finally {
+    inFlightStoreFetch = null;
   }
-  return getOfflineStoreData();
 }
+
+function resolveLockedMenusFromStoreData(storeData, localFallback) {
+  if (storeData?.storeId && !storeData.offline && storeData.lockedMenus) {
+    return {
+      menus: storeData.lockedMenus,
+      source: "server",
+      shouldSyncLocal: true,
+      shouldBackfillServer: false,
+    };
+  }
+
+  if (localFallback) {
+    return {
+      menus: localFallback,
+      source: "local",
+      shouldSyncLocal: false,
+      shouldBackfillServer: Boolean(
+        storeData?.storeId &&
+          !storeData.offline &&
+          storeData.hasServerLockedMenusColumn &&
+          storeData.lockedMenus === null,
+      ),
+    };
+  }
+
+  return {
+    menus: { ...DEFAULT_LOCKED_MENUS },
+    source: "default",
+    shouldSyncLocal: false,
+    shouldBackfillServer: false,
+  };
+}
+
+/**
+ * Mengambil status lengkap PIN aktif + peta menu terkunci dalam satu panggilan.
+ */
+export const getPinSecurityStatus = async () => {
+  try {
+    const storeData = await getCurrentStoreData();
+    let pinHash = null;
+
+    if (storeData?.storeId) {
+      const scopedHashKey = hashKeyFor(storeData.storeId);
+      if (storeData.offline) {
+        pinHash = isHexSha256(storeData.pinHash) ? storeData.pinHash : null;
+      } else if (isHexSha256(storeData.pinHash)) {
+        await AsyncStorage.setItem(scopedHashKey, storeData.pinHash);
+        await AsyncStorage.multiRemove([
+          legacyKeyFor(storeData.storeId),
+          PIN_STORAGE_KEY,
+        ]);
+        await updateSnapshotPin(storeData.storeId, storeData.pinHash);
+        pinHash = storeData.pinHash;
+      } else {
+        await AsyncStorage.multiRemove([
+          scopedHashKey,
+          legacyKeyFor(storeData.storeId),
+          PIN_STORAGE_KEY,
+        ]);
+        await updateSnapshotPin(storeData.storeId, null);
+        pinHash = null;
+      }
+    } else {
+      const legacy = await AsyncStorage.getItem(PIN_STORAGE_KEY);
+      pinHash = legacy ? hashStorePin("global", legacy) : null;
+    }
+
+    const localFallback = storeData?.offline
+      ? storeData.lockedMenus
+      : await readLocalLockedMenus(storeData?.storeId || null);
+
+    const resolved = resolveLockedMenusFromStoreData(storeData, localFallback);
+
+    if (resolved.shouldSyncLocal && storeData?.storeId) {
+      await writeLocalLockedMenus(storeData.storeId, resolved.menus);
+    } else if (resolved.shouldBackfillServer && storeData?.storeId) {
+      void pushLockedMenusToServer(storeData.storeId, resolved.menus);
+    }
+
+    return {
+      hasPin: isHexSha256(pinHash),
+      pinHash,
+      lockedMenus: resolved.menus,
+    };
+  } catch {
+    return {
+      hasPin: false,
+      pinHash: null,
+      lockedMenus: { ...DEFAULT_LOCKED_MENUS },
+    };
+  }
+};
 
 /**
  * Mengembalikan hash SHA-256 PIN toko aktif (atau null bila PIN belum diatur).
  * Tidak lagi menyimpan maupun mengembalikan PIN plaintext ke storage lokal.
  */
 export const getSecurityPinHash = async () => {
-  try {
-    const storeData = await getCurrentStoreData();
-    if (storeData?.storeId) {
-      const scopedHashKey = hashKeyFor(storeData.storeId);
-      if (storeData.offline) {
-        return isHexSha256(storeData.pinHash) ? storeData.pinHash : null;
-      }
-
-      if (isHexSha256(storeData.pinHash)) {
-        await AsyncStorage.setItem(scopedHashKey, storeData.pinHash);
-        await AsyncStorage.multiRemove([
-          legacyKeyFor(storeData.storeId),
-          PIN_STORAGE_KEY,
-        ]);
-        return storeData.pinHash;
-      }
-
-      // Toko ini tidak memiliki PIN di database -> bersihkan cache lokal agar tidak bocor
-      await AsyncStorage.multiRemove([
-        scopedHashKey,
-        legacyKeyFor(storeData.storeId),
-        PIN_STORAGE_KEY,
-      ]);
-      return null;
-    }
-
-    const legacy = await AsyncStorage.getItem(PIN_STORAGE_KEY);
-    return legacy ? hashStorePin("global", legacy) : null;
-  } catch {
-    return null;
-  }
+  const status = await getPinSecurityStatus();
+  return status.pinHash;
 };
 
 export const isPinProtected = async () => {
-  const hash = await getSecurityPinHash();
-  return isHexSha256(hash);
+  const status = await getPinSecurityStatus();
+  return status.hasPin;
 };
 
 export const getLockedMenus = async () => {
-  try {
-    const storeData = await getCurrentStoreData();
-    const key = storeData?.storeId
-      ? `${LOCKED_MENUS_STORAGE_KEY}:${storeData.storeId}`
-      : LOCKED_MENUS_STORAGE_KEY;
-    const raw = await AsyncStorage.getItem(key);
-    if (!raw) return { ...DEFAULT_LOCKED_MENUS };
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_LOCKED_MENUS, ...parsed };
-  } catch {
-    return { ...DEFAULT_LOCKED_MENUS };
-  }
+  const status = await getPinSecurityStatus();
+  return status.lockedMenus;
 };
 
 export const setLockedMenus = async (config) => {
   try {
-    const storeData = await getCurrentStoreData();
-    if (storeData?.storeId) {
-      await AsyncStorage.setItem(
-        `${LOCKED_MENUS_STORAGE_KEY}:${storeData.storeId}`,
-        JSON.stringify(config),
-      );
+    const cleanConfig =
+      normalizeLockedMenusConfig(config) || { ...DEFAULT_LOCKED_MENUS };
+    const snap = await getAuthSnapshot();
+    let storeId = snap?.store_id || null;
+    if (!storeId) {
+      const storeData = await getCurrentStoreData();
+      storeId = storeData?.storeId || null;
     }
-    await AsyncStorage.setItem(
-      LOCKED_MENUS_STORAGE_KEY,
-      JSON.stringify(config),
-    );
+
+    await writeLocalLockedMenus(storeId, cleanConfig);
+
+    if (storeId) {
+      await pushLockedMenusToServer(storeId, cleanConfig);
+    }
   } catch (err) {
     console.warn("Gagal menyimpan preferensi menu terkunci:", err);
   }
 };
 
 export const isScreenLocked = async (screenName) => {
-  const hasPin = await isPinProtected();
+  const { hasPin, lockedMenus } = await getPinSecurityStatus();
   if (!hasPin) return false;
-  const lockedMenus = await getLockedMenus();
   return !!lockedMenus[screenName];
 };
 
@@ -260,13 +445,14 @@ export const setSecurityPin = async (newPin) => {
       legacyKeyFor(storeData.storeId),
       PIN_STORAGE_KEY,
     ]);
+    await updateSnapshotPin(storeData.storeId, pinHash);
 
     try {
       const { error: rpcErr } = await supabase.rpc("set_store_security_pin", {
         p_pin_hash: pinHash,
         p_legacy_pin: cleanPin,
       });
-      if (rpcErr && isMissingRpcError(rpcErr)) {
+      if (rpcErr && isMissingRpcError(rpcErr, "set_store_security_pin")) {
         await supabase
           .from("stores")
           .update({ security_pin: cleanPin })
@@ -289,12 +475,14 @@ export const removeSecurityPin = async () => {
       legacyKeyFor(storeData.storeId),
       PIN_STORAGE_KEY,
     ]);
+    await updateSnapshotPin(storeData.storeId, null);
+
     try {
       const { error: rpcErr } = await supabase.rpc("set_store_security_pin", {
         p_pin_hash: null,
         p_legacy_pin: null,
       });
-      if (rpcErr && isMissingRpcError(rpcErr)) {
+      if (rpcErr && isMissingRpcError(rpcErr, "set_store_security_pin")) {
         await supabase
           .from("stores")
           .update({ security_pin: null })

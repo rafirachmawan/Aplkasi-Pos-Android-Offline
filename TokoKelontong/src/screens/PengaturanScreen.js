@@ -76,10 +76,9 @@ import {
 import { colors, fonts } from "../theme/colors";
 import PinModal from "../components/PinModal";
 import {
-  isPinProtected,
+  getPinSecurityStatus,
   setSecurityPin,
   removeSecurityPin,
-  getLockedMenus,
   setLockedMenus,
   LOCKABLE_MENU_OPTIONS,
   DEFAULT_LOCKED_MENUS,
@@ -401,14 +400,18 @@ const PengaturanScreen = ({ navigation }) => {
   };
 
   useEffect(() => {
-    isPinProtected().then(setHasPin);
-    getLockedMenus().then(setLockedMenusState);
     getDeviceId().then(setDeviceId).catch(() => {});
     void refreshPlan({ force: true });
   }, []);
 
   useFocusEffect(
     useCallback(() => {
+      getPinSecurityStatus()
+        .then((pinStatus) => {
+          setHasPin(pinStatus.hasPin);
+          setLockedMenusState(pinStatus.lockedMenus);
+        })
+        .catch(() => {});
       getOfflineQueueCount()
         .then(() => refreshSyncCounts())
         .catch(() => {});
