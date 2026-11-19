@@ -8,6 +8,7 @@ import {
   ScrollView,
   Image,
   Dimensions,
+  useWindowDimensions,
   Platform,
   Alert,
 } from "react-native";
@@ -38,10 +39,20 @@ const isTablet = width >= 600;
 
 const HomeScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { state, dispatch } = useContext(AppContext);
   const { profile } = useAuth();
   const cloudStoreName = profile?.stores?.store_name;
   const storeName = cloudStoreName || state.storeName || "Toko Saya";
+
+  const trimmedStoreName = String(storeName || "").trim();
+  const isCompactPhone = windowWidth < 360;
+  const dynamicStoreNameStyle =
+    trimmedStoreName.length > 24 || isCompactPhone
+      ? styles.storeNameTextCompact
+      : trimmedStoreName.length > 16
+        ? styles.storeNameTextMedium
+        : null;
 
   const [hideBalance, setHideBalance] = useState(false);
   const [pinModalVisible, setPinModalVisible] = useState(false);
@@ -158,8 +169,10 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const now = new Date();
+  const useShortWeekday =
+    windowWidth < 380 || (!plan.isPro && state.businessMode === "fnb");
   const dateFormatted = now.toLocaleDateString("id-ID", {
-    weekday: "long",
+    weekday: useShortWeekday ? "short" : "long",
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -258,28 +271,14 @@ const HomeScreen = ({ navigation }) => {
             />
           </View>
 
-          <View style={styles.storeHeaderRight}>
-            <View style={styles.storeTopRow}>
-              <Text
-                style={styles.storeNameText}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {storeName}
-              </Text>
-              <ConnectionStatusPill
-                style={styles.connectionPill}
-                offline={syncStatus.offline}
-                syncing={syncStatus.syncing}
-                onPress={() => {
-                  if (offlineCount > 0) {
-                    navigation.navigate("TransaksiPending");
-                  } else {
-                    refreshSyncCounts();
-                  }
-                }}
-              />
-            </View>
+          <View style={styles.storeIdentityCol}>
+            <Text
+              style={[styles.storeNameText, dynamicStoreNameStyle]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {storeName}
+            </Text>
 
             <View style={styles.storeMetaRow}>
               <View
@@ -311,6 +310,19 @@ const HomeScreen = ({ navigation }) => {
               </Text>
             </View>
           </View>
+
+          <ConnectionStatusPill
+            style={styles.connectionPill}
+            offline={syncStatus.offline}
+            syncing={syncStatus.syncing}
+            onPress={() => {
+              if (offlineCount > 0) {
+                navigation.navigate("TransaksiPending");
+              } else {
+                refreshSyncCounts();
+              }
+            }}
+          />
         </View>
       </View>
 
@@ -616,25 +628,25 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
   },
-  storeHeaderRight: {
+  storeIdentityCol: {
     flex: 1,
     minWidth: 0,
     justifyContent: "center",
   },
-  storeTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
   storeNameText: {
-    flex: 1,
-    minWidth: 0,
     fontFamily: fonts.extraBold,
     fontSize: 17,
     lineHeight: 22,
     color: colors.text,
     letterSpacing: -0.3,
+  },
+  storeNameTextMedium: {
+    fontSize: 15.5,
+    lineHeight: 20,
+  },
+  storeNameTextCompact: {
+    fontSize: 14.5,
+    lineHeight: 19,
   },
   connectionPill: {
     flexShrink: 0,
@@ -643,7 +655,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 5,
+    marginTop: 4,
   },
   tierBadge: {
     backgroundColor: colors.surfaceSubtle,
@@ -660,6 +672,7 @@ const styles = StyleSheet.create({
   tierBadgeText: {
     fontFamily: fonts.bold,
     fontSize: 12,
+    lineHeight: 16,
     color: colors.textBodySecondary,
     letterSpacing: 0.3,
   },
@@ -676,6 +689,7 @@ const styles = StyleSheet.create({
   fnbTagText: {
     fontFamily: fonts.bold,
     fontSize: 12,
+    lineHeight: 16,
     color: colors.onPrimary,
     letterSpacing: 0.3,
   },
@@ -690,6 +704,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontFamily: fonts.medium,
     fontSize: 12,
+    lineHeight: 16,
     color: colors.textSecondary,
   },
 

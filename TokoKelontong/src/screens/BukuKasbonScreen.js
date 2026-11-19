@@ -5,16 +5,21 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
   Alert,
   ActivityIndicator,
   Linking,
-  Platform,
   ScrollView,
   KeyboardAvoidingView,
+  Keyboard,
+  Platform,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -60,6 +65,142 @@ function ModalHeader({ title, subtitle, onClose, closeLabel }) {
         />
       </TouchableOpacity>
     </View>
+  );
+}
+
+function KasbonSheetBody({
+  visible,
+  title,
+  subtitle,
+  onClose,
+  closeLabel,
+  disabled,
+  parentInsets,
+  footer,
+  children,
+}) {
+  const modalInsets = useSafeAreaInsets();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardVisible(false);
+      return undefined;
+    }
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () =>
+      setKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener(hideEvent, () =>
+      setKeyboardVisible(false),
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [visible]);
+
+  const effectiveTop = Math.max(modalInsets.top, parentInsets?.top || 0, 28) + 16;
+  const effectiveBottom = Math.max(modalInsets.bottom, parentInsets?.bottom || 0);
+  const bottomPad = keyboardVisible
+    ? 14
+    : Platform.OS === "android"
+      ? Math.max(effectiveBottom + 18, 52)
+      : Math.max(effectiveBottom, 16) + 8;
+
+  return (
+    <KeyboardAvoidingView
+      behavior="padding"
+      style={[
+        styles.modalSheetOverlay,
+        {
+          paddingTop: effectiveTop,
+          paddingLeft: Math.max(modalInsets.left, 0),
+          paddingRight: Math.max(modalInsets.right, 0),
+        },
+      ]}
+    >
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={() => !disabled && onClose()}
+        accessibilityRole="button"
+        accessibilityLabel={closeLabel || `Tutup ${title}`}
+      />
+      <View style={styles.modalBottomSheet}>
+        <View style={styles.modalSheetHandle} />
+        <View style={styles.modalSheetHeaderWrap}>
+          <ModalHeader
+            title={title}
+            subtitle={subtitle}
+            onClose={() => !disabled && onClose()}
+            closeLabel={closeLabel}
+          />
+        </View>
+        <ScrollView
+          style={styles.modalSheetScroll}
+          contentContainerStyle={styles.modalSheetScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+        {footer ? (
+          <View
+            style={[
+              styles.modalSheetFooter,
+              { paddingBottom: bottomPad },
+            ]}
+          >
+            {footer}
+          </View>
+        ) : null}
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+/**
+ * Container bottom-sheet seragam untuk modal kasbon agar menutup rapat hingga
+ * bagian bawah layar (aman terhadap bilah navigasi Android & keyboard).
+ */
+function KasbonBottomSheetModal({
+  visible,
+  title,
+  subtitle,
+  onClose,
+  closeLabel,
+  disabled = false,
+  insets,
+  footer,
+  children,
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={() => !disabled && onClose()}
+    >
+      <SafeAreaProvider>
+        <KasbonSheetBody
+          visible={visible}
+          title={title}
+          subtitle={subtitle}
+          onClose={onClose}
+          closeLabel={closeLabel}
+          disabled={disabled}
+          parentInsets={insets}
+          footer={footer}
+        >
+          {children}
+        </KasbonSheetBody>
+      </SafeAreaProvider>
+    </Modal>
   );
 }
 
@@ -668,519 +809,477 @@ const BukuKasbonScreen = ({ navigation }) => {
       )}
 
       {/* ── Floating Action Button (Catat Kasbon) ── */}
-      <TouchableOpacity
-        style={[
-          styles.fabBtn,
-          { bottom: Math.max(insets.bottom, 16) + 16 },
-          isReadOnly && styles.fabBtnLocked,
-        ]}
-        onPress={() => {
-          // Tier Gratis: data bisa dilihat, pencatatan baru dikunci.
-          if (isReadOnly) {
-            setShowLockModal(true);
-            return;
-          }
-          setNewName("");
-          setNewPhone("");
-          setNewAmount("");
-          setNewDueDate("");
-          setNewNotes("");
-          setNotesInputHeight(54);
-          setAddErrors({ name: "", amount: "", dueDate: "", submit: "" });
-          setShowAddModal(true);
-        }}
-        activeOpacity={0.88}
-      >
-        <Text style={styles.fabBtnText}>
-          {isReadOnly ? "Catat Kasbon (Pro)" : "+ Catat Kasbon"}
-        </Text>
-      </TouchableOpacity>
+      {!(showPayModal || showAddModal || showDetailModal || showLockModal) ? (
+        <TouchableOpacity
+          style={[
+            styles.fabBtn,
+            { bottom: Math.max(insets.bottom, 16) + 16 },
+            isReadOnly && styles.fabBtnLocked,
+          ]}
+          onPress={() => {
+            // Tier Gratis: data bisa dilihat, pencatatan baru dikunci.
+            if (isReadOnly) {
+              setShowLockModal(true);
+              return;
+            }
+            setNewName("");
+            setNewPhone("");
+            setNewAmount("");
+            setNewDueDate("");
+            setNewNotes("");
+            setNotesInputHeight(54);
+            setAddErrors({ name: "", amount: "", dueDate: "", submit: "" });
+            setShowAddModal(true);
+          }}
+          activeOpacity={0.88}
+        >
+          <Text style={styles.fabBtnText}>
+            {isReadOnly ? "Catat Kasbon (Pro)" : "+ Catat Kasbon"}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       {/* ── Modal Bayar Kasbon / Cicil ── */}
-      <Modal
+      <KasbonBottomSheetModal
         visible={showPayModal}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => !paying && setShowPayModal(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
-        >
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.modalCard}>
-              <ModalHeader
-                title="Bayar / Cicil Kasbon"
-                subtitle={
-                  selectedDebt?.customer_name
-                    ? `Pelanggan: ${selectedDebt.customer_name}`
-                    : ""
-                }
-                onClose={() => !paying && setShowPayModal(false)}
-                closeLabel="Tutup modal pembayaran kasbon"
-              />
-
-              <View style={styles.sisaHutangBanner}>
-                <View style={styles.sisaHutangTextWrap}>
-                  <Text style={styles.sisaHutangLabel}>
-                    Sisa hutang saat ini
-                  </Text>
-                  <Text style={styles.sisaHutangVal}>
-                    {formatRupiah(selectedDebt?.remaining_debt || 0)}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.quickPayFullBtn}
-                  onPress={() => {
-                    setPayAmountInput(
-                      formatToRpInput(String(selectedDebt?.remaining_debt || 0)),
-                    );
-                    if (payError) setPayError("");
-                  }}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Isi nominal bayar lunas"
-                >
-                  <Text style={styles.quickPayFullText}>Bayar Lunas</Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.inputLabel}>
-                Nominal pembayaran <Text style={styles.requiredMark}>*</Text>
-              </Text>
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  styles.modalInputAmount,
-                  Boolean(payError) && styles.modalInputError,
-                ]}
-                value={payAmountInput}
-                onChangeText={(val) => {
-                  setPayAmountInput(formatToRpInput(val));
-                  if (payError) setPayError("");
-                }}
-                keyboardType="number-pad"
-                placeholder="Rp0"
-                placeholderTextColor={colors.textMuted}
-              />
-              {payError ? (
-                <Text style={styles.fieldError}>{payError}</Text>
-              ) : (
-                <Text style={styles.fieldHelper}>
-                  Otomatis diformat ke Rupiah, contoh: Rp50.000
-                </Text>
-              )}
-
-              <Text style={styles.inputLabel}>Metode pembayaran</Text>
-              <View style={styles.methodsRow}>
-                {[
-                  { id: "cash", label: "Tunai" },
-                  { id: "transfer", label: "Transfer" },
-                  { id: "qris", label: "QRIS" },
-                ].map((m) => {
-                  const isSelected = payMethod === m.id;
-                  return (
-                    <TouchableOpacity
-                      key={m.id}
-                      style={[
-                        styles.methodChip,
-                        isSelected && styles.methodChipActive,
-                      ]}
-                      onPress={() => setPayMethod(m.id)}
-                      activeOpacity={0.75}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isSelected }}
-                    >
-                      <Text
-                        style={[
-                          styles.methodChipText,
-                          isSelected && styles.methodChipTextActive,
-                        ]}
-                      >
-                        {m.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.inputLabel}>Catatan (opsional)</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={payNotes}
-                onChangeText={setPayNotes}
-                placeholder="Misal: Cicilan ke-1"
-                placeholderTextColor={colors.textMuted}
-              />
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => setShowPayModal(false)}
-                  disabled={paying}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.modalCancelText}>Batal</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalSubmitBtn, paying && { opacity: 0.85 }]}
-                  onPress={handleSavePayment}
-                  disabled={paying}
-                  activeOpacity={0.88}
-                  accessibilityRole="button"
-                >
-                  {paying ? (
-                    <ActivityIndicator size="small" color={colors.onPrimary} />
-                  ) : null}
-                  <Text style={styles.modalSubmitText}>
-                    {paying ? "Menyimpan..." : "Simpan Pembayaran"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ── Modal Catat Kasbon Baru Manual ── */}
-      <Modal
-        visible={showAddModal}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => !savingNew && setShowAddModal(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
-        >
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.modalCard}>
-              <ModalHeader
-                title="Catat Kasbon Baru"
-                subtitle="Catat piutang pelanggan secara manual"
-                onClose={() => !savingNew && setShowAddModal(false)}
-                closeLabel="Tutup modal catat kasbon"
-              />
-
-              <Text style={styles.formSectionLabel}>Data utama</Text>
-
-              <Text style={styles.inputLabel}>
-                Nama pelanggan <Text style={styles.requiredMark}>*</Text>
-              </Text>
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  Boolean(addErrors.name) && styles.modalInputError,
-                ]}
-                value={newName}
-                onChangeText={(v) => {
-                  setNewName(v);
-                  if (addErrors.name || addErrors.submit) {
-                    setAddErrors((prev) => ({
-                      ...prev,
-                      name: "",
-                      submit: "",
-                    }));
-                  }
-                }}
-                autoCapitalize="words"
-                returnKeyType="next"
-                placeholder="Misal: Pak Budi"
-                placeholderTextColor={colors.textMuted}
-              />
-              {addErrors.name ? (
-                <Text style={styles.fieldError}>{addErrors.name}</Text>
-              ) : null}
-
-              <Text style={styles.inputLabel}>
-                Nominal kasbon <Text style={styles.requiredMark}>*</Text>
-              </Text>
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  styles.modalInputAmount,
-                  Boolean(addErrors.amount) && styles.modalInputError,
-                ]}
-                value={newAmount}
-                onChangeText={(v) => {
-                  setNewAmount(formatToRpInput(v));
-                  if (addErrors.amount || addErrors.submit) {
-                    setAddErrors((prev) => ({
-                      ...prev,
-                      amount: "",
-                      submit: "",
-                    }));
-                  }
-                }}
-                keyboardType="number-pad"
-                placeholder="Rp0"
-                placeholderTextColor={colors.textMuted}
-              />
-              {addErrors.amount ? (
-                <Text style={styles.fieldError}>{addErrors.amount}</Text>
-              ) : (
-                <Text style={styles.fieldHelper}>
-                  Otomatis diformat ke Rupiah, contoh: Rp50.000
-                </Text>
-              )}
-
-              <View style={styles.optionalSection}>
-                <Text style={styles.formSectionLabel}>
-                  Detail tambahan (opsional)
-                </Text>
-
-                <Text style={styles.inputLabel}>No. WhatsApp / HP</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={newPhone}
-                  onChangeText={setNewPhone}
-                  keyboardType="phone-pad"
-                  placeholder="Misal: 08123456789"
-                  placeholderTextColor={colors.textMuted}
-                />
-                <Text style={styles.fieldHelper}>
-                  Untuk mengirim pengingat tagihan via WhatsApp
-                </Text>
-
-                <Text style={styles.inputLabel}>Jatuh tempo (opsional)</Text>
-                <TextInput
-                  style={[
-                    styles.modalInput,
-                    Boolean(addErrors.dueDate) && styles.modalInputError,
-                  ]}
-                  value={newDueDate}
-                  onChangeText={(v) => {
-                    setNewDueDate(v);
-                    if (addErrors.dueDate || addErrors.submit) {
-                      setAddErrors((prev) => ({
-                        ...prev,
-                        dueDate: "",
-                        submit: "",
-                      }));
-                    }
-                  }}
-                  onBlur={() => {
-                    const res = parseFlexibleDueDate(newDueDate);
-                    if (!res.valid) {
-                      setAddErrors((prev) => ({ ...prev, dueDate: res.error }));
-                    }
-                  }}
-                  autoCapitalize="none"
-                  placeholder="Misal: 12 Januari atau 12-01"
-                  placeholderTextColor={colors.textMuted}
-                />
-                {addErrors.dueDate ? (
-                  <Text style={styles.fieldError}>{addErrors.dueDate}</Text>
-                ) : newDueDate.trim() &&
-                  parsedDuePreview.valid &&
-                  parsedDuePreview.display ? (
-                  <Text style={styles.fieldSuccess}>
-                    Terjadwal jatuh tempo: {parsedDuePreview.display}
-                  </Text>
-                ) : (
-                  <Text style={styles.fieldHelper}>
-                    Boleh kosong, atau tulis bebas seperti 12 Januari, 12-01, atau besok
-                  </Text>
-                )}
-
-                <Text style={styles.inputLabel}>Catatan</Text>
-                <TextInput
-                  style={[
-                    styles.modalInput,
-                    styles.notesInput,
-                    { height: Math.max(54, notesInputHeight) },
-                  ]}
-                  value={newNotes}
-                  onChangeText={setNewNotes}
-                  multiline
-                  textAlignVertical="top"
-                  onContentSizeChange={(e) => {
-                    const nextH = Math.round(
-                      e.nativeEvent.contentSize.height + 16,
-                    );
-                    setNotesInputHeight(Math.min(110, Math.max(54, nextH)));
-                  }}
-                  placeholder="Misal: Ambil beras 1 karung & minyak"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-
-              {addErrors.submit ? (
-                <View style={styles.submitErrorBox}>
-                  <MaterialCommunityIcons
-                    name="alert-circle-outline"
-                    size={16}
-                    color={colors.errorDark}
-                  />
-                  <Text style={styles.submitErrorText}>{addErrors.submit}</Text>
-                </View>
-              ) : null}
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => setShowAddModal(false)}
-                  disabled={savingNew}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.modalCancelText}>Batal</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalSubmitBtn, savingNew && { opacity: 0.85 }]}
-                  onPress={handleSaveNewDebt}
-                  disabled={savingNew}
-                  activeOpacity={0.88}
-                  accessibilityRole="button"
-                >
-                  {savingNew ? (
-                    <ActivityIndicator size="small" color={colors.onPrimary} />
-                  ) : null}
-                  <Text style={styles.modalSubmitText}>
-                    {savingNew ? "Menyimpan..." : "Simpan Kasbon"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ── Modal Detail & Riwayat Cicilan ── */}
-      <Modal
-        visible={showDetailModal}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setShowDetailModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { maxHeight: "85%" }]}>
-            <ModalHeader
-              title="Detail Catatan Kasbon"
-              subtitle={detailDebt?.customer_name}
-              onClose={() => setShowDetailModal(false)}
-              closeLabel="Tutup detail kasbon"
-            />
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.detailBox}>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailKey}>Total Hutang Awal</Text>
-                  <Text style={styles.detailVal}>
-                    {formatRupiah(detailDebt?.total_debt || 0)}
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailKey}>Sisa Hutang Belum Lunas</Text>
-                  <Text
-                    style={[
-                      styles.detailVal,
-                      {
-                        color:
-                          (Number(detailDebt?.remaining_debt) || 0) <= 0
-                            ? "#059669"
-                            : "#DC2626",
-                        fontFamily: fonts.extraBold,
-                      },
-                    ]}
-                  >
-                    {(Number(detailDebt?.remaining_debt) || 0) <= 0
-                      ? "Lunas"
-                      : formatRupiah(detailDebt?.remaining_debt || 0)}
-                  </Text>
-                </View>
-                {detailDebt?.invoice_number ? (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailKey}>Nomor Nota</Text>
-                    <Text style={styles.detailVal}>
-                      {detailDebt.invoice_number}
-                    </Text>
-                  </View>
-                ) : null}
-                {detailDebt?.due_date ? (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailKey}>Jatuh Tempo</Text>
-                    <Text style={[styles.detailVal, { color: "#D97706" }]}>
-                      {formatDueDateDisplay(detailDebt.due_date)}
-                    </Text>
-                  </View>
-                ) : null}
-                {detailDebt?.notes ? (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailKey}>Catatan</Text>
-                    <Text style={styles.detailVal}>{detailDebt.notes}</Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <Text style={styles.historySectionTitle}>
-                RIWAYAT PEMBAYARAN & CICILAN
-              </Text>
-              {!detailDebt?.debt_payments ||
-              detailDebt.debt_payments.length === 0 ? (
-                <View style={styles.emptyHistoryBox}>
-                  <MaterialCommunityIcons
-                    name="cash-clock"
-                    size={28}
-                    color="#94A3B8"
-                  />
-                  <Text style={styles.noHistoryText}>
-                    Belum ada pembayaran cicilan yang dicatat.
-                  </Text>
-                </View>
-              ) : (
-                detailDebt.debt_payments.map((p, idx) => (
-                  <View key={p.id || idx} style={styles.historyCard}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.historyAmount}>
-                        {formatRupiah(p.payment_amount)}
-                      </Text>
-                      <Text style={styles.historyDate}>
-                        {new Date(p.created_at).toLocaleString("id-ID", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        • {p.payment_method?.toUpperCase()}
-                      </Text>
-                      {p.notes ? (
-                        <Text style={styles.historyNotes}>
-                          Catatan: {p.notes}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View style={styles.historyBadge}>
-                      <Text style={styles.historyBadgeText}>Tercatat</Text>
-                    </View>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-
+        title="Bayar / Cicil Kasbon"
+        subtitle={
+          selectedDebt?.customer_name
+            ? `Pelanggan: ${selectedDebt.customer_name}`
+            : ""
+        }
+        onClose={() => setShowPayModal(false)}
+        closeLabel="Tutup modal pembayaran kasbon"
+        disabled={paying}
+        insets={insets}
+        footer={
+          <View style={styles.modalActions}>
             <TouchableOpacity
-              style={styles.modalCloseFullBtn}
-              onPress={() => setShowDetailModal(false)}
+              style={styles.modalCancelBtn}
+              onPress={() => setShowPayModal(false)}
+              disabled={paying}
               activeOpacity={0.8}
+              accessibilityRole="button"
             >
-              <Text style={styles.modalCloseFullText}>Tutup</Text>
+              <Text style={styles.modalCancelText}>Batal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalSubmitBtn, paying && { opacity: 0.85 }]}
+              onPress={handleSavePayment}
+              disabled={paying}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+            >
+              {paying ? (
+                <ActivityIndicator size="small" color={colors.onPrimary} />
+              ) : null}
+              <Text style={styles.modalSubmitText}>
+                {paying ? "Menyimpan..." : "Simpan Pembayaran"}
+              </Text>
             </TouchableOpacity>
           </View>
+        }
+      >
+        <View style={styles.sisaHutangBanner}>
+          <View style={styles.sisaHutangTextWrap}>
+            <Text style={styles.sisaHutangLabel}>
+              Sisa hutang saat ini
+            </Text>
+            <Text style={styles.sisaHutangVal}>
+              {formatRupiah(selectedDebt?.remaining_debt || 0)}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.quickPayFullBtn}
+            onPress={() => {
+              setPayAmountInput(
+                formatToRpInput(String(selectedDebt?.remaining_debt || 0)),
+              );
+              if (payError) setPayError("");
+            }}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Isi nominal bayar lunas"
+          >
+            <Text style={styles.quickPayFullText}>Bayar Lunas</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+
+        <Text style={styles.inputLabel}>
+          Nominal pembayaran <Text style={styles.requiredMark}>*</Text>
+        </Text>
+        <TextInput
+          style={[
+            styles.modalInput,
+            styles.modalInputAmount,
+            Boolean(payError) && styles.modalInputError,
+          ]}
+          value={payAmountInput}
+          onChangeText={(val) => {
+            setPayAmountInput(formatToRpInput(val));
+            if (payError) setPayError("");
+          }}
+          keyboardType="number-pad"
+          placeholder="Rp0"
+          placeholderTextColor={colors.textMuted}
+        />
+        {payError ? (
+          <Text style={styles.fieldError}>{payError}</Text>
+        ) : (
+          <Text style={styles.fieldHelper}>
+            Otomatis diformat ke Rupiah, contoh: Rp50.000
+          </Text>
+        )}
+
+        <Text style={styles.inputLabel}>Metode pembayaran</Text>
+        <View style={styles.methodsRow}>
+          {[
+            { id: "cash", label: "Tunai" },
+            { id: "transfer", label: "Transfer" },
+            { id: "qris", label: "QRIS" },
+          ].map((m) => {
+            const isSelected = payMethod === m.id;
+            return (
+              <TouchableOpacity
+                key={m.id}
+                style={[
+                  styles.methodChip,
+                  isSelected && styles.methodChipActive,
+                ]}
+                onPress={() => setPayMethod(m.id)}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+              >
+                <Text
+                  style={[
+                    styles.methodChipText,
+                    isSelected && styles.methodChipTextActive,
+                  ]}
+                >
+                  {m.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.inputLabel}>Catatan (opsional)</Text>
+        <TextInput
+          style={styles.modalInput}
+          value={payNotes}
+          onChangeText={setPayNotes}
+          placeholder="Misal: Cicilan ke-1"
+          placeholderTextColor={colors.textMuted}
+        />
+      </KasbonBottomSheetModal>
+
+      {/* ── Modal Catat Kasbon Baru Manual ── */}
+      <KasbonBottomSheetModal
+        visible={showAddModal}
+        title="Catat Kasbon Baru"
+        subtitle="Catat piutang pelanggan secara manual"
+        onClose={() => setShowAddModal(false)}
+        closeLabel="Tutup modal catat kasbon"
+        disabled={savingNew}
+        insets={insets}
+        footer={
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setShowAddModal(false)}
+              disabled={savingNew}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+            >
+              <Text style={styles.modalCancelText}>Batal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalSubmitBtn, savingNew && { opacity: 0.85 }]}
+              onPress={handleSaveNewDebt}
+              disabled={savingNew}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+            >
+              {savingNew ? (
+                <ActivityIndicator size="small" color={colors.onPrimary} />
+              ) : null}
+              <Text style={styles.modalSubmitText}>
+                {savingNew ? "Menyimpan..." : "Simpan Kasbon"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        }
+      >
+        <Text style={styles.formSectionLabel}>Data utama</Text>
+
+        <Text style={styles.inputLabel}>
+          Nama pelanggan <Text style={styles.requiredMark}>*</Text>
+        </Text>
+        <TextInput
+          style={[
+            styles.modalInput,
+            Boolean(addErrors.name) && styles.modalInputError,
+          ]}
+          value={newName}
+          onChangeText={(v) => {
+            setNewName(v);
+            if (addErrors.name || addErrors.submit) {
+              setAddErrors((prev) => ({
+                ...prev,
+                name: "",
+                submit: "",
+              }));
+            }
+          }}
+          autoCapitalize="words"
+          returnKeyType="next"
+          placeholder="Misal: Pak Budi"
+          placeholderTextColor={colors.textMuted}
+        />
+        {addErrors.name ? (
+          <Text style={styles.fieldError}>{addErrors.name}</Text>
+        ) : null}
+
+        <Text style={styles.inputLabel}>
+          Nominal kasbon <Text style={styles.requiredMark}>*</Text>
+        </Text>
+        <TextInput
+          style={[
+            styles.modalInput,
+            styles.modalInputAmount,
+            Boolean(addErrors.amount) && styles.modalInputError,
+          ]}
+          value={newAmount}
+          onChangeText={(v) => {
+            setNewAmount(formatToRpInput(v));
+            if (addErrors.amount || addErrors.submit) {
+              setAddErrors((prev) => ({
+                ...prev,
+                amount: "",
+                submit: "",
+              }));
+            }
+          }}
+          keyboardType="number-pad"
+          placeholder="Rp0"
+          placeholderTextColor={colors.textMuted}
+        />
+        {addErrors.amount ? (
+          <Text style={styles.fieldError}>{addErrors.amount}</Text>
+        ) : (
+          <Text style={styles.fieldHelper}>
+            Otomatis diformat ke Rupiah, contoh: Rp50.000
+          </Text>
+        )}
+
+        <View style={styles.optionalSection}>
+          <Text style={styles.formSectionLabel}>
+            Detail tambahan (opsional)
+          </Text>
+
+          <Text style={styles.inputLabel}>No. WhatsApp / HP</Text>
+          <TextInput
+            style={styles.modalInput}
+            value={newPhone}
+            onChangeText={setNewPhone}
+            keyboardType="phone-pad"
+            placeholder="Misal: 08123456789"
+            placeholderTextColor={colors.textMuted}
+          />
+          <Text style={styles.fieldHelper}>
+            Untuk mengirim pengingat tagihan via WhatsApp
+          </Text>
+
+          <Text style={styles.inputLabel}>Jatuh tempo (opsional)</Text>
+          <TextInput
+            style={[
+              styles.modalInput,
+              Boolean(addErrors.dueDate) && styles.modalInputError,
+            ]}
+            value={newDueDate}
+            onChangeText={(v) => {
+              setNewDueDate(v);
+              if (addErrors.dueDate || addErrors.submit) {
+                setAddErrors((prev) => ({
+                  ...prev,
+                  dueDate: "",
+                  submit: "",
+                }));
+              }
+            }}
+            onBlur={() => {
+              const res = parseFlexibleDueDate(newDueDate);
+              if (!res.valid) {
+                setAddErrors((prev) => ({ ...prev, dueDate: res.error }));
+              }
+            }}
+            autoCapitalize="none"
+            placeholder="Misal: 12 Januari atau 12-01"
+            placeholderTextColor={colors.textMuted}
+          />
+          {addErrors.dueDate ? (
+            <Text style={styles.fieldError}>{addErrors.dueDate}</Text>
+          ) : newDueDate.trim() &&
+            parsedDuePreview.valid &&
+            parsedDuePreview.display ? (
+            <Text style={styles.fieldSuccess}>
+              Terjadwal jatuh tempo: {parsedDuePreview.display}
+            </Text>
+          ) : (
+            <Text style={styles.fieldHelper}>
+              Boleh kosong, atau tulis bebas seperti 12 Januari, 12-01, atau besok
+            </Text>
+          )}
+
+          <Text style={styles.inputLabel}>Catatan</Text>
+          <TextInput
+            style={[
+              styles.modalInput,
+              styles.notesInput,
+              { height: Math.max(54, notesInputHeight) },
+            ]}
+            value={newNotes}
+            onChangeText={setNewNotes}
+            multiline
+            textAlignVertical="top"
+            onContentSizeChange={(e) => {
+              const nextH = Math.round(
+                e.nativeEvent.contentSize.height + 16,
+              );
+              setNotesInputHeight(Math.min(110, Math.max(54, nextH)));
+            }}
+            placeholder="Misal: Ambil beras 1 karung & minyak"
+            placeholderTextColor={colors.textMuted}
+          />
+        </View>
+
+        {addErrors.submit ? (
+          <View style={styles.submitErrorBox}>
+            <MaterialCommunityIcons
+              name="alert-circle-outline"
+              size={16}
+              color={colors.errorDark}
+            />
+            <Text style={styles.submitErrorText}>{addErrors.submit}</Text>
+          </View>
+        ) : null}
+      </KasbonBottomSheetModal>
+
+      {/* ── Modal Detail & Riwayat Cicilan ── */}
+      <KasbonBottomSheetModal
+        visible={showDetailModal}
+        title="Detail Catatan Kasbon"
+        subtitle={detailDebt?.customer_name}
+        onClose={() => setShowDetailModal(false)}
+        closeLabel="Tutup detail kasbon"
+        insets={insets}
+        footer={
+          <TouchableOpacity
+            style={styles.modalCloseFullBtn}
+            onPress={() => setShowDetailModal(false)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <Text style={styles.modalCloseFullText}>Tutup</Text>
+          </TouchableOpacity>
+        }
+      >
+        <View style={styles.detailBox}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailKey}>Total Hutang Awal</Text>
+            <Text style={styles.detailVal}>
+              {formatRupiah(detailDebt?.total_debt || 0)}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailKey}>Sisa Hutang Belum Lunas</Text>
+            <Text
+              style={[
+                styles.detailVal,
+                {
+                  color:
+                    (Number(detailDebt?.remaining_debt) || 0) <= 0
+                      ? "#059669"
+                      : "#DC2626",
+                  fontFamily: fonts.extraBold,
+                },
+              ]}
+            >
+              {(Number(detailDebt?.remaining_debt) || 0) <= 0
+                ? "Lunas"
+                : formatRupiah(detailDebt?.remaining_debt || 0)}
+            </Text>
+          </View>
+          {detailDebt?.invoice_number ? (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailKey}>Nomor Nota</Text>
+              <Text style={styles.detailVal}>
+                {detailDebt.invoice_number}
+              </Text>
+            </View>
+          ) : null}
+          {detailDebt?.due_date ? (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailKey}>Jatuh Tempo</Text>
+              <Text style={[styles.detailVal, { color: "#D97706" }]}>
+                {formatDueDateDisplay(detailDebt.due_date)}
+              </Text>
+            </View>
+          ) : null}
+          {detailDebt?.notes ? (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailKey}>Catatan</Text>
+              <Text style={styles.detailVal}>{detailDebt.notes}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <Text style={styles.historySectionTitle}>
+          RIWAYAT PEMBAYARAN & CICILAN
+        </Text>
+        {!detailDebt?.debt_payments ||
+        detailDebt.debt_payments.length === 0 ? (
+          <View style={styles.emptyHistoryBox}>
+            <MaterialCommunityIcons
+              name="cash-clock"
+              size={28}
+              color="#94A3B8"
+            />
+            <Text style={styles.noHistoryText}>
+              Belum ada pembayaran cicilan yang dicatat.
+            </Text>
+          </View>
+        ) : (
+          detailDebt.debt_payments.map((p, idx) => (
+            <View key={p.id || idx} style={styles.historyCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.historyAmount}>
+                  {formatRupiah(p.payment_amount)}
+                </Text>
+                <Text style={styles.historyDate}>
+                  {new Date(p.created_at).toLocaleString("id-ID", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}{" "}
+                  • {p.payment_method?.toUpperCase()}
+                </Text>
+                {p.notes ? (
+                  <Text style={styles.historyNotes}>
+                    Catatan: {p.notes}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.historyBadge}>
+                <Text style={styles.historyBadgeText}>Tercatat</Text>
+              </View>
+            </View>
+          ))
+        )}
+      </KasbonBottomSheetModal>
 
       {/* ── Panel Kunci Fitur (tier Gratis) ── */}
       <ProLockModal
@@ -1701,39 +1800,68 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
 
-  // ── Modals Common ──
-  modalOverlay: {
+  // ── Modals Common (Bottom Sheet) ──
+  modalSheetOverlay: {
     flex: 1,
     backgroundColor: colors.overlayBackdrop,
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 20,
+    justifyContent: "flex-end",
   },
-  modalScrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-  },
-  modalCard: {
+  modalBottomSheet: {
     width: "100%",
-    maxWidth: 460,
+    maxWidth: 600,
+    maxHeight: "100%",
     alignSelf: "center",
     backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
     borderColor: colors.border,
+    overflow: "hidden",
     shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.14,
     shadowRadius: 16,
-    elevation: 6,
+    elevation: 16,
+  },
+  modalSheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderStrong,
+    alignSelf: "center",
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  modalSheetHeaderWrap: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  modalSheetScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  modalSheetScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 18,
+  },
+  modalSheetFooter: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 0,
   },
   modalHeaderTextWrap: {
     flex: 1,
@@ -1924,7 +2052,7 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 20,
+    marginTop: 0,
   },
   modalCancelBtn: {
     flex: 1,
@@ -2045,16 +2173,19 @@ const styles = StyleSheet.create({
     color: "#16A34A",
   },
   modalCloseFullBtn: {
-    backgroundColor: "#F1F5F9",
-    paddingVertical: 11,
-    borderRadius: 10,
+    minHeight: 48,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: "center",
-    marginTop: 14,
+    justifyContent: "center",
   },
   modalCloseFullText: {
     fontFamily: fonts.bold,
-    fontSize: 13,
-    color: "#475569",
+    fontSize: 14,
+    color: colors.textDark,
   },
 });
 

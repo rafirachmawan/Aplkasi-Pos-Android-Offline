@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Alert,
   TouchableOpacity,
+  Pressable,
   Text,
   Platform,
   Image,
@@ -13,8 +14,12 @@ import {
   StatusBar,
   Linking,
   Switch,
+  KeyboardAvoidingView,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Print from "expo-print";
@@ -107,6 +112,155 @@ const barcodeStyles = StyleSheet.create({
     color: "#000",
   },
 });
+
+/**
+ * Konten dalam modal tambah/edit satuan & kategori agar lebar kartu tetap penuh
+ * saat mengetik serta bergeser aman di atas keyboard pada HP Android.
+ */
+function AttributeInputModalBody({
+  title,
+  value,
+  onChangeText,
+  placeholder,
+  confirmLabel,
+  cancelLabel,
+  cancelIsDestructive,
+  hintText,
+  onCancel,
+  onConfirm,
+  onDismiss,
+  parentInsets,
+}) {
+  const modalInsets = useSafeAreaInsets();
+  const topPad = Math.max(modalInsets.top, parentInsets?.top || 0, 20) + 12;
+  const bottomPad =
+    Math.max(modalInsets.bottom, parentInsets?.bottom || 0, 16) + 12;
+
+  return (
+    <KeyboardAvoidingView behavior="padding" style={styles.attrModalAvoid}>
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel={`Tutup ${title}`}
+      />
+      <ScrollView
+        style={styles.attrModalScroll}
+        contentContainerStyle={[
+          styles.attrModalScrollContent,
+          { paddingTop: topPad, paddingBottom: bottomPad },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.unitModal}>
+          <View style={styles.unitModalHeader}>
+            <Text style={styles.unitModalTitle}>{title}</Text>
+            <TouchableOpacity
+              onPress={onDismiss}
+              style={styles.unitModalCloseBtn}
+              hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Tutup ${title}`}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={20}
+                color={colors.textBodySecondary}
+              />
+            </TouchableOpacity>
+          </View>
+          <RNTextInput
+            style={styles.unitModalInput}
+            value={value}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            placeholderTextColor={colors.textSecondary}
+            autoFocus
+            autoCapitalize="none"
+            returnKeyType="done"
+            onSubmitEditing={onConfirm}
+          />
+          <View style={styles.unitModalActions}>
+            <TouchableOpacity
+              style={[
+                styles.unitModalCancelBtn,
+                cancelIsDestructive && { borderColor: colors.error },
+              ]}
+              onPress={onCancel}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+            >
+              <Text
+                style={[
+                  styles.unitModalCancelText,
+                  cancelIsDestructive && { color: colors.error },
+                ]}
+              >
+                {cancelLabel}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.unitModalConfirmBtn}
+              onPress={onConfirm}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+            >
+              <Text style={styles.unitModalConfirmText}>{confirmLabel}</Text>
+            </TouchableOpacity>
+          </View>
+          {hintText ? (
+            <Text style={styles.unitEditHint}>{hintText}</Text>
+          ) : null}
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function AttributeInputModal({
+  visible,
+  title,
+  value,
+  onChangeText,
+  placeholder,
+  confirmLabel,
+  cancelLabel = "Batal",
+  cancelIsDestructive = false,
+  hintText = "",
+  onCancel,
+  onConfirm,
+  onDismiss,
+  parentInsets,
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      statusBarTranslucent
+      navigationBarTranslucent
+      animationType="fade"
+      onRequestClose={onDismiss}
+    >
+      <SafeAreaProvider>
+        <AttributeInputModalBody
+          title={title}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          confirmLabel={confirmLabel}
+          cancelLabel={cancelLabel}
+          cancelIsDestructive={cancelIsDestructive}
+          hintText={hintText}
+          onCancel={onCancel}
+          onConfirm={onConfirm}
+          onDismiss={onDismiss}
+          parentInsets={parentInsets}
+        />
+      </SafeAreaProvider>
+    </Modal>
+  );
+}
 
 // ─── Main Screen ───────────────────────────────────────────────────────────
 const AddProductScreen = ({ navigation, route }) => {
@@ -1245,203 +1399,77 @@ const AddProductScreen = ({ navigation, route }) => {
       </Modal>
 
       {/* ── Modal Tambah Satuan ── */}
-      <Modal
+      <AttributeInputModal
         visible={showAddUnitModal}
-        transparent
-        statusBarTranslucent={true}
-        animationType="fade"
-        onRequestClose={() => setShowAddUnitModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlayCenter}
-          activeOpacity={1}
-          onPress={() => setShowAddUnitModal(false)}
-        >
-          <View style={styles.unitModal}>
-            <Text style={styles.unitModalTitle}>Tambah Satuan Baru</Text>
-            <RNTextInput
-              style={styles.unitModalInput}
-              value={newUnitInput}
-              onChangeText={setNewUnitInput}
-              placeholder="Contoh: dus, lusin, pack..."
-              placeholderTextColor={colors.textSecondary}
-              autoFocus
-              autoCapitalize="none"
-              onSubmitEditing={handleAddUnit}
-            />
-            <View style={styles.unitModalActions}>
-              <TouchableOpacity
-                style={styles.unitModalCancelBtn}
-                onPress={() => setShowAddUnitModal(false)}
-              >
-                <Text style={styles.unitModalCancelText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.unitModalConfirmBtn}
-                onPress={handleAddUnit}
-              >
-                <Text style={styles.unitModalConfirmText}>Tambah</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        title="Tambah Satuan Baru"
+        value={newUnitInput}
+        onChangeText={setNewUnitInput}
+        placeholder="Contoh: dus, lusin, pack..."
+        confirmLabel="Tambah"
+        onCancel={() => setShowAddUnitModal(false)}
+        onConfirm={handleAddUnit}
+        onDismiss={() => setShowAddUnitModal(false)}
+        parentInsets={insets}
+      />
 
       {/* ── Modal Edit Satuan ── */}
-      <Modal
+      <AttributeInputModal
         visible={showEditUnitModal}
-        transparent
-        statusBarTranslucent={true}
-        animationType="fade"
-        onRequestClose={() => setShowEditUnitModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlayCenter}
-          activeOpacity={1}
-          onPress={() => setShowEditUnitModal(false)}
-        >
-          <View style={styles.unitModal}>
-            <Text style={styles.unitModalTitle}>Edit Satuan</Text>
-            <RNTextInput
-              style={styles.unitModalInput}
-              value={editUnitInput}
-              onChangeText={setEditUnitInput}
-              autoFocus
-              autoCapitalize="none"
-              onSubmitEditing={handleEditUnit}
-            />
-            <View style={styles.unitModalActions}>
-              <TouchableOpacity
-                style={[
-                  styles.unitModalCancelBtn,
-                  { borderColor: colors.error },
-                ]}
-                onPress={() => {
-                  if (editingUnit)
-                    handleDeleteUnit(editingUnit.value, editingUnit.index);
-                  setShowEditUnitModal(false);
-                }}
-              >
-                <Text
-                  style={[styles.unitModalCancelText, { color: colors.error }]}
-                >
-                  Hapus
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.unitModalConfirmBtn}
-                onPress={handleEditUnit}
-              >
-                <Text style={styles.unitModalConfirmText}>Simpan</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.unitEditHint}>
-              * Tekan tahan (long press) pada satuan untuk edit/hapus
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        title="Edit Satuan"
+        value={editUnitInput}
+        onChangeText={setEditUnitInput}
+        placeholder="Nama satuan produk"
+        cancelLabel="Hapus"
+        cancelIsDestructive
+        confirmLabel="Simpan"
+        hintText="* Tekan tahan (long press) pada satuan untuk edit/hapus"
+        onCancel={() => {
+          if (editingUnit)
+            handleDeleteUnit(editingUnit.value, editingUnit.index);
+          setShowEditUnitModal(false);
+        }}
+        onConfirm={handleEditUnit}
+        onDismiss={() => setShowEditUnitModal(false)}
+        parentInsets={insets}
+      />
 
       {/* ── Modal Tambah Kategori ── */}
-      <Modal
+      <AttributeInputModal
         visible={showAddCategoryModal}
-        transparent
-        statusBarTranslucent={true}
-        animationType="fade"
-        onRequestClose={() => setShowAddCategoryModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlayCenter}
-          activeOpacity={1}
-          onPress={() => setShowAddCategoryModal(false)}
-        >
-          <View style={styles.unitModal}>
-            <Text style={styles.unitModalTitle}>Tambah Kategori Baru</Text>
-            <RNTextInput
-              style={styles.unitModalInput}
-              value={newCategoryInput}
-              onChangeText={setNewCategoryInput}
-              placeholder="Contoh: makanan, minuman, sabun..."
-              placeholderTextColor={colors.textSecondary}
-              autoFocus
-              autoCapitalize="none"
-              onSubmitEditing={handleAddCategory}
-            />
-            <View style={styles.unitModalActions}>
-              <TouchableOpacity
-                style={styles.unitModalCancelBtn}
-                onPress={() => setShowAddCategoryModal(false)}
-              >
-                <Text style={styles.unitModalCancelText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.unitModalConfirmBtn}
-                onPress={handleAddCategory}
-              >
-                <Text style={styles.unitModalConfirmText}>Tambah</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        title="Tambah Kategori Baru"
+        value={newCategoryInput}
+        onChangeText={setNewCategoryInput}
+        placeholder="Contoh: makanan, minuman, sabun..."
+        confirmLabel="Tambah"
+        onCancel={() => setShowAddCategoryModal(false)}
+        onConfirm={handleAddCategory}
+        onDismiss={() => setShowAddCategoryModal(false)}
+        parentInsets={insets}
+      />
 
       {/* ── Modal Edit Kategori ── */}
-      <Modal
+      <AttributeInputModal
         visible={showEditCategoryModal}
-        transparent
-        statusBarTranslucent={true}
-        animationType="fade"
-        onRequestClose={() => setShowEditCategoryModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlayCenter}
-          activeOpacity={1}
-          onPress={() => setShowEditCategoryModal(false)}
-        >
-          <View style={styles.unitModal}>
-            <Text style={styles.unitModalTitle}>Edit Kategori</Text>
-            <RNTextInput
-              style={styles.unitModalInput}
-              value={editCategoryInput}
-              onChangeText={setEditCategoryInput}
-              autoFocus
-              autoCapitalize="none"
-              onSubmitEditing={handleEditCategory}
-            />
-            <View style={styles.unitModalActions}>
-              <TouchableOpacity
-                style={[
-                  styles.unitModalCancelBtn,
-                  { borderColor: colors.error },
-                ]}
-                onPress={() => {
-                  if (editingCategory)
-                    handleDeleteCategory(
-                      editingCategory.value,
-                      editingCategory.index,
-                    );
-                  setShowEditCategoryModal(false);
-                }}
-              >
-                <Text
-                  style={[styles.unitModalCancelText, { color: colors.error }]}
-                >
-                  Hapus
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.unitModalConfirmBtn}
-                onPress={handleEditCategory}
-              >
-                <Text style={styles.unitModalConfirmText}>Simpan</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.unitEditHint}>
-              * Tekan tahan (long press) pada kategori untuk edit/hapus
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        title="Edit Kategori"
+        value={editCategoryInput}
+        onChangeText={setEditCategoryInput}
+        placeholder="Nama kategori produk"
+        cancelLabel="Hapus"
+        cancelIsDestructive
+        confirmLabel="Simpan"
+        hintText="* Tekan tahan (long press) pada kategori untuk edit/hapus"
+        onCancel={() => {
+          if (editingCategory)
+            handleDeleteCategory(
+              editingCategory.value,
+              editingCategory.index,
+            );
+          setShowEditCategoryModal(false);
+        }}
+        onConfirm={handleEditCategory}
+        onDismiss={() => setShowEditCategoryModal(false)}
+        parentInsets={insets}
+      />
 
       {/* ── Modal Pilih Sumber Gambar ── */}
       <Modal
@@ -2475,66 +2503,110 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 
-  // Unit Modal (Add / Edit)
+  // Unit & Category Modal (Add / Edit)
+  attrModalAvoid: {
+    flex: 1,
+    backgroundColor: colors.overlayBackdrop,
+  },
+  attrModalScroll: {
+    flex: 1,
+  },
+  attrModalScrollContent: {
+    flexGrow: 1,
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
   unitModal: {
-    backgroundColor: "#fff",
+    width: "100%",
+    maxWidth: 420,
+    alignSelf: "center",
+    backgroundColor: colors.surface,
     borderRadius: 20,
-    marginHorizontal: 24,
-    padding: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
     elevation: 10,
-    shadowColor: "#000",
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.16,
     shadowRadius: 20,
   },
+  unitModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 14,
+  },
   unitModalTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    flex: 1,
+    fontFamily: fonts.bold,
+    fontSize: 17,
     color: colors.text,
-    marginBottom: 16,
+  },
+  unitModalCloseBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: "center",
+    justifyContent: "center",
   },
   unitModalInput: {
+    width: "100%",
+    minHeight: 48,
     borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: 10,
+    borderColor: colors.borderStrong,
+    borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    fontFamily: fonts.medium,
     fontSize: 15,
     color: colors.text,
     marginBottom: 16,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surfaceMuted,
   },
   unitModalActions: {
+    width: "100%",
     flexDirection: "row",
     gap: 10,
   },
   unitModalCancelBtn: {
     flex: 1,
+    minHeight: 46,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     alignItems: "center",
+    justifyContent: "center",
   },
   unitModalCancelText: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: "700",
-    color: colors.textSecondary,
+    color: colors.textBodySecondary,
   },
   unitModalConfirmBtn: {
     flex: 1,
+    minHeight: 46,
     paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
+    borderRadius: 12,
+    backgroundColor: colors.primaryDark,
     alignItems: "center",
+    justifyContent: "center",
   },
   unitModalConfirmText: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: "700",
-    color: "#fff",
+    color: colors.onPrimary,
   },
   unitEditHint: {
-    fontSize: 11,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textSecondary,
     textAlign: "center",
     marginTop: 12,
