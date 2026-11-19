@@ -189,6 +189,9 @@ export const generateDailyClosingWAMessage = (summary, storeProfile, dateStr) =>
     `• Total Omzet      : *${formatRupiah(summary?.omzet || 0)}*`,
     `• Uang Tunai (Laci): ${formatRupiah(summary?.omzet_tunai || 0)}`,
     `• Non-Tunai (QRIS/TF): ${formatRupiah(summary?.omzet_non_tunai || 0)}`,
+    ...((summary?.omzet_kasbon || 0) > 0
+      ? [`• Kasbon / Piutang : ${formatRupiah(summary.omzet_kasbon)}`]
+      : []),
     `• Total Transaksi  : ${summary?.count || 0} Nota`,
     `• Estimasi Laba    : *${formatRupiah(summary?.laba || 0)}*`,
     SEP,

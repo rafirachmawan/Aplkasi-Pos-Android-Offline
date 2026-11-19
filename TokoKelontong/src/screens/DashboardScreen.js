@@ -64,6 +64,7 @@ const DashboardScreen = ({ navigation }) => {
     omzet: 0,
     omzet_tunai: 0,
     omzet_non_tunai: 0,
+    omzet_kasbon: 0,
     laba: 0,
     count: 0,
     top_products: [],
@@ -126,6 +127,7 @@ const DashboardScreen = ({ navigation }) => {
         omzet: result?.omzet || 0,
         omzet_tunai: result?.omzet_tunai || 0,
         omzet_non_tunai: result?.omzet_non_tunai || 0,
+        omzet_kasbon: result?.omzet_kasbon || 0,
         laba: result?.laba || 0,
         count: result?.count || 0,
         top_products: result?.top_products || [],
@@ -396,11 +398,13 @@ const DashboardScreen = ({ navigation }) => {
 
         <View style={styles.summaryDivider} />
 
-        {/* Pemisahan Tunai Laci vs Non-Tunai */}
+        {/* Pemisahan Tunai Laci vs Non-Tunai (+ Kasbon jika ada) */}
         <View style={styles.splitRow}>
           <View style={styles.splitCol}>
-            <Text style={styles.splitColLabel}>Tunai (Laci Kasir)</Text>
-            <Text style={styles.splitColValue}>
+            <Text style={styles.splitColLabel} numberOfLines={1}>
+              Tunai (Laci)
+            </Text>
+            <Text style={styles.splitColValue} numberOfLines={1} adjustsFontSizeToFit>
               {formatRupiah(summary.omzet_tunai || 0)}
             </Text>
           </View>
@@ -408,11 +412,27 @@ const DashboardScreen = ({ navigation }) => {
           <View style={styles.splitVerticalLine} />
 
           <View style={styles.splitCol}>
-            <Text style={styles.splitColLabel}>Non-Tunai (QRIS/TF)</Text>
-            <Text style={styles.splitColValue}>
+            <Text style={styles.splitColLabel} numberOfLines={1}>
+              Non-Tunai
+            </Text>
+            <Text style={styles.splitColValue} numberOfLines={1} adjustsFontSizeToFit>
               {formatRupiah(summary.omzet_non_tunai || 0)}
             </Text>
           </View>
+
+          {(summary.omzet_kasbon || 0) > 0 && (
+            <>
+              <View style={styles.splitVerticalLine} />
+              <View style={styles.splitCol}>
+                <Text style={styles.splitColLabel} numberOfLines={1}>
+                  Kasbon
+                </Text>
+                <Text style={styles.splitColValue} numberOfLines={1} adjustsFontSizeToFit>
+                  {formatRupiah(summary.omzet_kasbon || 0)}
+                </Text>
+              </View>
+            </>
+          )}
         </View>
 
         <View style={styles.tapToDetailRow}>

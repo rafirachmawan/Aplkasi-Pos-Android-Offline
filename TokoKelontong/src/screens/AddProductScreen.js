@@ -36,6 +36,8 @@ import {
   isBluetoothPrintingSupported,
   printBarcodeLabelViaBluetooth,
 } from "../utils/bluetoothPrinter";
+import usePlan from "../hooks/usePlan";
+import { ProLockModal } from "../components/ProLock";
 
 // ─── Helper: format angka menjadi format Rupiah saat diketik ───────────────
 const formatToRp = (raw) => {
@@ -285,6 +287,8 @@ const AddProductScreen = ({ navigation, route }) => {
   const [showAddWholesaleModal, setShowAddWholesaleModal] = useState(false);
   const [wsMinQtyInput, setWsMinQtyInput] = useState("");
   const [wsPriceInput, setWsPriceInput] = useState("");
+  const plan = usePlan();
+  const [showGrosirLockModal, setShowGrosirLockModal] = useState(false);
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
 
   // Dropdown Modal states
@@ -739,7 +743,7 @@ const AddProductScreen = ({ navigation, route }) => {
       await printBarcodeLabelViaBluetooth({
         barcode,
         productName: productName || "Produk",
-        priceText: sellingPrice ? `Rp ${sellingPrice}` : null,
+        priceText: sellingPrice ? `Rp${sellingPrice}` : null,
       });
       Alert.alert("Berhasil", "Label dikirim ke printer Bluetooth.");
     } catch (e) {
@@ -1108,12 +1112,12 @@ const AddProductScreen = ({ navigation, route }) => {
               <Text style={styles.fieldLabel}>HARGA MODAL (RP) *</Text>
               <RNTextInput
                 style={styles.textInputClean}
-                value={capitalPrice ? `Rp ${capitalPrice}` : ""}
+                value={capitalPrice ? `Rp${capitalPrice}` : ""}
                 onChangeText={(text) => {
                   const raw = text.replace(/^Rp\s?/, "");
                   setCapitalPrice(formatToRp(raw));
                 }}
-                placeholder="Rp 0"
+                placeholder="Rp0"
                 placeholderTextColor="#94A3B8"
                 keyboardType="numeric"
               />
@@ -1122,12 +1126,12 @@ const AddProductScreen = ({ navigation, route }) => {
               <Text style={styles.fieldLabel}>HARGA JUAL (RP) *</Text>
               <RNTextInput
                 style={styles.textInputClean}
-                value={sellingPrice ? `Rp ${sellingPrice}` : ""}
+                value={sellingPrice ? `Rp${sellingPrice}` : ""}
                 onChangeText={(text) => {
                   const raw = text.replace(/^Rp\s?/, "");
                   setSellingPrice(formatToRp(raw));
                 }}
-                placeholder="Rp 0"
+                placeholder="Rp0"
                 placeholderTextColor="#94A3B8"
                 keyboardType="numeric"
               />
@@ -1165,7 +1169,7 @@ const AddProductScreen = ({ navigation, route }) => {
                     { color: marginPositive ? "#047857" : "#B91C1C" },
                   ]}
                 >
-                  Rp {margin.toLocaleString("id-ID")} ({marginPct}%) per {unit}
+                  Rp{margin.toLocaleString("id-ID")} ({marginPct}%) per {unit}
                 </Text>
               </View>
             </View>
@@ -1180,22 +1184,32 @@ const AddProductScreen = ({ navigation, route }) => {
               <TouchableOpacity
                 style={styles.btnAddWholesale}
                 onPress={() => {
+                  if (!plan.isPro) {
+                    setShowGrosirLockModal(true);
+                    return;
+                  }
                   setWsMinQtyInput("");
                   setWsPriceInput("");
                   setShowAddWholesaleModal(true);
                 }}
               >
-                <Text style={styles.btnAddWholesaleText}>+ Tambah</Text>
+                <Text style={styles.btnAddWholesaleText}>
+                  {plan.isPro ? "+ Tambah" : "Khusus Pro"}
+                </Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.wholesaleSubtitle}>
-              Potongan harga otomatis jika pembeli membeli dalam jumlah banyak (misal beli ≥ 12 {unit}).
+              {plan.isPro
+                ? `Potongan harga otomatis jika pembeli membeli dalam jumlah banyak (misal beli ≥ 12 ${unit}).`
+                : "Fitur paket Pro: potongan harga otomatis untuk pembelian grosir / partai."}
             </Text>
 
             {wholesaleRules.length === 0 ? (
               <View style={styles.wholesaleEmptyBox}>
                 <Text style={styles.wholesaleEmptyText}>
-                  Belum ada aturan harga grosir. Klik Tambah untuk membuat aturan.
+                  {plan.isPro
+                    ? "Belum ada aturan harga grosir. Klik Tambah untuk membuat aturan."
+                    : "Upgrade ke Pro untuk menambahkan aturan harga grosir."}
                 </Text>
               </View>
             ) : (
@@ -1210,11 +1224,15 @@ const AddProductScreen = ({ navigation, route }) => {
                           Beli ≥ {rule.min_qty} {unit}
                         </Text>
                         <Text style={styles.wholesalePriceText}>
-                          Rp {rule.price.toLocaleString("id-ID")} / {unit}
+                          Rp{rule.price.toLocaleString("id-ID")} / {unit}
                         </Text>
                       </View>
                       <TouchableOpacity
                         onPress={() => {
+                          if (!plan.isPro) {
+                            setShowGrosirLockModal(true);
+                            return;
+                          }
                           setWholesaleRules(
                             wholesaleRules.filter((_, i) => i !== idx),
                           );
@@ -1365,7 +1383,7 @@ const AddProductScreen = ({ navigation, route }) => {
             <SimpleBarcodeDisplay value={barcode} />
 
             {sellingPrice !== "" && (
-              <Text style={styles.modalPrice}>Rp {sellingPrice}</Text>
+              <Text style={styles.modalPrice}>Rp{sellingPrice}</Text>
             )}
 
             <TouchableOpacity
@@ -1541,84 +1559,112 @@ const AddProductScreen = ({ navigation, route }) => {
       </Modal>
 
       {/* ── Modal Tambah Aturan Harga Grosir ── */}
-      <Modal visible={showAddWholesaleModal} transparent animationType="fade">
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.wsModalCard}>
-            <View style={styles.wsModalHeader}>
-              <Text style={styles.wsModalTitle}>Tambah Harga Grosir</Text>
-              <TouchableOpacity
-                onPress={() => setShowAddWholesaleModal(false)}
-              >
-                <MaterialCommunityIcons name="close" size={22} color="#64748B" />
-              </TouchableOpacity>
+      <Modal
+        visible={showAddWholesaleModal}
+        transparent
+        statusBarTranslucent
+        navigationBarTranslucent
+        animationType="fade"
+        onRequestClose={() => setShowAddWholesaleModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={styles.attrModalAvoid}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowAddWholesaleModal(false)}
+          />
+          <ScrollView
+            style={styles.attrModalScroll}
+            contentContainerStyle={[
+              styles.attrModalScrollContent,
+              {
+                paddingTop: Math.max(insets.top, 20) + 12,
+                paddingBottom: Math.max(insets.bottom, 16) + 12,
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.wsModalCard, { width: "100%", maxWidth: 420 }]}>
+              <View style={styles.wsModalHeader}>
+                <Text style={styles.wsModalTitle}>Tambah Harga Grosir</Text>
+                <TouchableOpacity
+                  onPress={() => setShowAddWholesaleModal(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialCommunityIcons name="close" size={22} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.wsModalSubtitle}>
+                Tentukan jumlah minimum dan harga per satuan:
+              </Text>
+
+              <Text style={styles.wsInputLabel}>
+                Jumlah Pembelian Minimum ({unit}) *
+              </Text>
+              <RNTextInput
+                style={styles.wsInput}
+                value={wsMinQtyInput}
+                onChangeText={setWsMinQtyInput}
+                keyboardType="number-pad"
+                placeholder="Contoh: 12"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={styles.wsInputLabel}>
+                Harga Satuan Grosir (Rp) *
+              </Text>
+              <RNTextInput
+                style={styles.wsInput}
+                value={wsPriceInput}
+                onChangeText={(v) => setWsPriceInput(formatToRp(v))}
+                keyboardType="number-pad"
+                placeholder="Contoh: 2.800"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <View style={styles.wsModalActions}>
+                <TouchableOpacity
+                  style={styles.wsCancelBtn}
+                  onPress={() => setShowAddWholesaleModal(false)}
+                >
+                  <Text style={styles.wsCancelText}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.wsSaveBtn}
+                  onPress={() => {
+                    const minQ = parseInt(wsMinQtyInput, 10);
+                    const pr = parseRp(wsPriceInput);
+                    if (!minQ || minQ <= 1) {
+                      Alert.alert(
+                        "Jumlah Salah",
+                        "Jumlah minimum grosir harus lebih dari 1.",
+                      );
+                      return;
+                    }
+                    if (!pr || pr <= 0) {
+                      Alert.alert("Harga Salah", "Masukkan harga grosir yang valid.");
+                      return;
+                    }
+                    if (wholesaleRules.some((r) => r.min_qty === minQ)) {
+                      Alert.alert(
+                        "Duplikat",
+                        `Aturan untuk minimal ${minQ} ${unit} sudah ada.`,
+                      );
+                      return;
+                    }
+                    setWholesaleRules([...wholesaleRules, { min_qty: minQ, price: pr }]);
+                    setShowAddWholesaleModal(false);
+                  }}
+                >
+                  <Text style={styles.wsSaveText}>Simpan Aturan</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <Text style={styles.wsModalSubtitle}>
-              Tentukan jumlah minimum dan harga per satuan:
-            </Text>
-
-            <Text style={styles.wsInputLabel}>
-              Jumlah Pembelian Minimum ({unit}) *
-            </Text>
-            <RNTextInput
-              style={styles.wsInput}
-              value={wsMinQtyInput}
-              onChangeText={setWsMinQtyInput}
-              keyboardType="number-pad"
-              placeholder="Contoh: 12"
-              placeholderTextColor="#94A3B8"
-            />
-
-            <Text style={styles.wsInputLabel}>
-              Harga Satuan Grosir (Rp) *
-            </Text>
-            <RNTextInput
-              style={styles.wsInput}
-              value={wsPriceInput}
-              onChangeText={(v) => setWsPriceInput(formatToRp(v))}
-              keyboardType="number-pad"
-              placeholder="Contoh: 2.800"
-              placeholderTextColor="#94A3B8"
-            />
-
-            <View style={styles.wsModalActions}>
-              <TouchableOpacity
-                style={styles.wsCancelBtn}
-                onPress={() => setShowAddWholesaleModal(false)}
-              >
-                <Text style={styles.wsCancelText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.wsSaveBtn}
-                onPress={() => {
-                  const minQ = parseInt(wsMinQtyInput, 10);
-                  const pr = parseRp(wsPriceInput);
-                  if (!minQ || minQ <= 1) {
-                    Alert.alert(
-                      "Jumlah Salah",
-                      "Jumlah minimum grosir harus lebih dari 1.",
-                    );
-                    return;
-                  }
-                  if (!pr || pr <= 0) {
-                    Alert.alert("Harga Salah", "Masukkan harga grosir yang valid.");
-                    return;
-                  }
-                  if (wholesaleRules.some((r) => r.min_qty === minQ)) {
-                    Alert.alert(
-                      "Duplikat",
-                      `Aturan untuk minimal ${minQ} ${unit} sudah ada.`,
-                    );
-                    return;
-                  }
-                  setWholesaleRules([...wholesaleRules, { min_qty: minQ, price: pr }]);
-                  setShowAddWholesaleModal(false);
-                }}
-              >
-                <Text style={styles.wsSaveText}>Simpan Aturan</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Modal Dropdown Kategori Produk ── */}
@@ -1840,6 +1886,12 @@ const AddProductScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <ProLockModal
+        visible={showGrosirLockModal}
+        feature="grosir"
+        onClose={() => setShowGrosirLockModal(false)}
+      />
     </View>
   );
 };

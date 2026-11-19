@@ -642,7 +642,7 @@ class TransactionRepository {
    */
   async _fetchSummaryRows(start, end) {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const cols = ["grand_total"];
+      const cols = ["grand_total", "cash_received"];
       if (hasPaymentMethodCol !== false) cols.push("payment_method");
       if (hasClientTxIdCol !== false) cols.push("client_tx_id");
       cols.push(
@@ -715,6 +715,7 @@ class TransactionRepository {
       ...(server || []),
       ...local.map(({ row, items }) => ({
         grand_total: row.grand_total,
+        cash_received: row.cash_received,
         payment_method: row.payment_method,
         transaction_details: items.map((it) => ({
           product_name: it.product_name,
@@ -728,15 +729,24 @@ class TransactionRepository {
     let omzet = 0;
     let omzet_tunai = 0;
     let omzet_non_tunai = 0;
+    let omzet_kasbon = 0;
     let laba = 0;
     const productSalesMap = {};
 
     for (const t of data || []) {
-      const gTotal = t.grand_total || 0;
+      const gTotal = Number(t.grand_total || 0);
       omzet += gTotal;
 
       const method = String(t.payment_method || "cash").toLowerCase();
-      if (method === "qris" || method === "transfer" || method === "debit") {
+      if (method === "kasbon") {
+        // Hanya DP tunai yang masuk laci kasir; sisanya dicatat sebagai piutang kasbon.
+        const dpCash = Math.min(
+          gTotal,
+          Math.max(0, Number(t.cash_received || 0)),
+        );
+        omzet_tunai += dpCash;
+        omzet_kasbon += Math.max(0, gTotal - dpCash);
+      } else if (method === "qris" || method === "transfer" || method === "debit") {
         omzet_non_tunai += gTotal;
       } else {
         omzet_tunai += gTotal;
@@ -763,6 +773,7 @@ class TransactionRepository {
       omzet,
       omzet_tunai,
       omzet_non_tunai,
+      omzet_kasbon,
       laba,
       count: (data || []).length,
       top_products: topProducts,

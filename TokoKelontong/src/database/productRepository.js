@@ -77,20 +77,33 @@ async function getStoreId() {
   return cachedStoreId;
 }
 
-async function getLocalWholesaleMap() {
+async function resolveWholesaleKey(explicitStoreId = null) {
+  const sid =
+    explicitStoreId || (await getActiveStoreId().catch(() => null)) || null;
+  return sid ? `${LOCAL_WHOLESALE_KEY}:${sid}` : LOCAL_WHOLESALE_KEY;
+}
+
+async function getLocalWholesaleMap(explicitStoreId = null) {
   try {
-    const raw = await AsyncStorage.getItem(LOCAL_WHOLESALE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const key = await resolveWholesaleKey(explicitStoreId);
+    const raw = await AsyncStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
+    if (key !== LOCAL_WHOLESALE_KEY) {
+      const legacyRaw = await AsyncStorage.getItem(LOCAL_WHOLESALE_KEY);
+      if (legacyRaw) return JSON.parse(legacyRaw);
+    }
+    return {};
   } catch {
     return {};
   }
 }
 
-async function setLocalWholesale(productId, rules) {
+async function setLocalWholesale(productId, rules, explicitStoreId = null) {
   try {
-    const map = await getLocalWholesaleMap();
+    const key = await resolveWholesaleKey(explicitStoreId);
+    const map = await getLocalWholesaleMap(explicitStoreId);
     map[productId] = rules || [];
-    await AsyncStorage.setItem(LOCAL_WHOLESALE_KEY, JSON.stringify(map));
+    await AsyncStorage.setItem(key, JSON.stringify(map));
   } catch (err) {
     console.warn("Gagal simpan harga grosir lokal:", err);
   }

@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   Alert,
   Image,
@@ -14,6 +15,7 @@ import {
   Switch,
   Share,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -2239,91 +2241,114 @@ const PengaturanScreen = ({ navigation }) => {
         visible={showPasswordModal}
         transparent
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         animationType="fade"
-        onRequestClose={() => setShowPasswordModal(false)}
+        onRequestClose={() => !pwSaving && setShowPasswordModal(false)}
       >
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.restoreModalCard}>
-            <View style={styles.modalHeaderRow}>
-              <View
-                style={[styles.settingIconWrap, { backgroundColor: "#FEF3C7" }]}
-              >
-                <MaterialCommunityIcons
-                  name="key-change"
-                  size={22}
-                  color="#D97706"
-                />
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={styles.modalOverlayCenter}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => !pwSaving && setShowPasswordModal(false)}
+          />
+          <ScrollView
+            style={{ width: "100%" }}
+            contentContainerStyle={{
+              flexGrow: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              paddingHorizontal: 16,
+              paddingTop: Math.max(insets.top, 24) + 12,
+              paddingBottom: Math.max(insets.bottom, 16) + 16,
+            }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.restoreModalCard, { width: "100%", maxWidth: 420 }]}>
+              <View style={styles.modalHeaderRow}>
+                <View
+                  style={[styles.settingIconWrap, { backgroundColor: "#FEF3C7" }]}
+                >
+                  <MaterialCommunityIcons
+                    name="key-change"
+                    size={22}
+                    color="#D97706"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.restoreTitle}>Ganti Password</Text>
+                  <Text style={styles.restoreSub}>
+                    Validasi password lama, lalu buat password baru
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => !pwSaving && setShowPasswordModal(false)}>
+                  <MaterialCommunityIcons
+                    name="close-circle"
+                    size={22}
+                    color="#94A3B8"
+                  />
+                </TouchableOpacity>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.restoreTitle}>Ganti Password</Text>
-                <Text style={styles.restoreSub}>
-                  Validasi password lama, lalu buat password baru
-                </Text>
+
+              <Text style={styles.pwLabel}>Password Lama</Text>
+              <TextInput
+                style={styles.pwInput}
+                value={pwCurrent}
+                onChangeText={setPwCurrent}
+                secureTextEntry
+                placeholder="Password saat ini"
+                placeholderTextColor="#94A3B8"
+              />
+              <Text style={styles.pwLabel}>Password Baru</Text>
+              <TextInput
+                style={styles.pwInput}
+                value={pwNew}
+                onChangeText={setPwNew}
+                secureTextEntry
+                placeholder="Minimal 6 karakter"
+                placeholderTextColor="#94A3B8"
+              />
+              <Text style={styles.pwLabel}>Ulangi Password Baru</Text>
+              <TextInput
+                style={styles.pwInput}
+                value={pwConfirm}
+                onChangeText={setPwConfirm}
+                secureTextEntry
+                placeholder="Ketik ulang password baru"
+                placeholderTextColor="#94A3B8"
+              />
+
+              {pwError !== "" && (
+                <Text style={styles.pwErrorText}>{pwError}</Text>
+              )}
+
+              <View style={styles.restoreActions}>
+                <TouchableOpacity
+                  style={styles.cancelRestoreBtn}
+                  onPress={() => setShowPasswordModal(false)}
+                  disabled={pwSaving}
+                >
+                  <Text style={styles.cancelRestoreText}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.confirmRestoreBtn,
+                    { backgroundColor: colors.primary },
+                    pwSaving && { opacity: 0.6 },
+                  ]}
+                  onPress={handleChangePassword}
+                  disabled={pwSaving}
+                >
+                  <Text style={styles.confirmRestoreText}>
+                    {pwSaving ? "Menyimpan..." : "Simpan Password"}
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => setShowPasswordModal(false)}>
-                <MaterialCommunityIcons
-                  name="close-circle"
-                  size={22}
-                  color="#94A3B8"
-                />
-              </TouchableOpacity>
             </View>
-
-            <Text style={styles.pwLabel}>Password Lama</Text>
-            <TextInput
-              style={styles.pwInput}
-              value={pwCurrent}
-              onChangeText={setPwCurrent}
-              secureTextEntry
-              placeholder="Password saat ini"
-              placeholderTextColor="#94A3B8"
-            />
-            <Text style={styles.pwLabel}>Password Baru</Text>
-            <TextInput
-              style={styles.pwInput}
-              value={pwNew}
-              onChangeText={setPwNew}
-              secureTextEntry
-              placeholder="Minimal 6 karakter"
-              placeholderTextColor="#94A3B8"
-            />
-            <Text style={styles.pwLabel}>Ulangi Password Baru</Text>
-            <TextInput
-              style={styles.pwInput}
-              value={pwConfirm}
-              onChangeText={setPwConfirm}
-              secureTextEntry
-              placeholder="Ketik ulang password baru"
-              placeholderTextColor="#94A3B8"
-            />
-
-            {pwError !== "" && (
-              <Text style={styles.pwErrorText}>{pwError}</Text>
-            )}
-
-            <View style={styles.restoreActions}>
-              <TouchableOpacity
-                style={styles.cancelRestoreBtn}
-                onPress={() => setShowPasswordModal(false)}
-              >
-                <Text style={styles.cancelRestoreText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.confirmRestoreBtn,
-                  { backgroundColor: colors.primary },
-                  pwSaving && { opacity: 0.6 },
-                ]}
-                onPress={handleChangePassword}
-                disabled={pwSaving}
-              >
-                <Text style={styles.confirmRestoreText}>
-                  {pwSaving ? "Menyimpan..." : "Simpan Password"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Pin Modal Handlers ── */}

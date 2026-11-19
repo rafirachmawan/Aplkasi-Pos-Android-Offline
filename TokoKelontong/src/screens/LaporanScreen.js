@@ -78,6 +78,7 @@ const LaporanScreen = ({ navigation, route }) => {
     omzet: 0,
     omzet_tunai: 0,
     omzet_non_tunai: 0,
+    omzet_kasbon: 0,
     laba: 0,
     count: 0,
     top_products: [],
@@ -182,6 +183,7 @@ const LaporanScreen = ({ navigation, route }) => {
         omzet: summaryRes?.omzet || 0,
         omzet_tunai: summaryRes?.omzet_tunai || 0,
         omzet_non_tunai: summaryRes?.omzet_non_tunai || 0,
+        omzet_kasbon: summaryRes?.omzet_kasbon || 0,
         laba: summaryRes?.laba || 0,
         count: data?.length || 0,
         top_products: summaryRes?.top_products || [],
@@ -193,6 +195,7 @@ const LaporanScreen = ({ navigation, route }) => {
         omzet: 0,
         omzet_tunai: 0,
         omzet_non_tunai: 0,
+        omzet_kasbon: 0,
         laba: 0,
         count: 0,
         top_products: [],
@@ -744,11 +747,13 @@ const LaporanScreen = ({ navigation, route }) => {
 
         <View style={styles.summaryDivider} />
 
-        {/* Bawah: Rincian Tunai di Laci vs Non-Tunai */}
+        {/* Bawah: Rincian Tunai di Laci vs Non-Tunai (+ Kasbon jika ada) */}
         <View style={styles.splitRow}>
           <View style={styles.splitCol}>
-            <Text style={styles.splitColLabel}>Tunai (Laci Kasir)</Text>
-            <Text style={styles.splitColValue}>
+            <Text style={styles.splitColLabel} numberOfLines={1}>
+              Tunai (Laci)
+            </Text>
+            <Text style={styles.splitColValue} numberOfLines={1} adjustsFontSizeToFit>
               {formatRupiah(summary.omzet_tunai || 0)}
             </Text>
           </View>
@@ -756,11 +761,27 @@ const LaporanScreen = ({ navigation, route }) => {
           <View style={styles.splitVerticalLine} />
 
           <View style={styles.splitCol}>
-            <Text style={styles.splitColLabel}>Non-Tunai (QRIS/TF)</Text>
-            <Text style={styles.splitColValue}>
+            <Text style={styles.splitColLabel} numberOfLines={1}>
+              Non-Tunai
+            </Text>
+            <Text style={styles.splitColValue} numberOfLines={1} adjustsFontSizeToFit>
               {formatRupiah(summary.omzet_non_tunai || 0)}
             </Text>
           </View>
+
+          {(summary.omzet_kasbon || 0) > 0 && (
+            <>
+              <View style={styles.splitVerticalLine} />
+              <View style={styles.splitCol}>
+                <Text style={styles.splitColLabel} numberOfLines={1}>
+                  Kasbon
+                </Text>
+                <Text style={styles.splitColValue} numberOfLines={1} adjustsFontSizeToFit>
+                  {formatRupiah(summary.omzet_kasbon || 0)}
+                </Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
 
@@ -893,9 +914,21 @@ const LaporanScreen = ({ navigation, route }) => {
         animationType="slide"
         transparent
         statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={() => setSelectedTx(null)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              paddingTop: Math.max(insets.top, 24) + 12,
+              paddingBottom:
+                Platform.OS === "android"
+                  ? Math.max(insets.bottom + 16, 48)
+                  : Math.max(insets.bottom, 16) + 8,
+            },
+          ]}
+        >
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, paddingRight: 8 }}>

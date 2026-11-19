@@ -1468,10 +1468,11 @@ const KasirScreen = ({ navigation }) => {
         animationType="slide"
         transparent={true}
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         onRequestClose={() => setShowCartModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
           style={{ flex: 1 }}
         >
           <View style={styles.modalOverlayCart}>

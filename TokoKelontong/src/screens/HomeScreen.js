@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   Platform,
   Alert,
+  Linking,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -33,6 +34,7 @@ import { getOfflineQueueCount } from "../utils/offlineQueue";
 import { refreshSyncCounts } from "../services/syncService";
 import useSyncStatus from "../hooks/useSyncStatus";
 import usePlan from "../hooks/usePlan";
+import { SUPPORT_WHATSAPP } from "../config/planConfig";
 
 const { width } = Dimensions.get("window");
 const isTablet = width >= 600;
@@ -166,6 +168,20 @@ const HomeScreen = ({ navigation }) => {
         },
       ],
     );
+  };
+
+  const handleContactCS = async () => {
+    const phone = SUPPORT_WHATSAPP || "6285196221716";
+    const msg = `Halo CS MarketPos, saya mengalami kendala / bug di aplikasi (Toko: ${trimmedStoreName || "Toko Saya"}).`;
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(
+        "Tidak Dapat Membuka WhatsApp",
+        "Silakan hubungi CS MarketPos melalui WhatsApp di 085196221716.",
+      );
+    }
   };
 
   const now = new Date();
@@ -512,7 +528,7 @@ const HomeScreen = ({ navigation }) => {
           })}
         </View>
 
-        {/* ─── Tombol Keluar (Logout) Paling Bawah ─── */}
+        {/* ─── Tombol Keluar (Logout) ─── */}
         <TouchableOpacity
           style={styles.logoutBottomButton}
           activeOpacity={0.78}
@@ -526,6 +542,34 @@ const HomeScreen = ({ navigation }) => {
             color={colors.errorDark}
           />
           <Text style={styles.logoutBottomText}>Keluar Akun (Logout)</Text>
+        </TouchableOpacity>
+
+        {/* ─── Tombol CS / Lapor Kendala via WhatsApp ─── */}
+        <TouchableOpacity
+          style={styles.csSupportButton}
+          activeOpacity={0.82}
+          accessibilityRole="button"
+          accessibilityLabel="Hubungi CS WhatsApp untuk lapor bug atau kendala"
+          onPress={handleContactCS}
+        >
+          <View style={styles.csIconWrap}>
+            <MaterialCommunityIcons
+              name="whatsapp"
+              size={22}
+              color={colors.successDark}
+            />
+          </View>
+          <View style={styles.csTextCol}>
+            <Text style={styles.csTitle}>Hubungi CS / Lapor Kendala</Text>
+            <Text style={styles.csSubtitle}>
+              Ada bug atau masalah? Chat WA 0851-9622-1716
+            </Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={20}
+            color={colors.successText}
+          />
         </TouchableOpacity>
       </ScrollView>
 
@@ -987,7 +1031,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
 
-  // ── Tombol Logout Paling Bawah ──
+  // ── Tombol Logout & CS ──
   logoutBottomButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1000,12 +1044,48 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 18,
     marginTop: 4,
-    marginBottom: 24,
+    marginBottom: 10,
   },
   logoutBottomText: {
     fontFamily: fonts.bold,
     fontSize: 13.5,
     color: colors.errorDark,
+  },
+  csSupportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.successContainer,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    borderRadius: 16,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  csIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.successPillBg,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  csTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  csTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+    color: colors.successDark,
+  },
+  csSubtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.successText,
+    marginTop: 2,
   },
 
   // ── Floating Bottom CTA: Buka Kasir POS ──

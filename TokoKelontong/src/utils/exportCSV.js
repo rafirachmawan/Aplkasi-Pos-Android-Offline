@@ -3,19 +3,25 @@ import { Platform } from 'react-native';
 /**
  * Konversi array of objects ke string CSV
  */
+const sanitizeCSVCell = (raw) => {
+  const val = raw == null ? '' : String(raw);
+  // Cegah CSV formula injection saat file dibuka di Excel / Sheets
+  const safeVal = /^[=+\-@\t\r]/.test(val) ? `'${val}` : val;
+  return safeVal.includes(',') ||
+    safeVal.includes('"') ||
+    safeVal.includes('\n') ||
+    safeVal.includes('\r')
+    ? `"${safeVal.replace(/"/g, '""')}"`
+    : safeVal;
+};
+
 const toCSV = (data) => {
   if (!data || data.length === 0) return '';
   const headers = Object.keys(data[0]);
   const rows = data.map(row =>
-    headers.map(h => {
-      const val = row[h] == null ? '' : String(row[h]);
-      // Escape koma dan tanda kutip
-      return val.includes(',') || val.includes('"') || val.includes('\n')
-        ? `"${val.replace(/"/g, '""')}"`
-        : val;
-    }).join(',')
+    headers.map(h => sanitizeCSVCell(row[h])).join(',')
   );
-  return [headers.join(','), ...rows].join('\n');
+  return [headers.map(sanitizeCSVCell).join(','), ...rows].join('\n');
 };
 
 /**

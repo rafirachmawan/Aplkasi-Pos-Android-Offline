@@ -47,8 +47,8 @@ export const PRO_FEATURES = {
     description: "Harga khusus untuk pembelian partai.",
   },
   multiPayment: {
-    title: "Multi-Pembayaran & PIN",
-    description: "Bayar gabungan (tunai + QRIS) dan kunci menu dengan PIN.",
+    title: "Multi-Pembayaran",
+    description: "Bayar gabungan (tunai + QRIS / transfer) dalam satu nota.",
   },
   multiDevice: {
     title: "Multi-Perangkat",
