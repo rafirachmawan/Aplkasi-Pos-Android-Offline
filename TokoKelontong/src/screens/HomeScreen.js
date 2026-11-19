@@ -388,22 +388,16 @@ const HomeScreen = ({ navigation }) => {
                 styles.updateActionBtn,
                 appUpdate.isUpdating && { opacity: 0.75 },
               ]}
-              onPress={appUpdate.promptApplyUpdate}
+              onPress={appUpdate.installUpdate}
               disabled={appUpdate.isUpdating}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel={
-                appUpdate.isReadyToInstall
-                  ? "Pasang pembaruan aplikasi sekarang"
-                  : "Update aplikasi sekarang"
-              }
+              accessibilityLabel="Pasang pembaruan aplikasi sekarang"
             >
               {appUpdate.isUpdating ? (
                 <ActivityIndicator size="small" color={colors.onPrimary} />
               ) : (
-                <Text style={styles.updateActionBtnText}>
-                  {appUpdate.isReadyToInstall ? "Pasang" : "Update"}
-                </Text>
+                <Text style={styles.updateActionBtnText}>Pasang</Text>
               )}
             </TouchableOpacity>
           </View>

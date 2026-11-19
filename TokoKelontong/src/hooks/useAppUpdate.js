@@ -6,6 +6,7 @@ import {
   syncAppUpdateNativeContext,
   checkForAppUpdate,
   applyAppUpdate,
+  installAppUpdateNow,
   startAppUpdateMonitor,
   promptAndApplyAppUpdate,
 } from "../services/appUpdateService";
@@ -44,6 +45,7 @@ export default function useAppUpdate() {
     ...status,
     checkForUpdate: checkForAppUpdate,
     applyUpdate: applyAppUpdate,
+    installUpdate: installAppUpdateNow,
     promptApplyUpdate: () =>
       promptAndApplyAppUpdate({
         isReadyToInstall: status.isReadyToInstall,

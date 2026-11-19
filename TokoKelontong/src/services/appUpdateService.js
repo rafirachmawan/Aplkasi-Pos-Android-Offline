@@ -296,7 +296,22 @@ export const applyAppUpdate = defaultManager.applyUpdate;
 export const startAppUpdateMonitor = defaultManager.startMonitor;
 
 /**
- * Menampilkan dialog konfirmasi update yang seragam untuk HomeScreen dan PengaturanScreen,
+ * Mengunduh (bila belum ada di cache) lalu me-restart aplikasi untuk memasang update.
+ * Menampilkan pesan error ramah bila gagal (misal koneksi terputus), tanpa menyembunyikan card.
+ */
+export async function installAppUpdateNow() {
+  try {
+    await applyAppUpdate();
+  } catch (e) {
+    Alert.alert(
+      "Gagal Update",
+      "Gagal mengunduh atau memasang pembaruan. Pastikan koneksi internet stabil lalu coba lagi.",
+    );
+  }
+}
+
+/**
+ * Menampilkan dialog konfirmasi update untuk pengecekan manual di PengaturanScreen,
  * lalu mengunduh (jika perlu) dan memuat ulang aplikasi tanpa menghapus data lokal.
  */
 export function promptAndApplyAppUpdate({ isReadyToInstall } = {}) {
@@ -304,21 +319,13 @@ export function promptAndApplyAppUpdate({ isReadyToInstall } = {}) {
   const message = isReadyToInstall
     ? "Pembaruan aplikasi sudah selesai diunduh. Muat ulang sekarang untuk memasangnya? Data transaksi & toko tetap aman."
     : "Versi terbaru aplikasi tersedia. Unduh dan pasang sekarang? Aplikasi akan restart sebentar setelah selesai, data transaksi & toko tetap aman.";
-  const actionLabel = isReadyToInstall ? "Pasang Sekarang" : "Update";
 
   Alert.alert(title, message, [
-    { text: "Nanti", style: "cancel" },
+    { text: "Batal", style: "cancel" },
     {
-      text: actionLabel,
-      onPress: async () => {
-        try {
-          await applyAppUpdate();
-        } catch (e) {
-          Alert.alert(
-            "Gagal Update",
-            "Gagal mengunduh atau memasang pembaruan. Pastikan koneksi internet stabil lalu coba lagi.",
-          );
-        }
+      text: "Pasang",
+      onPress: () => {
+        void installAppUpdateNow();
       },
     },
   ]);
