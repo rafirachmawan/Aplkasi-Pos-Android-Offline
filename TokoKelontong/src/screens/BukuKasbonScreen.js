@@ -30,6 +30,7 @@ import {
   parseRpInput,
   parseFlexibleDueDate,
   formatDueDateDisplay,
+  normalizeWhatsAppPhone,
 } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
 import usePlan from "../hooks/usePlan";
@@ -317,22 +318,26 @@ const BukuKasbonScreen = ({ navigation }) => {
 
   // ── Kirim Pengingat Tagihan via WhatsApp ──
   const handleSendReminderWA = (item) => {
-    const phone = (item.customer_phone || "").replace(/\D/g, "");
-    if (!phone) {
+    const cleanPhone = normalizeWhatsAppPhone(item.customer_phone);
+    if (!cleanPhone) {
       Alert.alert(
         "Nomor Tidak Tersedia",
         "Catatan kasbon ini belum memiliki nomor telepon WhatsApp pelanggan.",
       );
       return;
     }
-    sendWAMessageToPhone(item, phone);
+    if (cleanPhone.length < 9) {
+      Alert.alert(
+        "Nomor Tidak Valid",
+        "Nomor WhatsApp pelanggan terlalu pendek. Periksa kembali nomor HP yang tersimpan.",
+      );
+      return;
+    }
+    sendWAMessageToPhone(item, cleanPhone);
   };
 
   const sendWAMessageToPhone = (item, rawPhone) => {
-    let cleanPhone = rawPhone.replace(/\D/g, "");
-    if (cleanPhone.startsWith("0")) {
-      cleanPhone = "62" + cleanPhone.substring(1);
-    }
+    const cleanPhone = normalizeWhatsAppPhone(rawPhone);
 
     const formattedDue = formatDueDateDisplay(item.due_date);
     const dueDateText = formattedDue ? `📅 Jatuh Tempo: ${formattedDue}\n` : "";
@@ -802,7 +807,7 @@ const BukuKasbonScreen = ({ navigation }) => {
           renderItem={renderDebtItem}
           contentContainerStyle={[
             styles.listContainer,
-            { paddingBottom: Math.max(insets.bottom, 16) + 84 },
+            { paddingBottom: Math.max(insets.bottom, 36) + 84 },
           ]}
           showsVerticalScrollIndicator={false}
         />
@@ -813,7 +818,7 @@ const BukuKasbonScreen = ({ navigation }) => {
         <TouchableOpacity
           style={[
             styles.fabBtn,
-            { bottom: Math.max(insets.bottom, 16) + 16 },
+            { bottom: Math.max(insets.bottom, 36) + 12 },
             isReadOnly && styles.fabBtnLocked,
           ]}
           onPress={() => {

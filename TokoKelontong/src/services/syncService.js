@@ -6,6 +6,7 @@ import * as localDb from "../database/localDb";
 import ProductRepository, {
   isNetworkLikeError,
 } from "../database/productRepository";
+import debtRepository from "../database/debtRepository";
 import { getOfflineQueue, removeOfflineTransaction } from "../utils/offlineQueue";
 
 // Mesin sinkronisasi: mengirim outbox (transaksi yang dibuat di HP) ke
@@ -319,6 +320,7 @@ async function runCycle({ manual = false, forceCatalog = false, catalogMaxAgeMs 
     await migrateLegacy(storeId);
     if (manual) await localDb.resetForRetry(storeId);
     await syncPending(storeId, result);
+    await debtRepository.syncPendingDebts(storeId).catch(() => {});
 
     // Segarkan katalog setelah transaksi terkirim agar stok sama dengan server.
     const catalogAt = await localDb.getCatalogSyncedAt(storeId);

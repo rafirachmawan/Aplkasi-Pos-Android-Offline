@@ -139,6 +139,7 @@ const CustomAlertHost = () => {
       transparent
       animationType={Platform.OS === "android" ? "none" : "fade"}
       statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={() => {
         if (options?.cancelable !== false) {
           const cancelBtn = buttons.find((b) => b.style === "cancel");

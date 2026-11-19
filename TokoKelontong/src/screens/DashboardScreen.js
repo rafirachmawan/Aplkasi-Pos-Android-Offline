@@ -16,6 +16,8 @@ import { formatRupiah } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
+import { isScreenLocked } from "../utils/securityPin";
+import PinModal from "../components/PinModal";
 
 const MONTH_NAMES = [
   "Januari",
@@ -77,6 +79,9 @@ const DashboardScreen = ({ navigation }) => {
   const plan = usePlan();
   const isReadOnly = !plan.isPro;
   const [showLockModal, setShowLockModal] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
 
   const formatYMD = (year, monthIndex, day) => {
     const y = year;
@@ -86,6 +91,7 @@ const DashboardScreen = ({ navigation }) => {
   };
 
   const loadDashboardData = useCallback(async () => {
+    setLoadError("");
     try {
       const products = await ProductRepository.getAllProducts();
       setTotalProducts(products.length);
@@ -134,6 +140,9 @@ const DashboardScreen = ({ navigation }) => {
       });
     } catch (e) {
       console.error("Dashboard load error:", e);
+      setLoadError(
+        "Sebagian data statistik gagal dimuat. Periksa koneksi lalu coba lagi.",
+      );
     }
   }, [filterMode, selectedDay, selectedMonth, selectedYear]);
 
@@ -170,6 +179,16 @@ const DashboardScreen = ({ navigation }) => {
     }
   };
 
+  const navigateWithPin = async (screenName, params, lockKey = screenName) => {
+    const isLocked = await isScreenLocked(lockKey);
+    if (isLocked) {
+      setPendingNavigation({ screenName, params });
+      setPinModalVisible(true);
+    } else {
+      navigation.navigate(screenName, params);
+    }
+  };
+
   const navigateToTransactions = () => {
     let dateParam = "";
 
@@ -184,10 +203,14 @@ const DashboardScreen = ({ navigation }) => {
       dateParam = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
     }
 
-    navigation.navigate("Laporan", {
-      initialFilter: filterMode,
-      dateFilter: dateParam,
-    });
+    navigateWithPin(
+      "Laporan",
+      {
+        initialFilter: filterMode,
+        dateFilter: dateParam,
+      },
+      "Laporan",
+    );
   };
 
   const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
@@ -361,6 +384,25 @@ const DashboardScreen = ({ navigation }) => {
         </View>
       )}
 
+      {/* ── Banner Error Muat Data (jika query lokal/server gagal) ── */}
+      {!!loadError && (
+        <View style={styles.errorBanner}>
+          <MaterialCommunityIcons
+            name="alert-circle-outline"
+            size={18}
+            color="#B91C1C"
+          />
+          <Text style={styles.errorBannerText}>{loadError}</Text>
+          <TouchableOpacity
+            style={styles.errorRetryBtn}
+            onPress={loadDashboardData}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.errorRetryText}>Muat Ulang</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* ── Unified Hero Financial Card (Warm Orange) ── */}
       <TouchableOpacity
         style={styles.heroSummaryCard}
@@ -456,7 +498,7 @@ const DashboardScreen = ({ navigation }) => {
 
         <TouchableOpacity
           style={styles.subStatCard}
-          onPress={() => navigation.navigate("Gudang")}
+          onPress={() => navigateWithPin("Gudang")}
           activeOpacity={0.8}
         >
           <Text style={styles.subStatLabel}>TOTAL PRODUK</Text>
@@ -467,18 +509,49 @@ const DashboardScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* ── Section Produk Terlaris (Top 5 Best Sellers) ── */}
+      {/* ── Section Produk Terlaris (Top 5 Best Sellers — Khusus Pro) ── */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Produk Terlaris</Text>
-          {summary.top_products.length > 0 && (
-            <View style={styles.topBadgeCount}>
-              <Text style={styles.topBadgeCountText}>Top 5</Text>
+          {isReadOnly ? (
+            <View style={styles.proLockedBadge}>
+              <MaterialCommunityIcons
+                name="crown-outline"
+                size={12}
+                color="#92400E"
+              />
+              <Text style={styles.proLockedBadgeText}>PRO</Text>
             </View>
+          ) : (
+            summary.top_products.length > 0 && (
+              <View style={styles.topBadgeCount}>
+                <Text style={styles.topBadgeCountText}>Top 5</Text>
+              </View>
+            )
           )}
         </View>
 
-        {summary.top_products.length === 0 ? (
+        {isReadOnly ? (
+          <TouchableOpacity
+            style={styles.proLockedBox}
+            activeOpacity={0.85}
+            onPress={() => setShowLockModal(true)}
+          >
+            <MaterialCommunityIcons
+              name="lock-outline"
+              size={22}
+              color="#D97706"
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.proLockedTitle}>
+                Daftar Produk Terlaris Tersedia di Paket Pro
+              </Text>
+              <Text style={styles.proLockedDesc}>
+                Ketuk untuk melihat keuntungan paket Pro dan membuka peringkat 5 produk paling laris.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ) : summary.top_products.length === 0 ? (
           <View style={styles.emptyTopBox}>
             <Text style={styles.emptyTopText}>
               Belum ada data produk terjual pada periode ini.
@@ -553,7 +626,7 @@ const DashboardScreen = ({ navigation }) => {
 
           <TouchableOpacity
             style={styles.btnBukaGudang}
-            onPress={() => navigation.navigate("Gudang")}
+            onPress={() => navigateWithPin("Gudang")}
             activeOpacity={0.75}
           >
             <Text style={styles.btnBukaGudangText}>Kelola Gudang →</Text>
@@ -574,7 +647,7 @@ const DashboardScreen = ({ navigation }) => {
                 key={p.id}
                 style={styles.lowStockRow}
                 onPress={() =>
-                  navigation.navigate("AddProductScreen", { product: p })
+                  navigateWithPin("AddProductScreen", { product: p }, "Gudang")
                 }
                 activeOpacity={0.7}
               >
@@ -620,6 +693,7 @@ const DashboardScreen = ({ navigation }) => {
         visible={isPickerVisible}
         transparent
         statusBarTranslucent
+        navigationBarTranslucent
         animationType="fade"
         onRequestClose={() => setIsPickerVisible(false)}
       >
@@ -842,6 +916,27 @@ const DashboardScreen = ({ navigation }) => {
         visible={showLockModal}
         feature="dashboard"
         onClose={() => setShowLockModal(false)}
+      />
+
+      {/* ── Modal PIN Keamanan Pemilik Toko ── */}
+      <PinModal
+        visible={pinModalVisible}
+        title="Masukkan PIN Pemilik"
+        subtitle="Menu ini dilindungi PIN keamanan toko"
+        onCancel={() => {
+          setPinModalVisible(false);
+          setPendingNavigation(null);
+        }}
+        onSuccess={() => {
+          setPinModalVisible(false);
+          if (pendingNavigation) {
+            navigation.navigate(
+              pendingNavigation.screenName,
+              pendingNavigation.params,
+            );
+            setPendingNavigation(null);
+          }
+        }}
       />
     </ScrollView>
   );
@@ -1555,6 +1650,75 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
     color: "#FFFFFF",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  errorBannerText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: "#B91C1C",
+    lineHeight: 16,
+  },
+  errorRetryBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#DC2626",
+  },
+  errorRetryText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: "#FFFFFF",
+  },
+  proLockedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+  },
+  proLockedBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+    color: "#92400E",
+  },
+  proLockedBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 12,
+    padding: 14,
+  },
+  proLockedTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: "#92400E",
+    marginBottom: 2,
+  },
+  proLockedDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 11.5,
+    color: "#B45309",
+    lineHeight: 16,
   },
 });
 

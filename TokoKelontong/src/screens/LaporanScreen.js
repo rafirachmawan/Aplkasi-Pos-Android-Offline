@@ -21,7 +21,11 @@ import * as Sharing from "expo-sharing";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TransactionRepository from "../database/transactionRepository";
 import useSyncStatus from "../hooks/useSyncStatus";
-import { formatRupiah } from "../utils/helpers";
+import {
+  formatRupiah,
+  getReceiptPaymentSummary,
+  tryOpenWhatsApp,
+} from "../utils/helpers";
 import { exportToCSV } from "../utils/exportCSV";
 import {
   generateReceiptHTML,
@@ -388,20 +392,21 @@ const LaporanScreen = ({ navigation, route }) => {
       const profile = await getStoreProfile();
       const waText = generateWAMessage(selectedTx, txDetails, profile);
       const waUrl = `whatsapp://send?text=${encodeURIComponent(waText)}`;
-      const canOpenWA = await Linking.canOpenURL(waUrl);
-      if (canOpenWA) {
-        await Linking.openURL(waUrl);
-      } else {
-        const html = generateReceiptHTML(selectedTx, txDetails, profile);
-        const { uri } = await Print.printToFileAsync({ html });
-        const canShare = await Sharing.isAvailableAsync();
-        if (canShare) {
-          await Sharing.shareAsync(uri, {
-            mimeType: "application/pdf",
-            dialogTitle: "Kirim Nota via...",
-          });
-        }
-      }
+      await tryOpenWhatsApp({
+        openUrl: (u) => Linking.openURL(u),
+        whatsappUrl: waUrl,
+        onUnavailable: async () => {
+          const html = generateReceiptHTML(selectedTx, txDetails, profile);
+          const { uri } = await Print.printToFileAsync({ html });
+          const canShare = await Sharing.isAvailableAsync();
+          if (canShare) {
+            await Sharing.shareAsync(uri, {
+              mimeType: "application/pdf",
+              dialogTitle: "Kirim Nota via...",
+            });
+          }
+        },
+      });
     } catch (e) {
       Alert.alert("Error", "Gagal mengirim: " + e.message);
     } finally {
@@ -416,18 +421,18 @@ const LaporanScreen = ({ navigation, route }) => {
         activeTab === "Riwayat" ? "Semua Transaksi" : formatDisplayDate();
       const msg = generateDailyClosingWAMessage(summary, profile, dateText);
       const url = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        await Linking.openURL(url);
-      } else {
-        const webUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-        Linking.openURL(webUrl).catch(() => {
+      const webUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      await tryOpenWhatsApp({
+        openUrl: (u) => Linking.openURL(u),
+        whatsappUrl: url,
+        webFallbackUrl: webUrl,
+        onUnavailable: () => {
           Alert.alert(
             "WhatsApp Tidak Ditemukan",
             "Pastikan aplikasi WhatsApp sudah terpasang di HP ini.",
           );
-        });
-      }
+        },
+      });
     } catch (e) {
       Alert.alert("Gagal Kirim", "Tidak dapat membuka WhatsApp: " + e.message);
     }
@@ -460,6 +465,15 @@ const LaporanScreen = ({ navigation, route }) => {
         badgeBg: "#F3E8FF",
         textClr: "#7E22CE",
         iconClr: "#9333EA",
+      };
+    }
+    if (m === "debit") {
+      return {
+        label: "DEBIT",
+        icon: "credit-card-outline",
+        badgeBg: "#FEF3C7",
+        textClr: "#B45309",
+        iconClr: "#D97706",
       };
     }
     if (m === "kasbon" || m === "debt") {
@@ -556,15 +570,44 @@ const LaporanScreen = ({ navigation, route }) => {
         </View>
 
         {/* Info Transaksi Kanan */}
-        <View style={styles.txRight}>
-          <Text style={styles.txTotal}>{formatRupiah(item.grand_total)}</Text>
-          <Text style={styles.txMetaText}>
-            Bayar: {formatRupiah(item.cash_received)}
-          </Text>
-          <Text style={styles.txReturnText}>
-            Kembali: {formatRupiah(item.cash_return)}
-          </Text>
-        </View>
+        {(() => {
+          const payInfo = getReceiptPaymentSummary(item);
+          return (
+            <View style={styles.txRight}>
+              <Text style={styles.txTotal}>{formatRupiah(item.grand_total)}</Text>
+              {payInfo.kind === "cash" ? (
+                <>
+                  <Text style={styles.txMetaText}>
+                    Bayar: {formatRupiah(payInfo.cashReceived)}
+                  </Text>
+                  <Text style={styles.txReturnText}>
+                    Kembali: {formatRupiah(payInfo.cashReturn)}
+                  </Text>
+                </>
+              ) : payInfo.kind === "kasbon" ? (
+                <>
+                  <Text style={styles.txMetaText}>
+                    DP: {formatRupiah(payInfo.dpAmount)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.txReturnText,
+                      { color: payInfo.isPaidOff ? "#059669" : "#DC2626" },
+                    ]}
+                  >
+                    {payInfo.isPaidOff
+                      ? "Lunas"
+                      : `Sisa: ${formatRupiah(payInfo.remainingDebt)}`}
+                  </Text>
+                </>
+              ) : (
+                <Text style={[styles.txReturnText, { color: "#059669" }]}>
+                  Status: Lunas
+                </Text>
+              )}
+            </View>
+          );
+        })()}
 
         <MaterialCommunityIcons
           name="chevron-right"
@@ -1033,24 +1076,100 @@ const LaporanScreen = ({ navigation, route }) => {
                       {formatRupiah(selectedTx.grand_total)}
                     </Text>
                   </View>
-                  <View style={styles.receiptMetaRow}>
-                    <Text style={styles.receiptMeta}>Metode</Text>
-                    <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                      {(selectedTx.payment_method || "tunai").toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.receiptMetaRow}>
-                    <Text style={styles.receiptMeta}>Bayar</Text>
-                    <Text style={styles.receiptMeta}>
-                      {formatRupiah(selectedTx.cash_received)}
-                    </Text>
-                  </View>
-                  <View style={styles.receiptMetaRow}>
-                    <Text style={styles.receiptMeta}>Kembalian</Text>
-                    <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                      {formatRupiah(selectedTx.cash_return)}
-                    </Text>
-                  </View>
+                  {(() => {
+                    const payInfo = getReceiptPaymentSummary(selectedTx);
+                    if (payInfo.kind === "cash") {
+                      return (
+                        <>
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptMeta}>Metode</Text>
+                            <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
+                              {payInfo.methodLabel}
+                            </Text>
+                          </View>
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptMeta}>Bayar</Text>
+                            <Text style={styles.receiptMeta}>
+                              {formatRupiah(payInfo.cashReceived)}
+                            </Text>
+                          </View>
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptMeta}>Kembalian</Text>
+                            <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
+                              {formatRupiah(payInfo.cashReturn)}
+                            </Text>
+                          </View>
+                        </>
+                      );
+                    }
+                    if (payInfo.kind === "kasbon") {
+                      return (
+                        <>
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptMeta}>Metode</Text>
+                            <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
+                              {payInfo.methodLabel}
+                            </Text>
+                          </View>
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptMeta}>DP / Dibayar</Text>
+                            <Text style={styles.receiptMeta}>
+                              {formatRupiah(payInfo.dpAmount)}
+                            </Text>
+                          </View>
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptMeta}>Sisa Kasbon</Text>
+                            <Text
+                              style={[
+                                styles.receiptMeta,
+                                {
+                                  fontWeight: "bold",
+                                  color: payInfo.isPaidOff ? "#059669" : "#DC2626",
+                                },
+                              ]}
+                            >
+                              {formatRupiah(payInfo.remainingDebt)}
+                            </Text>
+                          </View>
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptMeta}>Status</Text>
+                            <Text
+                              style={[
+                                styles.receiptMeta,
+                                {
+                                  fontWeight: "bold",
+                                  color: payInfo.isPaidOff ? "#059669" : "#DC2626",
+                                },
+                              ]}
+                            >
+                              {payInfo.statusLabel}
+                            </Text>
+                          </View>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <View style={styles.receiptMetaRow}>
+                          <Text style={styles.receiptMeta}>Metode</Text>
+                          <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
+                            {payInfo.methodLabel}
+                          </Text>
+                        </View>
+                        <View style={styles.receiptMetaRow}>
+                          <Text style={styles.receiptMeta}>Status</Text>
+                          <Text
+                            style={[
+                              styles.receiptMeta,
+                              { fontWeight: "bold", color: "#059669" },
+                            ]}
+                          >
+                            {payInfo.statusLabel}
+                          </Text>
+                        </View>
+                      </>
+                    );
+                  })()}
 
                   <View style={styles.receiptDash} />
 

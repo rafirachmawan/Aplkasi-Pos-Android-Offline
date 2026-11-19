@@ -41,7 +41,7 @@ const GudangScreen = ({ navigation }) => {
 
   const fabBottom =
     Platform.OS === "android"
-      ? Math.max(insets.bottom, 16) + 12
+      ? Math.max(insets.bottom, 36) + 12
       : Math.max(insets.bottom, 14) + 10;
 
   const fetchProducts = useCallback(async () => {
@@ -360,47 +360,60 @@ const GudangScreen = ({ navigation }) => {
           contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
           style={{ flex: 1 }}
         >
-          {categories.slice(0, 5).map((cat, idx) => {
-            const count =
-              cat === "Semua"
-                ? products.length
-                : products.filter((p) => p.category === cat).length;
-            return (
-              <TouchableOpacity
-                key={idx}
-                style={[
-                  styles.categoryPill,
-                  selectedCategory === cat && styles.categoryPillActive,
-                ]}
-                onPress={() => setSelectedCategory(cat)}
-              >
-                <Text
+          {(() => {
+            const baseCats = categories.slice(0, 5);
+            const visibleCategories =
+              selectedCategory === "Semua" || baseCats.includes(selectedCategory)
+                ? baseCats
+                : [
+                    "Semua",
+                    selectedCategory,
+                    ...categories.filter(
+                      (c) => c !== "Semua" && c !== selectedCategory,
+                    ),
+                  ].slice(0, 5);
+            return visibleCategories.map((cat, idx) => {
+              const count =
+                cat === "Semua"
+                  ? products.length
+                  : products.filter((p) => p.category === cat).length;
+              return (
+                <TouchableOpacity
+                  key={cat + "-" + idx}
                   style={[
-                    styles.categoryPillText,
-                    selectedCategory === cat && styles.categoryPillTextActive,
+                    styles.categoryPill,
+                    selectedCategory === cat && styles.categoryPillActive,
                   ]}
-                >
-                  {cat}
-                </Text>
-                <View
-                  style={[
-                    styles.categoryCount,
-                    selectedCategory === cat && styles.categoryCountActive,
-                  ]}
+                  onPress={() => setSelectedCategory(cat)}
                 >
                   <Text
                     style={[
-                      styles.categoryCountText,
-                      selectedCategory === cat &&
-                        styles.categoryCountTextActive,
+                      styles.categoryPillText,
+                      selectedCategory === cat && styles.categoryPillTextActive,
                     ]}
                   >
-                    {count}
+                    {cat}
                   </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                  <View
+                    style={[
+                      styles.categoryCount,
+                      selectedCategory === cat && styles.categoryCountActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryCountText,
+                        selectedCategory === cat &&
+                          styles.categoryCountTextActive,
+                      ]}
+                    >
+                      {count}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            });
+          })()}
         </ScrollView>
 
         {/* Grid Button */}
@@ -491,6 +504,7 @@ const GudangScreen = ({ navigation }) => {
         visible={showCategoryModal}
         transparent
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         animationType="fade"
         onRequestClose={() => setShowCategoryModal(false)}
       >

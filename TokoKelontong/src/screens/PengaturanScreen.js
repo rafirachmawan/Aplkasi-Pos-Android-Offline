@@ -20,10 +20,10 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
-import * as Updates from "expo-updates";
 import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import useAppUpdate from "../hooks/useAppUpdate";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -118,6 +118,7 @@ const PengaturanScreen = ({ navigation }) => {
   );
   const [logoUri, setLogoUri] = useState(state.storeLogo || null);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
 
   // Account & security states
@@ -138,7 +139,8 @@ const PengaturanScreen = ({ navigation }) => {
   const [testingPrinter, setTestingPrinter] = useState(false);
 
   // Update aplikasi OTA (tanpa install ulang)
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const appUpdate = useAppUpdate();
+  const checkingUpdate = appUpdate.isChecking || appUpdate.isUpdating;
 
   // Security PIN states
   const [hasPin, setHasPin] = useState(false);
@@ -589,7 +591,7 @@ const PengaturanScreen = ({ navigation }) => {
 
   // ── Cek & pasang update OTA (tanpa install ulang) ──
   const handleCheckUpdate = async () => {
-    if (!Updates.isEnabled) {
+    if (!appUpdate.isSupported) {
       Alert.alert(
         "Tidak Tersedia",
         "Update otomatis hanya tersedia pada build APK, tidak di Expo Go.",
@@ -597,41 +599,22 @@ const PengaturanScreen = ({ navigation }) => {
       return;
     }
     if (checkingUpdate) return;
-    setCheckingUpdate(true);
+    if (appUpdate.hasUpdate || appUpdate.isReadyToInstall) {
+      appUpdate.promptApplyUpdate();
+      return;
+    }
     try {
-      const check = await Updates.checkForUpdateAsync();
-      if (!check.isAvailable) {
+      const check = await appUpdate.checkForUpdate({ silent: false, force: true });
+      if (!check.hasUpdate) {
         Alert.alert("Sudah Terbaru", "Aplikasi Anda sudah versi terbaru.");
         return;
       }
-      Alert.alert(
-        "Update Tersedia",
-        "Versi baru aplikasi tersedia. Unduh sekarang? Aplikasi akan restart otomatis setelah update selesai.",
-        [
-          { text: "Nanti", style: "cancel" },
-          {
-            text: "Update",
-            onPress: async () => {
-              try {
-                await Updates.fetchUpdateAsync();
-                await Updates.reloadAsync();
-              } catch (e) {
-                Alert.alert(
-                  "Gagal Update",
-                  "Gagal mengunduh update. Periksa koneksi internet lalu coba lagi.",
-                );
-              }
-            },
-          },
-        ],
-      );
-    } catch (e) {
+      appUpdate.promptApplyUpdate();
+    } catch (_) {
       Alert.alert(
         "Gagal Memeriksa",
         "Tidak dapat memeriksa update. Pastikan HP terhubung ke internet.",
       );
-    } finally {
-      setCheckingUpdate(false);
     }
   };
 
@@ -744,10 +727,13 @@ const PengaturanScreen = ({ navigation }) => {
   };
 
   const handleSave = async () => {
+    if (saving) return;
     if (!storeNameInput.trim()) {
       Alert.alert("Error", "Nama toko tidak boleh kosong.");
       return;
     }
+    setSaving(true);
+    const cloudWarnings = [];
     try {
       const activeStoreId = storeId || profile?.stores?.id || null;
       const nameKey = getStoreNameKey(activeStoreId);
@@ -775,11 +761,10 @@ const PengaturanScreen = ({ navigation }) => {
             activeStoreId ? `logos/${activeStoreId}` : "logos",
           );
         } catch (uploadErr) {
-          Alert.alert(
-            "Peringatan",
+          cloudWarnings.push(
             "Logo gagal diunggah ke cloud (" +
               uploadErr.message +
-              "). Logo hanya tersimpan di HP ini.",
+              "). Logo sementara tersimpan di HP ini.",
           );
         }
       }
@@ -837,17 +822,22 @@ const PengaturanScreen = ({ navigation }) => {
         await updateStoreName(storeNameInput.trim());
         await refreshProfile();
       } catch (cloudErr) {
-        Alert.alert(
-          "Peringatan",
+        cloudWarnings.push(
           "Pengaturan tersimpan di HP ini, tetapi nama toko gagal diperbarui ke cloud: " +
             cloudErr.message,
         );
+      }
+
+      if (cloudWarnings.length > 0) {
+        Alert.alert("Peringatan", cloudWarnings.join("\n\n"));
       }
 
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
       Alert.alert("Error", "Gagal menyimpan pengaturan: " + e.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1839,15 +1829,36 @@ const PengaturanScreen = ({ navigation }) => {
           disabled={checkingUpdate}
         >
           <View style={{ flex: 1 }}>
-            <Text style={styles.linkText}>
-              {checkingUpdate ? "Memeriksa Update..." : "Periksa Update"}
-            </Text>
+            <View style={styles.updateRowTitleLine}>
+              <Text style={styles.linkText}>
+                {appUpdate.isUpdating
+                  ? "Mengunduh & Memasang Update..."
+                  : checkingUpdate
+                    ? "Memeriksa Update..."
+                    : appUpdate.isReadyToInstall
+                      ? "Pasang Update Terbaru"
+                      : appUpdate.hasUpdate
+                        ? "Update Aplikasi Tersedia"
+                        : "Periksa Update"}
+              </Text>
+              {appUpdate.hasUpdate && !checkingUpdate && (
+                <View style={styles.updatePillBadge}>
+                  <Text style={styles.updatePillBadgeText}>
+                    {appUpdate.isReadyToInstall ? "Siap Dipasang" : "Baru"}
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.linkSubText}>
-              Versi terpasang v{appVersion} — update tanpa install ulang
+              {appUpdate.isReadyToInstall
+                ? `Versi terpasang v${appVersion} — update sudah diunduh, ketuk untuk restart & pasang`
+                : appUpdate.hasUpdate
+                  ? `Versi terpasang v${appVersion} — pembaruan tersedia, ketuk untuk unduh tanpa install ulang`
+                  : `Versi terpasang v${appVersion} — update tanpa install ulang`}
             </Text>
           </View>
           {checkingUpdate ? (
-            <MaterialCommunityIcons name="loading" size={20} color={colors.primary} />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : (
             <MaterialCommunityIcons
               name="chevron-right"
@@ -1860,12 +1871,17 @@ const PengaturanScreen = ({ navigation }) => {
 
       {/* ── Tombol Simpan ── */}
       <TouchableOpacity
-        style={[styles.saveBtn, saved && { backgroundColor: "#059669" }]}
+        style={[
+          styles.saveBtn,
+          saved && { backgroundColor: "#059669" },
+          saving && { opacity: 0.75 },
+        ]}
         onPress={handleSave}
+        disabled={saving}
         activeOpacity={0.85}
       >
         <Text style={styles.saveBtnText}>
-          {saved ? "TERSIMPAN!" : "SIMPAN PENGATURAN"}
+          {saving ? "MENYIMPAN..." : saved ? "TERSIMPAN!" : "SIMPAN PENGATURAN"}
         </Text>
       </TouchableOpacity>
 
@@ -1906,6 +1922,7 @@ const PengaturanScreen = ({ navigation }) => {
         visible={showImageSourceModal}
         transparent
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         animationType="fade"
         onRequestClose={() => setShowImageSourceModal(false)}
       >
@@ -1964,6 +1981,7 @@ const PengaturanScreen = ({ navigation }) => {
         visible={showPrinterPicker}
         transparent
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         animationType="fade"
         onRequestClose={() => setShowPrinterPicker(false)}
       >
@@ -3605,6 +3623,23 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 12,
     color: "#334155",
+  },
+  updateRowTitleLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  updatePillBadge: {
+    backgroundColor: colors.infoBadgeBg,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  updatePillBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+    color: colors.infoBadgeText,
   },
 });
 

@@ -479,3 +479,168 @@ export const normalizePaperSize = (value) => {
  */
 export const getPaperSpec = (value) =>
   PAPER_SPEC_MAP[normalizePaperSize(value)] || PAPER_SPEC_MAP['58mm'];
+
+/**
+ * Mengurai rincian pembayaran nota secara konsisten untuk layar kasir,
+ * laporan, WhatsApp, PDF/HTML, dan printer thermal Bluetooth.
+ */
+export const getReceiptPaymentSummary = (tx = {}) => {
+  const rawMethod = String(tx?.payment_method || 'cash').trim();
+  const upper = rawMethod.toUpperCase();
+  const grandTotal = Math.max(0, Number(tx?.grand_total || 0));
+  const cashReceived = Math.max(0, Number(tx?.cash_received || 0));
+  const cashReturn = Math.max(0, Number(tx?.cash_return || 0));
+
+  if (upper === 'CASH' || upper === 'TUNAI') {
+    return {
+      kind: 'cash',
+      methodLabel: 'TUNAI',
+      isPaidOff: true,
+      cashReceived,
+      cashReturn,
+      dpAmount: grandTotal,
+      remainingDebt: 0,
+      statusLabel: 'LUNAS',
+    };
+  }
+
+  if (upper === 'KASBON' || upper === 'DEBT') {
+    const dpAmount = Math.min(grandTotal, cashReceived);
+    const remainingDebt = Math.max(0, grandTotal - dpAmount);
+    const isPaidOff = remainingDebt <= 0;
+    return {
+      kind: 'kasbon',
+      methodLabel: 'KASBON',
+      isPaidOff,
+      cashReceived: dpAmount,
+      cashReturn: 0,
+      dpAmount,
+      remainingDebt,
+      statusLabel: isPaidOff ? 'LUNAS' : 'BELUM LUNAS',
+    };
+  }
+
+  const displayMethod = upper === 'DEBIT' ? 'DEBIT / EDC' : upper;
+  return {
+    kind: 'non_cash',
+    methodLabel: displayMethod,
+    isPaidOff: true,
+    cashReceived: grandTotal,
+    cashReturn: 0,
+    dpAmount: grandTotal,
+    remainingDebt: 0,
+    statusLabel: 'LUNAS',
+  };
+};
+
+/**
+ * Menormalkan nomor HP Indonesia ke format WhatsApp internasional ("628...").
+ * Menangani "08...", "+6208...", "+628...", maupun "8..." tanpa awalan nol.
+ */
+export const normalizeWhatsAppPhone = (raw) => {
+  let clean = String(raw || '').replace(/\D/g, '');
+  if (!clean) return '';
+  if (clean.startsWith('620')) {
+    clean = '62' + clean.slice(3);
+  } else if (clean.startsWith('0')) {
+    clean = '62' + clean.slice(1);
+  } else if (clean.startsWith('8') && clean.length >= 8 && clean.length <= 13) {
+    clean = '62' + clean;
+  }
+  return clean;
+};
+
+/**
+ * Menyaring input bilangan bulat (menghapus titik, koma, spasi, huruf).
+ * Tanda minus di awal hanya diizinkan bila allowNegative bernilai true.
+ */
+export const sanitizeIntegerInput = (raw, { allowNegative = false } = {}) => {
+  const str = String(raw ?? '');
+  if (!allowNegative) {
+    return str.replace(/\D/g, '');
+  }
+  const hasLeadingMinus = str.startsWith('-');
+  const digits = str.replace(/\D/g, '');
+  return hasLeadingMinus ? `-${digits}` : digits;
+};
+
+/**
+ * Memvalidasi dan mengurai input stok produk secara ketat (tanpa pemotongan diam-diam).
+ */
+export const parseStockFields = ({
+  useStockManagement,
+  stockQuantity,
+  minStock,
+  isEdit = false,
+}) => {
+  if (!useStockManagement) {
+    return { ok: true, stock: 999999, minStockThreshold: -1 };
+  }
+
+  const stockStr = String(stockQuantity ?? '').trim();
+  const isNegativeInput = /^-\d+$/.test(stockStr);
+  const validStockPattern = isEdit ? /^-?\d+$/ : /^\d+$/;
+
+  if (!validStockPattern.test(stockStr)) {
+    return {
+      ok: false,
+      error:
+        !isEdit && isNegativeInput
+          ? 'Stok tidak boleh negatif.'
+          : 'Stok harus berupa angka bulat yang valid.',
+    };
+  }
+
+  const stock = Number(stockStr);
+  if (!Number.isSafeInteger(stock)) {
+    return { ok: false, error: 'Jumlah stok terlalu besar.' };
+  }
+
+  const minStr = String(minStock ?? '').trim();
+  if (minStr !== '' && !/^\d+$/.test(minStr)) {
+    return {
+      ok: false,
+      error: 'Batas minimum stok harus berupa angka bulat non-negatif.',
+    };
+  }
+
+  const minStockThreshold = minStr === '' ? 0 : Number(minStr);
+  if (!Number.isSafeInteger(minStockThreshold)) {
+    return { ok: false, error: 'Batas minimum stok terlalu besar.' };
+  }
+
+  return { ok: true, stock, minStockThreshold };
+};
+
+/**
+ * Membuka tautan WhatsApp tanpa bergantung pada Linking.canOpenURL (yang selalu
+ * mengembalikan false di Android 11+ bila scheme whatsapp belum masuk <queries>).
+ * Jika gagal membuka whatsapp://, fallback dijalankan (misal wa.me atau ekspor PDF).
+ */
+export const tryOpenWhatsApp = async ({
+  openUrl,
+  whatsappUrl,
+  webFallbackUrl,
+  onUnavailable,
+}) => {
+  try {
+    await openUrl(whatsappUrl);
+    return 'whatsapp';
+  } catch (_) {
+    if (webFallbackUrl) {
+      try {
+        await openUrl(webFallbackUrl);
+        return 'web';
+      } catch (webErr) {
+        if (onUnavailable) {
+          await onUnavailable(webErr);
+        }
+        return 'unavailable';
+      }
+    }
+    if (onUnavailable) {
+      await onUnavailable(_);
+    }
+    return 'fallback';
+  }
+};

@@ -4,9 +4,9 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fonts } from '../theme/colors';
 
@@ -57,9 +57,16 @@ const GuideSection = ({ title, badge, content }) => {
 };
 
 const PanduanScreen = () => {
+  const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+    <View style={styles.safe}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.body,
+          { paddingBottom: Math.max(insets.bottom, 24) + 28 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         
         {/* Header Title Card */}
         <View style={styles.headerCard}>
@@ -248,7 +255,7 @@ const PanduanScreen = () => {
         </View>
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 

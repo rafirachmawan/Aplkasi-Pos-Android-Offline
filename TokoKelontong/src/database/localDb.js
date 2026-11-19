@@ -595,6 +595,26 @@ export function resetForRetry(storeId) {
   });
 }
 
+// Hapus transaksi bermasalah permanen (needs_review) atas konfirmasi pengguna.
+export function deleteOutboxTransaction(clientTxId) {
+  return writeTx(async (db) => {
+    const row = await db.getFirstAsync(
+      "SELECT status FROM outbox_transactions WHERE client_tx_id = ?",
+      clientTxId,
+    );
+    if (!row || row.status !== TX_STATUS.NEEDS_REVIEW) return false;
+    await db.runAsync(
+      "DELETE FROM outbox_items WHERE client_tx_id = ?",
+      clientTxId,
+    );
+    const res = await db.runAsync(
+      "DELETE FROM outbox_transactions WHERE client_tx_id = ? AND status = 'needs_review'",
+      clientTxId,
+    );
+    return (res?.changes || 0) > 0;
+  });
+}
+
 export function pruneSynced() {
   return writeTx(async (db) => {
     const cutoff = Date.now() - SYNCED_RETENTION_MS;

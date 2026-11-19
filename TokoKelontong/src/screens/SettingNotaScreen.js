@@ -39,6 +39,7 @@ import {
   savePaperSize,
 } from "../utils/bluetoothPrinter";
 import usePlan from "../hooks/usePlan";
+import useKeyboardVisible from "../hooks/useKeyboardVisible";
 import { ProLockModal } from "../components/ProLock";
 
 const getCustomPresetsKey = (storeId) =>
@@ -92,6 +93,7 @@ const SettingNotaScreen = ({ navigation }) => {
   const plan = usePlan();
   const isReadOnly = !plan.isPro;
   const [showLockModal, setShowLockModal] = useState(false);
+  const keyboardVisible = useKeyboardVisible();
 
   useEffect(() => {
     if (isReadOnly) {
@@ -363,7 +365,10 @@ const SettingNotaScreen = ({ navigation }) => {
     <View style={styles.container}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ padding: 16, paddingBottom: 130 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: keyboardVisible ? 28 : 152,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -883,63 +888,65 @@ const SettingNotaScreen = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      {/* ── DOCKED BOTTOM ACTIONS (Aman dari Tombol Navigasi Android) ── */}
-      <View
-        style={[
-          styles.dockedFooter,
-          {
-            paddingBottom:
-              Platform.OS === "android"
-                ? Math.max(insets.bottom, 16) + 10
-                : Math.max(insets.bottom, 14),
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.dockedTestBtn}
-          onPress={handleTestPrint}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="Tes cetak struk"
-        >
-          <Text style={styles.dockedTestBtnText}>Tes Cetak</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
+      {/* ── DOCKED BOTTOM ACTIONS (Aman dari Tombol Navigasi Android & Sembunyi Saat Keyboard Muncul) ── */}
+      {!keyboardVisible && (
+        <View
           style={[
-            styles.dockedSaveBtn,
-            isReadOnly && { backgroundColor: colors.primaryDark },
-            saved && { backgroundColor: colors.successButtonDark },
-            saving && { opacity: 0.7 },
+            styles.dockedFooter,
+            {
+              paddingBottom:
+                Platform.OS === "android"
+                  ? Math.max(insets.bottom, 36) + 12
+                  : Math.max(insets.bottom, 14),
+            },
           ]}
-          onPress={handleSave}
-          disabled={saving}
-          activeOpacity={0.88}
-          accessibilityRole="button"
-          accessibilityLabel={
-            isReadOnly
-              ? "Simpan pengaturan nota khusus paket Pro"
-              : "Simpan pengaturan nota"
-          }
         >
-          {isReadOnly && !saved && !saving && (
-            <MaterialCommunityIcons
-              name="lock-outline"
-              size={16}
-              color={colors.onPrimary}
-            />
-          )}
-          <Text style={styles.dockedSaveBtnText}>
-            {saved
-              ? "TERSIMPAN!"
-              : saving
-                ? "MENYIMPAN..."
-                : isReadOnly
-                  ? "Simpan (Khusus Pro)"
-                  : "SIMPAN PENGATURAN"}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={styles.dockedTestBtn}
+            onPress={handleTestPrint}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Tes cetak struk"
+          >
+            <Text style={styles.dockedTestBtnText}>Tes Cetak</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.dockedSaveBtn,
+              isReadOnly && { backgroundColor: colors.primaryDark },
+              saved && { backgroundColor: colors.successButtonDark },
+              saving && { opacity: 0.7 },
+            ]}
+            onPress={handleSave}
+            disabled={saving}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isReadOnly
+                ? "Simpan pengaturan nota khusus paket Pro"
+                : "Simpan pengaturan nota"
+            }
+          >
+            {isReadOnly && !saved && !saving && (
+              <MaterialCommunityIcons
+                name="lock-outline"
+                size={16}
+                color={colors.onPrimary}
+              />
+            )}
+            <Text style={styles.dockedSaveBtnText}>
+              {saved
+                ? "TERSIMPAN!"
+                : saving
+                  ? "MENYIMPAN..."
+                  : isReadOnly
+                    ? "Simpan (Khusus Pro)"
+                    : "SIMPAN PENGATURAN"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Panel Kunci Fitur (tier Gratis) ── */}
       <ProLockModal

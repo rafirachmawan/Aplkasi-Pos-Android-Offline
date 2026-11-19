@@ -12,6 +12,7 @@ import {
   Platform,
   Alert,
   Linking,
+  ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -34,6 +35,7 @@ import { getOfflineQueueCount } from "../utils/offlineQueue";
 import { refreshSyncCounts } from "../services/syncService";
 import useSyncStatus from "../hooks/useSyncStatus";
 import usePlan from "../hooks/usePlan";
+import useAppUpdate from "../hooks/useAppUpdate";
 import { SUPPORT_WHATSAPP } from "../config/planConfig";
 
 const { width } = Dimensions.get("window");
@@ -73,6 +75,7 @@ const HomeScreen = ({ navigation }) => {
   // Tier langganan toko. Menu Pro TETAP bisa dibuka (K-11: data lama harus
   // tetap terlihat); badge ini hanya penanda bahwa aksi baru terkunci.
   const plan = usePlan();
+  const appUpdate = useAppUpdate();
 
   useFocusEffect(
     useCallback(() => {
@@ -347,6 +350,81 @@ const HomeScreen = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* ─── Badge Card Pemberitahuan Update OTA (EAS Update) ─── */}
+        {appUpdate.shouldShowBanner && (
+          <View style={styles.updateAlertCard}>
+            <View style={styles.updateCardTopRow}>
+              <View style={styles.updateStatusBadge}>
+                <MaterialCommunityIcons
+                  name={
+                    appUpdate.isReadyToInstall
+                      ? "check-decagram-outline"
+                      : "cloud-download-outline"
+                  }
+                  size={13}
+                  color={colors.infoBadgeText}
+                />
+                <Text style={styles.updateStatusBadgeText}>
+                  {appUpdate.isReadyToInstall
+                    ? "SIAP DIPASANG"
+                    : "UPDATE TERSEDIA"}
+                </Text>
+              </View>
+              {!appUpdate.isUpdating && (
+                <TouchableOpacity
+                  onPress={appUpdate.dismissBanner}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tutup pemberitahuan update sementara"
+                >
+                  <Text style={styles.updateDismissText}>Nanti</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.updateCardBodyRow}>
+              <View style={styles.updateCardTextCol}>
+                <Text style={styles.updateCardTitle}>
+                  {appUpdate.isReadyToInstall
+                    ? "Pembaruan Siap Dipasang"
+                    : "Versi Baru Aplikasi Tersedia"}
+                </Text>
+                <Text style={styles.updateCardSub}>
+                  {appUpdate.isUpdating
+                    ? "Sedang mengunduh & menyiapkan pembaruan..."
+                    : appUpdate.isReadyToInstall
+                      ? "Pembaruan sudah terunduh. Muat ulang sebentar agar fitur & perbaikan terbaru aktif."
+                      : "Pembaruan terbaru sudah dirilis. Perbarui sekarang tanpa install ulang APK."}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.updateActionBtn,
+                  appUpdate.isUpdating && { opacity: 0.75 },
+                ]}
+                onPress={appUpdate.promptApplyUpdate}
+                disabled={appUpdate.isUpdating}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  appUpdate.isReadyToInstall
+                    ? "Pasang pembaruan aplikasi sekarang"
+                    : "Update aplikasi sekarang"
+                }
+              >
+                {appUpdate.isUpdating ? (
+                  <ActivityIndicator size="small" color={colors.onPrimary} />
+                ) : (
+                  <Text style={styles.updateActionBtnText}>
+                    {appUpdate.isReadyToInstall ? "Pasang" : "Update"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* ─── Banner Antrean Offline (Hanya tampil jika ada data pending) ─── */}
         {offlineCount > 0 && (
           <View style={styles.offlineAlertCard}>
@@ -508,6 +586,11 @@ const HomeScreen = ({ navigation }) => {
                     {item.proFeature && !plan.isPro && (
                       <View style={styles.proBadge}>
                         <Text style={styles.proBadgeText}>PRO</Text>
+                      </View>
+                    )}
+                    {item.key === "Pengaturan" && appUpdate.hasUpdate && (
+                      <View style={styles.updateMenuBadge}>
+                        <Text style={styles.updateMenuBadgeText}>UPDATE</Text>
                       </View>
                     )}
                     {isLocked && (
@@ -1144,6 +1227,90 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
     color: colors.onPrimary,
+  },
+
+  // ── Badge Notification Card Update OTA ──
+  updateAlertCard: {
+    backgroundColor: colors.infoContainer,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.infoBorder,
+    padding: 14,
+    marginBottom: 16,
+    gap: 10,
+  },
+  updateCardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  updateStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.infoBadgeBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  updateStatusBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+    color: colors.infoBadgeText,
+    letterSpacing: 0.4,
+  },
+  updateDismissText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  updateCardBodyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  updateCardTextCol: {
+    flex: 1,
+  },
+  updateCardTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.text,
+  },
+  updateCardSub: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.infoText,
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  updateActionBtn: {
+    backgroundColor: colors.info,
+    minHeight: 40,
+    minWidth: 82,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  updateActionBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    color: colors.onPrimary,
+  },
+  updateMenuBadge: {
+    backgroundColor: colors.infoBadgeBg,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  updateMenuBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+    color: colors.infoBadgeText,
+    letterSpacing: 0.3,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   ScrollView,
@@ -15,6 +15,8 @@ import {
   Linking,
   Switch,
   KeyboardAvoidingView,
+  ActivityIndicator,
+  InteractionManager,
 } from "react-native";
 import {
   SafeAreaProvider,
@@ -29,7 +31,12 @@ import { syncNow } from "../services/syncService";
 import { useAuth } from "../context/AuthContext";
 import { colors, fonts } from "../theme/colors";
 import { encodeCode128 } from "../utils/barcode128";
-import { escapeHtml } from "../utils/helpers";
+import {
+  escapeHtml,
+  sanitizeIntegerInput,
+  parseStockFields,
+} from "../utils/helpers";
+import useKeyboardVisible from "../hooks/useKeyboardVisible";
 import { uploadProductImage, isCloudImageUri } from "../utils/imageStorage";
 import {
   isPrinterConfigured,
@@ -290,6 +297,15 @@ const AddProductScreen = ({ navigation, route }) => {
   const plan = usePlan();
   const [showGrosirLockModal, setShowGrosirLockModal] = useState(false);
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const keyboardVisible = useKeyboardVisible();
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Dropdown Modal states
   const [showCategoryDropdownModal, setShowCategoryDropdownModal] = useState(false);
@@ -348,7 +364,18 @@ const AddProductScreen = ({ navigation, route }) => {
       if (storedUnits) {
         try {
           const parsed = JSON.parse(storedUnits);
-          if (Array.isArray(parsed) && parsed.length > 0) setUnits(parsed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setUnits(() => {
+              const merged = [...parsed];
+              if (
+                existingProduct?.unit &&
+                !merged.includes(existingProduct.unit)
+              ) {
+                merged.push(existingProduct.unit);
+              }
+              return merged;
+            });
+          }
         } catch (_) {
           // Data tersimpan korup — biarkan daftar default dipakai.
         }
@@ -356,7 +383,18 @@ const AddProductScreen = ({ navigation, route }) => {
       if (storedCats) {
         try {
           const parsed = JSON.parse(storedCats);
-          if (Array.isArray(parsed) && parsed.length > 0) setCategories(parsed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCategories(() => {
+              const merged = [...parsed];
+              if (
+                existingProduct?.category &&
+                !merged.includes(existingProduct.category)
+              ) {
+                merged.push(existingProduct.category);
+              }
+              return merged;
+            });
+          }
         } catch (_) {
           // Data tersimpan korup — biarkan daftar default dipakai.
         }
@@ -644,10 +682,18 @@ const AddProductScreen = ({ navigation, route }) => {
     navigation.navigate("BarcodeScanner", {
       autoClose: true,
       onBarcodeScanned: async (code) => {
+        if (!isMountedRef.current) return;
         setBarcode(code);
         try {
           const existing = await ProductRepository.getProductByBarcode(code);
+          if (!isMountedRef.current) return;
           if (existing && existing.id !== existingProduct?.id) {
+            await new Promise((resolve) =>
+              InteractionManager.runAfterInteractions(() =>
+                setTimeout(resolve, 120),
+              ),
+            );
+            if (!isMountedRef.current) return;
             Alert.alert(
               "Barcode Sudah Terdaftar",
               `Barcode ini milik produk: "${existing.product_name}"\n\nApakah ingin mengedit produk tersebut?`,
@@ -655,14 +701,19 @@ const AddProductScreen = ({ navigation, route }) => {
                 {
                   text: "Batal",
                   style: "cancel",
-                  onPress: () => setBarcode(""),
+                  onPress: () => {
+                    if (isMountedRef.current) setBarcode("");
+                  },
                 },
                 {
                   text: "Edit Produk",
-                  onPress: () =>
-                    navigation.replace("AddProductScreen", {
-                      product: existing,
-                    }),
+                  onPress: () => {
+                    if (isMountedRef.current) {
+                      navigation.replace("AddProductScreen", {
+                        product: existing,
+                      });
+                    }
+                  },
                 },
               ],
             );
@@ -756,6 +807,7 @@ const AddProductScreen = ({ navigation, route }) => {
 
   // ── Save ──
   const handleSave = async () => {
+    if (saving) return;
     if (
       !productName ||
       !capitalPrice ||
@@ -767,8 +819,12 @@ const AddProductScreen = ({ navigation, route }) => {
     }
     const capPrice = parseRp(capitalPrice);
     const sellPrice = parseRp(sellingPrice);
-    const stock = useStockManagement ? parseInt(stockQuantity, 10) : 999999;
-    const minStockVal = useStockManagement ? parseInt(minStock, 10) : -1;
+    const stockParsed = parseStockFields({
+      useStockManagement,
+      stockQuantity,
+      minStock,
+      isEdit: Boolean(existingProduct),
+    });
 
     if (isNaN(capPrice) || capPrice < 0) {
       Alert.alert("Error", "Harga modal tidak valid.");
@@ -778,81 +834,73 @@ const AddProductScreen = ({ navigation, route }) => {
       Alert.alert("Error", "Harga jual tidak valid.");
       return;
     }
-    if (
-      useStockManagement &&
-      (isNaN(stock) || (!existingProduct && stock < 0))
-    ) {
-      Alert.alert(
-        "Error",
-        existingProduct ? "Stok tidak valid." : "Stok tidak boleh negatif.",
-      );
+    if (!stockParsed.ok) {
+      Alert.alert("Error", stockParsed.error);
       return;
     }
+    const { stock, minStockThreshold } = stockParsed;
 
-    // Cek barcode duplikat sebelum simpan (jalur tambah & edit)
-    const barcodeVal = barcode.trim() || null;
-    if (barcodeVal) {
-      try {
-        const existingBarcode =
-          await ProductRepository.getProductByBarcode(barcodeVal);
-        if (existingBarcode && existingBarcode.id !== existingProduct?.id) {
-          Alert.alert(
-            "Barcode Sudah Terdaftar",
-            `Barcode ini sudah dipakai oleh produk "${existingBarcode.product_name}". Gunakan barcode lain.`,
-          );
-          return;
-        }
-      } catch (_) {
-        // Jika cek gagal, lanjut — unique index di server jadi penjaga akhir
-      }
-    }
-
-    // Upload foto lokal ke Supabase Storage agar tampil di semua HP.
-    // URL cloud (http) yang sudah ada tidak di-upload ulang.
-    let finalImageUri = imageUri || null;
-    if (imageUri && !isCloudImageUri(imageUri)) {
-      try {
-        finalImageUri = await uploadProductImage(imageUri);
-      } catch (uploadErr) {
-        const proceed = await new Promise((resolve) =>
-          Alert.alert(
-            "Gagal Upload Foto",
-            "Foto produk tidak bisa diunggah ke cloud (" +
-              uploadErr.message +
-              "). Apakah bucket 'product-images' sudah dibuat di Supabase?",
-            [
-              {
-                text: "Batal Simpan",
-                style: "cancel",
-                onPress: () => resolve(false),
-              },
-              { text: "Simpan Tanpa Foto", onPress: () => resolve(true) },
-            ],
-          ),
-        );
-        if (!proceed) return;
-        finalImageUri = null;
-      }
-    }
-
-    const data = {
-      barcode: barcodeVal,
-      product_name: productName.trim(),
-      capital_price: capPrice,
-      selling_price: sellPrice,
-      stock_quantity: stock,
-      min_stock_threshold: useStockManagement
-        ? isNaN(minStockVal)
-          ? 5
-          : Math.max(0, minStockVal)
-        : -1,
-      image_uri: finalImageUri,
-      unit,
-      category,
-      wholesale_rules: wholesaleRules,
-    };
-
+    setSaving(true);
     try {
+      // Cek barcode duplikat sebelum simpan (jalur tambah & edit)
+      const barcodeVal = barcode.trim() || null;
+      if (barcodeVal) {
+        try {
+          const existingBarcode =
+            await ProductRepository.getProductByBarcode(barcodeVal);
+          if (existingBarcode && existingBarcode.id !== existingProduct?.id) {
+            Alert.alert(
+              "Barcode Sudah Terdaftar",
+              `Barcode ini sudah dipakai oleh produk "${existingBarcode.product_name}". Gunakan barcode lain.`,
+            );
+            return;
+          }
+        } catch (_) {
+          // Jika cek gagal, lanjut — unique index di server jadi penjaga akhir
+        }
+      }
+
+      // Upload foto lokal ke Supabase Storage agar tampil di semua HP.
+      // URL cloud (http) yang sudah ada tidak di-upload ulang.
+      let finalImageUri = imageUri || null;
+      if (imageUri && !isCloudImageUri(imageUri)) {
+        try {
+          finalImageUri = await uploadProductImage(imageUri);
+        } catch (uploadErr) {
+          const proceed = await new Promise((resolve) =>
+            Alert.alert(
+              "Gagal Upload Foto",
+              "Foto produk tidak bisa diunggah ke cloud (" +
+                uploadErr.message +
+                "). Apakah bucket 'product-images' sudah dibuat di Supabase?",
+              [
+                {
+                  text: "Batal Simpan",
+                  style: "cancel",
+                  onPress: () => resolve(false),
+                },
+                { text: "Simpan Tanpa Foto", onPress: () => resolve(true) },
+              ],
+            ),
+          );
+          if (!proceed) return;
+          finalImageUri = null;
+        }
+      }
+
+      const data = {
+        barcode: barcodeVal,
+        product_name: productName.trim(),
+        capital_price: capPrice,
+        selling_price: sellPrice,
+        stock_quantity: stock,
+        min_stock_threshold: minStockThreshold,
+        image_uri: finalImageUri,
+        unit,
+        category,
+        wholesale_rules: wholesaleRules,
+      };
+
       if (existingProduct) {
         const wasUnlimited = Number(existingProduct.min_stock_threshold) < 0;
         if (!useStockManagement) {
@@ -887,6 +935,8 @@ const AddProductScreen = ({ navigation, route }) => {
       }
     } catch (error) {
       Alert.alert("Error", error.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -900,7 +950,10 @@ const AddProductScreen = ({ navigation, route }) => {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ padding: 16, paddingBottom: 130 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: keyboardVisible ? 28 : 152,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -1281,10 +1334,18 @@ const AddProductScreen = ({ navigation, route }) => {
                   <RNTextInput
                     style={styles.textInputClean}
                     value={stockQuantity}
-                    onChangeText={setStockQuantity}
+                    onChangeText={(text) =>
+                      setStockQuantity(
+                        sanitizeIntegerInput(text, {
+                          allowNegative: Boolean(existingProduct),
+                        }),
+                      )
+                    }
                     placeholder="0"
                     placeholderTextColor="#94A3B8"
-                    keyboardType="numeric"
+                    keyboardType={
+                      existingProduct ? "numbers-and-punctuation" : "number-pad"
+                    }
                   />
                 </View>
                 <View style={{ flex: 1, marginLeft: 8 }}>
@@ -1292,10 +1353,12 @@ const AddProductScreen = ({ navigation, route }) => {
                   <RNTextInput
                     style={styles.textInputClean}
                     value={minStock}
-                    onChangeText={setMinStock}
-                    placeholder="5"
+                    onChangeText={(text) =>
+                      setMinStock(sanitizeIntegerInput(text))
+                    }
+                    placeholder="0"
                     placeholderTextColor="#94A3B8"
-                    keyboardType="numeric"
+                    keyboardType="number-pad"
                   />
                 </View>
               </View>
@@ -1319,46 +1382,59 @@ const AddProductScreen = ({ navigation, route }) => {
         </View>
       </ScrollView>
 
-      {/* ── DOCKED BOTTOM ACTIONS (Aman Navigasi Android) ── */}
-      <View
-        style={[
-          styles.dockedFooter,
-          {
-            paddingBottom:
-              Platform.OS === "android"
-                ? Math.max(insets.bottom, 16) + 10
-                : Math.max(insets.bottom, 14),
-          },
-        ]}
-      >
-        {existingProduct && (
-          <TouchableOpacity
-            style={styles.dockedCancelBtn}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.dockedCancelBtnText}>Batal</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
+      {/* ── DOCKED BOTTOM ACTIONS (Aman Navigasi Android & Sembunyi Saat Keyboard Muncul) ── */}
+      {!keyboardVisible && (
+        <View
           style={[
-            styles.dockedSaveBtn,
-            !existingProduct && { flex: 1 },
+            styles.dockedFooter,
+            {
+              paddingBottom:
+                Platform.OS === "android"
+                  ? Math.max(insets.bottom, 36) + 12
+                  : Math.max(insets.bottom, 14),
+            },
           ]}
-          onPress={handleSave}
-          activeOpacity={0.88}
         >
-          <Text style={styles.dockedSaveBtnText}>
-            {existingProduct ? "SIMPAN PERUBAHAN" : "TAMBAH BARANG"}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          {existingProduct && (
+            <TouchableOpacity
+              style={styles.dockedCancelBtn}
+              onPress={() => navigation.goBack()}
+              disabled={saving}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dockedCancelBtnText}>Batal</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.dockedSaveBtn,
+              !existingProduct && { flex: 1 },
+              saving && { opacity: 0.75 },
+            ]}
+            onPress={handleSave}
+            disabled={saving}
+            activeOpacity={0.88}
+          >
+            {saving ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.dockedSaveBtnText}>MENYIMPAN...</Text>
+              </View>
+            ) : (
+              <Text style={styles.dockedSaveBtnText}>
+                {existingProduct ? "SIMPAN PERUBAHAN" : "TAMBAH BARANG"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Modal Label Barcode ── */}
       <Modal
         visible={showBarcodeModal}
         transparent
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         animationType="slide"
         onRequestClose={() => setShowBarcodeModal(false)}
       >
@@ -1494,6 +1570,7 @@ const AddProductScreen = ({ navigation, route }) => {
         visible={showImageSourceModal}
         transparent
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         animationType="fade"
         onRequestClose={() => setShowImageSourceModal(false)}
       >
@@ -1607,7 +1684,9 @@ const AddProductScreen = ({ navigation, route }) => {
               <RNTextInput
                 style={styles.wsInput}
                 value={wsMinQtyInput}
-                onChangeText={setWsMinQtyInput}
+                onChangeText={(text) =>
+                  setWsMinQtyInput(sanitizeIntegerInput(text))
+                }
                 keyboardType="number-pad"
                 placeholder="Contoh: 12"
                 placeholderTextColor="#94A3B8"
@@ -1672,6 +1751,7 @@ const AddProductScreen = ({ navigation, route }) => {
         visible={showCategoryDropdownModal}
         transparent
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         animationType="fade"
         onRequestClose={() => setShowCategoryDropdownModal(false)}
       >
@@ -1782,6 +1862,7 @@ const AddProductScreen = ({ navigation, route }) => {
         visible={showUnitDropdownModal}
         transparent
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         animationType="fade"
         onRequestClose={() => setShowUnitDropdownModal(false)}
       >

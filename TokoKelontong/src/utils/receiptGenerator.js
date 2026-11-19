@@ -3,7 +3,10 @@ import {
   escapeHtml,
   normalizePaperSize,
   getPaperSpec,
+  getReceiptPaymentSummary,
 } from './helpers';
+
+export { getReceiptPaymentSummary };
 
 export const FREE_RECEIPT_DEFAULTS = {
   storeName: 'MarketPos',
@@ -74,16 +77,23 @@ export const generateWAMessage = (transaction, details, storeProfile) => {
   const discountLine = transaction.discount_amount > 0
     ? `\n🏷️ Diskon       : -${formatRupiah(transaction.discount_amount)}` : '';
 
-  const paymentMethod = String(transaction.payment_method || 'cash').toUpperCase();
+  const payInfo = getReceiptPaymentSummary(transaction);
   let paymentLines = [];
-  if (paymentMethod === 'CASH' || paymentMethod === 'TUNAI') {
+  if (payInfo.kind === 'cash') {
     paymentLines = [
-      `💵 Tunai      : ${formatRupiah(transaction.cash_received)}`,
-      `🔄 Kembalian  : *${formatRupiah(transaction.cash_return)}*`,
+      `💵 Tunai      : ${formatRupiah(payInfo.cashReceived)}`,
+      `🔄 Kembalian  : *${formatRupiah(payInfo.cashReturn)}*`,
+    ];
+  } else if (payInfo.kind === 'kasbon') {
+    paymentLines = [
+      `💳 Metode     : *KASBON*`,
+      `💵 DP / Bayar : ${formatRupiah(payInfo.dpAmount)}`,
+      `⏳ Sisa Kasbon: *${formatRupiah(payInfo.remainingDebt)}*`,
+      `📌 Status     : *${payInfo.statusLabel}*`,
     ];
   } else {
     paymentLines = [
-      `💳 Metode     : *${paymentMethod}*`,
+      `💳 Metode     : *${payInfo.methodLabel}*`,
       `💵 Bayar      : ${formatRupiah(transaction.grand_total)} (Lunas)`,
     ];
   }
@@ -457,18 +467,42 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
       </div>
 
       ${(() => {
-        const method = escapeHtml(String(transaction.payment_method || 'cash').toUpperCase());
-        if (method === 'CASH' || method === 'TUNAI') {
+        const payInfo = getReceiptPaymentSummary(transaction);
+        const safeMethod = escapeHtml(payInfo.methodLabel);
+        if (payInfo.kind === 'cash') {
           return `
           <div class="payment-box">
             <div class="pay-row">
               <span class="pay-label">Tunai</span>
-              <span class="pay-val">${formatRupiah(transaction.cash_received)}</span>
+              <span class="pay-val">${formatRupiah(payInfo.cashReceived)}</span>
             </div>
             <div class="pay-divider"></div>
             <div class="pay-row kembali">
               <span class="pay-label">Kembalian</span>
-              <span class="pay-val">${formatRupiah(transaction.cash_return)}</span>
+              <span class="pay-val">${formatRupiah(payInfo.cashReturn)}</span>
+            </div>
+          </div>`;
+        }
+        if (payInfo.kind === 'kasbon') {
+          const statusColor = payInfo.isPaidOff ? '#059669' : '#DC2626';
+          return `
+          <div class="payment-box">
+            <div class="pay-row">
+              <span class="pay-label">Metode Bayar</span>
+              <span class="pay-val" style="font-weight: 700; color: #B45309;">${safeMethod}</span>
+            </div>
+            <div class="pay-row">
+              <span class="pay-label">DP / Dibayar</span>
+              <span class="pay-val">${formatRupiah(payInfo.dpAmount)}</span>
+            </div>
+            <div class="pay-row">
+              <span class="pay-label">Sisa Kasbon</span>
+              <span class="pay-val" style="font-weight: 700; color: ${statusColor};">${formatRupiah(payInfo.remainingDebt)}</span>
+            </div>
+            <div class="pay-divider"></div>
+            <div class="pay-row kembali">
+              <span class="pay-label">Status</span>
+              <span class="pay-val" style="color: ${statusColor};">${escapeHtml(payInfo.statusLabel)}</span>
             </div>
           </div>`;
         }
@@ -476,7 +510,7 @@ export const generateReceiptHTML = (transaction, details, storeProfile) => {
         <div class="payment-box">
           <div class="pay-row">
             <span class="pay-label">Metode Bayar</span>
-            <span class="pay-val" style="font-weight: 700; color: #0284C7;">${method}</span>
+            <span class="pay-val" style="font-weight: 700; color: #0284C7;">${safeMethod}</span>
           </div>
           <div class="pay-divider"></div>
           <div class="pay-row kembali">

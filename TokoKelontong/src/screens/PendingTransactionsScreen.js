@@ -10,11 +10,13 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getActiveStoreId } from "../services/sessionStore";
-import { listOutbox } from "../database/localDb";
+import { listOutbox, deleteOutboxTransaction } from "../database/localDb";
 import TransactionRepository from "../database/transactionRepository";
 import useSyncStatus from "../hooks/useSyncStatus";
+import { refreshSyncCounts } from "../services/syncService";
 import { formatRupiah } from "../utils/helpers";
 import { colors, fonts } from "../theme/colors";
 
@@ -36,10 +38,34 @@ function formatTime(iso) {
 }
 
 export default function PendingTransactionsScreen() {
+  const insets = useSafeAreaInsets();
   const syncStatus = useSyncStatus();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+
+  const handleDeleteNeedsReview = (item) => {
+    Alert.alert(
+      "Hapus dari Antrean?",
+      `Nota ${item.invoice_number} gagal dikirim ke server karena kendala data. Jika dihapus, transaksi ini tidak akan tercatat ke laporan cloud.\n\nLanjutkan hapus dari HP?`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus Antrean",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteOutboxTransaction(item.client_tx_id);
+              await refreshSyncCounts();
+              load();
+            } catch (e) {
+              Alert.alert("Gagal", e?.message || "Tidak dapat menghapus transaksi.");
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const load = useCallback(async () => {
     try {
@@ -117,6 +143,24 @@ export default function PendingTransactionsScreen() {
             {item.last_error}
           </Text>
         ) : null}
+        {item.status === "needs_review" && (
+          <View style={styles.cardFooterActions}>
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={() => handleDeleteNeedsReview(item)}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={`Hapus antrean ${item.invoice_number}`}
+            >
+              <MaterialCommunityIcons
+                name="trash-can-outline"
+                size={14}
+                color={colors.error}
+              />
+              <Text style={styles.deleteBtnText}>Hapus Antrean</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   };
@@ -159,7 +203,15 @@ export default function PendingTransactionsScreen() {
           data={rows}
           keyExtractor={(i) => i.client_tx_id}
           renderItem={renderItem}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[
+            styles.list,
+            {
+              paddingBottom:
+                Platform.OS === "android"
+                  ? Math.max(insets.bottom, 36) + 16
+                  : Math.max(insets.bottom, 16) + 16,
+            },
+          ]}
           ListEmptyComponent={
             <View style={styles.empty}>
               <MaterialCommunityIcons
@@ -232,6 +284,30 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.error,
     marginTop: 8,
+  },
+  cardFooterActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    backgroundColor: "#FEF2F2",
+  },
+  deleteBtnText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: colors.error,
   },
   empty: { alignItems: "center", marginTop: 60, gap: 8 },
   emptyText: { fontFamily: fonts.regular, fontSize: 13, color: colors.textSecondary },

@@ -609,14 +609,25 @@ class TransactionRepository {
     for (const t of data || []) {
       const d = new Date(t.created_at); // tanggal lokal perangkat
       const tanggal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const totalPrice = t.total_price || 0;
-      const discountAmount = t.discount_amount || 0;
-      for (const td of t.transaction_details || []) {
-        const lineRevenue = td.quantity * td.price_at_sale;
+      const details = t.transaction_details || [];
+      const totalPrice = Number(t.total_price || 0);
+      const effectiveDiscount = Math.min(
+        Math.max(0, Number(t.discount_amount || 0)),
+        Math.max(0, totalPrice),
+      );
+      let allocatedSum = 0;
+
+      details.forEach((td, idx) => {
+        const lineRevenue = Number(td.quantity || 0) * Number(td.price_at_sale || 0);
         const allocatedDiscount =
-          totalPrice > 0
-            ? Math.round((lineRevenue / totalPrice) * discountAmount)
-            : 0;
+          effectiveDiscount <= 0 || totalPrice <= 0
+            ? 0
+            : idx === details.length - 1
+              ? Math.max(0, effectiveDiscount - allocatedSum)
+              : Math.round((lineRevenue / totalPrice) * effectiveDiscount);
+        allocatedSum += allocatedDiscount;
+        const netSales = Math.max(0, lineRevenue - allocatedDiscount);
+
         rows.push({
           Tanggal: tanggal,
           No_Nota: t.invoice_number,
@@ -627,11 +638,13 @@ class TransactionRepository {
           Qty: td.quantity,
           Harga_Modal: td.capital_at_sale,
           Harga_Jual: td.price_at_sale,
-          Total_Penjualan: lineRevenue,
+          Subtotal_Barang: lineRevenue,
+          Diskon_Alokasi: allocatedDiscount,
+          Total_Penjualan: netSales,
           Total_Keuntungan:
-            lineRevenue - allocatedDiscount - td.quantity * (td.capital_at_sale || 0),
+            netSales - Number(td.quantity || 0) * Number(td.capital_at_sale || 0),
         });
-      }
+      });
     }
     return rows;
   }

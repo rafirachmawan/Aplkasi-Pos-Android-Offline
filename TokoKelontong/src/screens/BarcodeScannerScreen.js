@@ -175,11 +175,13 @@ const BarcodeScannerScreen = ({ navigation, route }) => {
         if (isSingleDoneRef.current) return;
         isSingleDoneRef.current = true;
         setScanned(true);
-        if (onBarcodeScanned) {
-          onBarcodeScanned(code);
-        }
         if (autoClose) {
           navigation.goBack();
+        }
+        if (onBarcodeScanned) {
+          Promise.resolve(onBarcodeScanned(code)).catch((err) => {
+            console.warn("onBarcodeScanned error:", err?.message || err);
+          });
         }
         return;
       }

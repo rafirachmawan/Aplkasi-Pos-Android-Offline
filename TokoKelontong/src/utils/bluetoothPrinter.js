@@ -12,6 +12,7 @@ import {
   PRINTER_PAPER_SIZE_KEY,
   normalizePaperSize,
   getPaperSpec,
+  getReceiptPaymentSummary,
 } from "./helpers";
 
 const PRINTER_ADDRESS_KEY = "printerAddress";
@@ -463,12 +464,17 @@ export const printReceiptViaBluetooth = async (tx, details, storeProfile = {}) =
   }
   await printer.setBlob(1);
   await printer.printText(row("TOTAL", rp(tx?.grand_total)) + "\n", TEXT_OPTS);
-  const payMethod = String(tx?.payment_method || "cash").toUpperCase();
-  if (payMethod === "CASH" || payMethod === "TUNAI") {
-    await printer.printText(row("Tunai", rp(tx?.cash_received)) + "\n", TEXT_OPTS);
-    await printer.printText(row("Kembalian", rp(tx?.cash_return)) + "\n", TEXT_OPTS);
+  const payInfo = getReceiptPaymentSummary(tx);
+  if (payInfo.kind === "cash") {
+    await printer.printText(row("Tunai", rp(payInfo.cashReceived)) + "\n", TEXT_OPTS);
+    await printer.printText(row("Kembalian", rp(payInfo.cashReturn)) + "\n", TEXT_OPTS);
+  } else if (payInfo.kind === "kasbon") {
+    await printer.printText(row("Metode", payInfo.methodLabel) + "\n", TEXT_OPTS);
+    await printer.printText(row("DP / Bayar", rp(payInfo.dpAmount)) + "\n", TEXT_OPTS);
+    await printer.printText(row("Sisa Kasbon", rp(payInfo.remainingDebt)) + "\n", TEXT_OPTS);
+    await printer.printText(row("Status", payInfo.statusLabel) + "\n", TEXT_OPTS);
   } else {
-    await printer.printText(row("Metode", payMethod) + "\n", TEXT_OPTS);
+    await printer.printText(row("Metode", payInfo.methodLabel) + "\n", TEXT_OPTS);
     await printer.printText(row("Bayar", rp(tx?.grand_total) + " (Lunas)") + "\n", TEXT_OPTS);
   }
   await printer.printText(dash() + "\n", TEXT_OPTS);

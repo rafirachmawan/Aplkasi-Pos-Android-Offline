@@ -32,6 +32,8 @@ import {
   parseRpInput as parseRpToNumber,
   parseFlexibleDueDate,
   formatDueDateDisplay,
+  getReceiptPaymentSummary,
+  tryOpenWhatsApp,
 } from "../utils/helpers";
 import {
   generateReceiptHTML,
@@ -677,6 +679,19 @@ const KasirScreen = ({ navigation }) => {
       setKasbonNotes("");
       setTableNumber("");
       const currentMethod = paymentMethod;
+      const fallbackPayInfo = getReceiptPaymentSummary({
+        payment_method: currentMethod,
+        grand_total: grandTotal,
+        cash_received: cashReceived,
+        cash_return: kembalian,
+      });
+      const fallbackSummaryText =
+        fallbackPayInfo.kind === "cash"
+          ? `Metode: TUNAI • Kembalian: ${formatRupiah(kembalian)}`
+          : fallbackPayInfo.kind === "kasbon"
+            ? `Metode: KASBON • DP ${formatRupiah(fallbackPayInfo.dpAmount)} • Sisa ${formatRupiah(fallbackPayInfo.remainingDebt)} (${fallbackPayInfo.statusLabel})`
+            : `Metode: ${fallbackPayInfo.methodLabel} • Lunas`;
+
       setPaymentMethod("cash");
       dispatch({ type: "CLEAR_CART" });
       refreshSyncCounts();
@@ -697,24 +712,10 @@ const KasirScreen = ({ navigation }) => {
           setLastTx(fullTx);
           setShowSuccessModal(true);
         } else {
-          Alert.alert(
-            "✅ Transaksi Berhasil!",
-            `Metode: ${currentMethod.toUpperCase()}${
-              currentMethod === "cash"
-                ? ` • Kembalian: ${formatRupiah(kembalian)}`
-                : " • Lunas"
-            }`,
-          );
+          Alert.alert("✅ Transaksi Berhasil!", fallbackSummaryText);
         }
       } catch (_) {
-        Alert.alert(
-          "✅ Transaksi Berhasil!",
-          `Metode: ${currentMethod.toUpperCase()}${
-            currentMethod === "cash"
-              ? ` • Kembalian: ${formatRupiah(kembalian)}`
-              : " • Lunas"
-          }`,
-        );
+        Alert.alert("✅ Transaksi Berhasil!", fallbackSummaryText);
       }
 
       // Refresh stok di tampilan. Penjualan lokal sudah mengurangi stok efektif
@@ -791,6 +792,8 @@ const KasirScreen = ({ navigation }) => {
       title: orderTitle,
       cart: [...cart],
       discountInput,
+      paymentMethod,
+      paymentNotes,
       totalHarga,
       grandTotal,
       timestamp: new Date().toISOString(),
@@ -801,6 +804,8 @@ const KasirScreen = ({ navigation }) => {
     setActiveTableOrderId(null);
     setDiscountInput("");
     setCashInput("");
+    setPaymentMethod("cash");
+    setPaymentNotes("");
     setShowCartModal(false);
     Alert.alert(
       "📌 Pesanan Ditahan",
@@ -820,9 +825,13 @@ const KasirScreen = ({ navigation }) => {
           });
         }
       });
-      if (order.discountInput) {
-        setDiscountInput(order.discountInput);
-      }
+      setDiscountInput(order.discountInput || "");
+      setCashInput("");
+      setPaymentNotes(order.paymentNotes || "");
+      const savedMethod = order.paymentMethod || "cash";
+      setPaymentMethod(
+        savedMethod === "kasbon" && !plan.isPro ? "cash" : savedMethod,
+      );
       const updated = heldOrders.filter((o) => o.id !== order.id);
       saveHeldOrders(updated);
       setShowHeldOrdersModal(false);
@@ -910,20 +919,21 @@ const KasirScreen = ({ navigation }) => {
       const storeProfile = await getStoreProfile();
       const waText = generateWAMessage(lastTx, lastTxDetails, storeProfile);
       const waUrl = `whatsapp://send?text=${encodeURIComponent(waText)}`;
-      const canOpenWA = await Linking.canOpenURL(waUrl);
-      if (canOpenWA) {
-        await Linking.openURL(waUrl);
-      } else {
-        const html = generateReceiptHTML(lastTx, lastTxDetails, storeProfile);
-        const { uri } = await Print.printToFileAsync({ html });
-        const canShare = await Sharing.isAvailableAsync();
-        if (canShare) {
-          await Sharing.shareAsync(uri, {
-            mimeType: "application/pdf",
-            dialogTitle: "Kirim Nota via...",
-          });
-        }
-      }
+      await tryOpenWhatsApp({
+        openUrl: (u) => Linking.openURL(u),
+        whatsappUrl: waUrl,
+        onUnavailable: async () => {
+          const html = generateReceiptHTML(lastTx, lastTxDetails, storeProfile);
+          const { uri } = await Print.printToFileAsync({ html });
+          const canShare = await Sharing.isAvailableAsync();
+          if (canShare) {
+            await Sharing.shareAsync(uri, {
+              mimeType: "application/pdf",
+              dialogTitle: "Kirim Nota via...",
+            });
+          }
+        },
+      });
     } catch (e) {
       Alert.alert("Error", "Gagal kirim: " + e.message);
     } finally {
@@ -2210,9 +2220,21 @@ const KasirScreen = ({ navigation }) => {
         transparent
         animationType="fade"
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         onRequestClose={() => setShowSuccessModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              paddingTop: Math.max(insets.top, 20),
+              paddingBottom:
+                Platform.OS === "android"
+                  ? Math.max(insets.bottom, 36)
+                  : Math.max(insets.bottom, 16),
+            },
+          ]}
+        >
           <View
             style={[styles.successModal, { padding: 0, overflow: "hidden" }]}
           >
@@ -2329,44 +2351,98 @@ const KasirScreen = ({ navigation }) => {
                     {formatRupiah(lastTx?.grand_total || 0)}
                   </Text>
                 </View>
-                {(!lastTx?.payment_method ||
-                lastTx.payment_method === "cash" ||
-                lastTx.payment_method === "tunai") ? (
-                  <>
-                    <View style={styles.receiptMetaRow}>
-                      <Text style={styles.receiptMeta}>Tunai</Text>
-                      <Text style={styles.receiptMeta}>
-                        {formatRupiah(lastTx?.cash_received || 0)}
-                      </Text>
-                    </View>
-                    <View style={styles.receiptMetaRow}>
-                      <Text style={styles.receiptMeta}>Kembalian</Text>
-                      <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                        {formatRupiah(lastTx?.cash_return || 0)}
-                      </Text>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.receiptMetaRow}>
-                      <Text style={styles.receiptMeta}>Metode Pembayaran</Text>
-                      <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                        {lastTx.payment_method.toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.receiptMetaRow}>
-                      <Text style={styles.receiptMeta}>Status</Text>
-                      <Text
-                        style={[
-                          styles.receiptMeta,
-                          { fontWeight: "bold", color: colors.successText },
-                        ]}
-                      >
-                        LUNAS
-                      </Text>
-                    </View>
-                  </>
-                )}
+                {(() => {
+                  const payInfo = getReceiptPaymentSummary(lastTx);
+                  if (payInfo.kind === "cash") {
+                    return (
+                      <>
+                        <View style={styles.receiptMetaRow}>
+                          <Text style={styles.receiptMeta}>Tunai</Text>
+                          <Text style={styles.receiptMeta}>
+                            {formatRupiah(payInfo.cashReceived)}
+                          </Text>
+                        </View>
+                        <View style={styles.receiptMetaRow}>
+                          <Text style={styles.receiptMeta}>Kembalian</Text>
+                          <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
+                            {formatRupiah(payInfo.cashReturn)}
+                          </Text>
+                        </View>
+                      </>
+                    );
+                  }
+                  if (payInfo.kind === "kasbon") {
+                    return (
+                      <>
+                        <View style={styles.receiptMetaRow}>
+                          <Text style={styles.receiptMeta}>Metode Pembayaran</Text>
+                          <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
+                            {payInfo.methodLabel}
+                          </Text>
+                        </View>
+                        <View style={styles.receiptMetaRow}>
+                          <Text style={styles.receiptMeta}>DP / Dibayar</Text>
+                          <Text style={styles.receiptMeta}>
+                            {formatRupiah(payInfo.dpAmount)}
+                          </Text>
+                        </View>
+                        <View style={styles.receiptMetaRow}>
+                          <Text style={styles.receiptMeta}>Sisa Kasbon</Text>
+                          <Text
+                            style={[
+                              styles.receiptMeta,
+                              {
+                                fontWeight: "bold",
+                                color: payInfo.isPaidOff
+                                  ? colors.successText
+                                  : colors.errorDark,
+                              },
+                            ]}
+                          >
+                            {formatRupiah(payInfo.remainingDebt)}
+                          </Text>
+                        </View>
+                        <View style={styles.receiptMetaRow}>
+                          <Text style={styles.receiptMeta}>Status</Text>
+                          <Text
+                            style={[
+                              styles.receiptMeta,
+                              {
+                                fontWeight: "bold",
+                                color: payInfo.isPaidOff
+                                  ? colors.successText
+                                  : colors.errorDark,
+                              },
+                            ]}
+                          >
+                            {payInfo.statusLabel}
+                          </Text>
+                        </View>
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMeta}>Metode Pembayaran</Text>
+                        <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
+                          {payInfo.methodLabel}
+                        </Text>
+                      </View>
+                      <View style={styles.receiptMetaRow}>
+                        <Text style={styles.receiptMeta}>Status</Text>
+                        <Text
+                          style={[
+                            styles.receiptMeta,
+                            { fontWeight: "bold", color: colors.successText },
+                          ]}
+                        >
+                          {payInfo.statusLabel}
+                        </Text>
+                      </View>
+                    </>
+                  );
+                })()}
 
                 <View style={styles.receiptDash} />
 
@@ -2473,6 +2549,7 @@ const KasirScreen = ({ navigation }) => {
         visible={showHeldOrdersModal}
         transparent
         statusBarTranslucent={true}
+        navigationBarTranslucent={true}
         animationType="fade"
         onRequestClose={() => setShowHeldOrdersModal(false)}
       >
