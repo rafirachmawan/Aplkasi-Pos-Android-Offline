@@ -325,16 +325,16 @@ export default function AuthScreen() {
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <Text style={styles.submitText}>
-                  {mode === "login" ? "Masuk ke Kasir" : "Buat Akun Toko"}
+                  {mode === "login" ? "Masuk" : "Buat Akun Toko"}
                 </Text>
               )}
             </TouchableOpacity>
 
-            <Text style={styles.hint}>
-              {mode === "login"
-                ? "Satu akun toko dapat digunakan bersama di seluruh perangkat kasir Anda."
-                : "Pendaftaran awal memerlukan koneksi internet. Transaksi kasir tetap berjalan penuh saat offline."}
-            </Text>
+            {mode === "register" && (
+              <Text style={styles.hint}>
+                Pendaftaran awal memerlukan koneksi internet. Transaksi kasir tetap berjalan penuh saat offline.
+              </Text>
+            )}
           </View>
 
           <Text style={styles.footer}>MarketPos — Point of Sale</Text>

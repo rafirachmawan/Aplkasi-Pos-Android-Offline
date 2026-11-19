@@ -36,7 +36,6 @@ export function createAppUpdateManager({
   let nativeRestarting = false;
   let availableUpdateId = null;
   let updateCreatedAt = null;
-  let dismissedUpdateId = null;
   let lastCheckedAt = 0;
   let lastError = null;
 
@@ -58,10 +57,6 @@ export function createAppUpdateManager({
     const isReadyToInstall = Boolean(
       isSupported && (nativePending || manualReadyToInstall),
     );
-    const activeUpdateKey = availableUpdateId || "__pending__";
-    const isDismissedForSession = Boolean(
-      dismissedUpdateId && dismissedUpdateId === activeUpdateKey,
-    );
 
     return {
       isSupported,
@@ -69,7 +64,7 @@ export function createAppUpdateManager({
       isUpdating: Boolean(isUpdating || nativeDownloading || nativeRestarting),
       hasUpdate,
       isReadyToInstall,
-      shouldShowBanner: hasUpdate && !isDismissedForSession,
+      shouldShowBanner: hasUpdate,
       availableUpdateId,
       updateCreatedAt,
       error: lastError,
@@ -249,12 +244,6 @@ export function createAppUpdateManager({
     return inFlightApply;
   };
 
-  const dismissBannerForSession = () => {
-    const snap = getSnapshot();
-    dismissedUpdateId = snap.availableUpdateId || "__pending__";
-    notify();
-  };
-
   const startMonitor = () => {
     monitorRefCount += 1;
     if (!isSupported) {
@@ -293,7 +282,6 @@ export function createAppUpdateManager({
     syncFromNativeContext,
     checkForUpdate,
     applyUpdate,
-    dismissBannerForSession,
     startMonitor,
   };
 }
@@ -305,7 +293,6 @@ export const subscribeAppUpdate = defaultManager.subscribe;
 export const syncAppUpdateNativeContext = defaultManager.syncFromNativeContext;
 export const checkForAppUpdate = defaultManager.checkForUpdate;
 export const applyAppUpdate = defaultManager.applyUpdate;
-export const dismissAppUpdateBanner = defaultManager.dismissBannerForSession;
 export const startAppUpdateMonitor = defaultManager.startMonitor;
 
 /**

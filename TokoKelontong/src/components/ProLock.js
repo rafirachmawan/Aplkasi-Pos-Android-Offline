@@ -16,7 +16,11 @@ import {
   SUPPORT_WHATSAPP,
   SUPPORT_NAME,
   UPGRADE_MESSAGE,
+  PRO_PRICE_ORIGINAL,
+  PRO_PRICE_PROMO,
+  PRO_PRICE_PERIOD,
 } from "../config/planConfig";
+import { formatRupiah } from "../utils/helpers";
 import usePlan from "../hooks/usePlan";
 
 /**
@@ -72,16 +76,13 @@ function ProLockCard({ feature, plan, onClose }) {
 
   return (
     <View style={[styles.card, isModal && styles.cardModal]}>
-      <View style={styles.iconCircle}>
+      <View style={styles.proPill}>
         <MaterialCommunityIcons
           name="crown-outline"
-          size={24}
+          size={14}
           color={colors.primaryDark}
         />
-      </View>
-
-      <View style={styles.proPill}>
-        <Text style={styles.proPillText}>FITUR PRO</Text>
+        <Text style={styles.proPillText}>PAKET PRO</Text>
       </View>
 
       <Text style={styles.title}>{meta.title}</Text>
@@ -100,51 +101,60 @@ function ProLockCard({ feature, plan, onClose }) {
         </View>
       ) : null}
 
-      <TouchableOpacity
-        style={styles.upgradeBtn}
-        onPress={() => void openUpgradeChat()}
-        activeOpacity={0.85}
-        disabled={!SUPPORT_WHATSAPP}
-        accessibilityRole="button"
-        accessibilityLabel={
-          SUPPORT_WHATSAPP ? "Upgrade ke Pro via WhatsApp" : "Hubungi pengelola"
-        }
-      >
-        {SUPPORT_WHATSAPP ? (
-          <MaterialCommunityIcons
-            name="whatsapp"
-            size={18}
-            color={colors.onPrimary}
-          />
-        ) : null}
-        <Text style={styles.upgradeText}>
-          {SUPPORT_WHATSAPP ? "Upgrade ke Pro via WhatsApp" : "Hubungi pengelola"}
-        </Text>
-      </TouchableOpacity>
-
-      {SUPPORT_WHATSAPP ? (
+      <View style={styles.priceBox}>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceOriginal}>
+            {formatRupiah(PRO_PRICE_ORIGINAL)}
+          </Text>
+          <View style={styles.pricePromoWrap}>
+            <Text style={styles.pricePromo}>
+              {formatRupiah(PRO_PRICE_PROMO)}
+            </Text>
+            <Text style={styles.pricePeriod}>{PRO_PRICE_PERIOD}</Text>
+          </View>
+        </View>
         <Text style={styles.hint}>
-          {`Pembayaran via WhatsApp ke ${SUPPORT_NAME}. Paket aktif otomatis setelah dikonfirmasi.`}
+          {SUPPORT_WHATSAPP
+            ? `Pembayaran via WhatsApp ${SUPPORT_NAME}. Aktif otomatis setelah konfirmasi.`
+            : "Nomor WhatsApp pengelola belum diatur. Hubungi pengelola MarketPos."}
         </Text>
-      ) : (
-        <Text style={styles.hint}>
-          {
-            "Nomor WhatsApp pengelola belum diatur. Hubungi pengelola MarketPos."
-          }
-        </Text>
-      )}
+      </View>
 
-      {isModal ? (
+      <View style={styles.actionsGroup}>
         <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={onClose}
-          activeOpacity={0.8}
+          style={styles.upgradeBtn}
+          onPress={() => void openUpgradeChat()}
+          activeOpacity={0.85}
+          disabled={!SUPPORT_WHATSAPP}
           accessibilityRole="button"
-          accessibilityLabel="Tutup panel fitur Pro"
+          accessibilityLabel={
+            SUPPORT_WHATSAPP ? "Upgrade via WhatsApp" : "Hubungi pengelola"
+          }
         >
-          <Text style={styles.closeBtnText}>Tutup</Text>
+          {SUPPORT_WHATSAPP ? (
+            <MaterialCommunityIcons
+              name="whatsapp"
+              size={18}
+              color={colors.onPrimary}
+            />
+          ) : null}
+          <Text style={styles.upgradeText}>
+            {SUPPORT_WHATSAPP ? "Upgrade via WhatsApp" : "Hubungi pengelola"}
+          </Text>
         </TouchableOpacity>
-      ) : null}
+
+        {isModal ? (
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={onClose}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Tutup panel fitur Pro"
+          >
+            <Text style={styles.closeBtnText}>Tutup</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -210,10 +220,10 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 24,
+    paddingVertical: 22,
     paddingHorizontal: 20,
     alignItems: "center",
   },
@@ -225,46 +235,38 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: colors.primaryContainer,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
   proPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     backgroundColor: colors.primaryContainer,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     paddingVertical: 4,
     borderRadius: 999,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   proPillText: {
     fontFamily: fonts.bold,
-    fontSize: 12,
-    letterSpacing: 0.6,
+    fontSize: 11.5,
+    letterSpacing: 0.5,
     color: colors.primaryTextDark,
   },
   title: {
-    fontFamily: fonts.bold,
-    fontSize: 18,
-    fontWeight: "800",
+    fontFamily: fonts.extraBold,
+    fontSize: 19,
     color: colors.text,
     textAlign: "center",
   },
   desc: {
     fontFamily: fonts.regular,
-    fontSize: 14,
+    fontSize: 13.5,
     color: colors.textBodySecondary,
     textAlign: "center",
     marginTop: 6,
-    lineHeight: 20,
+    lineHeight: 19,
+    maxWidth: 300,
   },
   expiredTag: {
     flexDirection: "row",
@@ -283,6 +285,58 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.warningTextDark,
   },
+  priceBox: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    backgroundColor: colors.primaryContainer,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 16,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "center",
+    gap: 8,
+  },
+  priceOriginal: {
+    fontFamily: fonts.medium,
+    fontSize: 13.5,
+    color: colors.textSecondary,
+    textDecorationLine: "line-through",
+  },
+  pricePromoWrap: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 2,
+  },
+  pricePromo: {
+    fontFamily: fonts.extraBold,
+    fontSize: 22,
+    color: colors.primaryDark,
+    letterSpacing: -0.3,
+  },
+  pricePeriod: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12.5,
+    color: colors.primaryTextDark,
+  },
+  hint: {
+    fontFamily: fonts.regular,
+    fontSize: 11.5,
+    color: colors.primaryTextDark,
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 16,
+  },
+  actionsGroup: {
+    alignSelf: "stretch",
+    marginTop: 18,
+    gap: 10,
+  },
   upgradeBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -293,7 +347,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 13,
     paddingHorizontal: 20,
-    marginTop: 20,
     alignSelf: "stretch",
     ...Platform.select({
       android: { elevation: 2 },
@@ -305,14 +358,6 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     color: colors.onPrimary,
   },
-  hint: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginTop: 10,
-    lineHeight: 18,
-  },
 
   // ── Varian modal (dipakai di dalam layar read-only) ──
   modalOverlay: {
@@ -323,11 +368,10 @@ const styles = StyleSheet.create({
   },
   modalInner: {
     width: "100%",
-    maxWidth: 380,
+    maxWidth: 360,
     alignSelf: "center",
   },
   closeBtn: {
-    marginTop: 14,
     minHeight: 44,
     alignSelf: "stretch",
     alignItems: "center",

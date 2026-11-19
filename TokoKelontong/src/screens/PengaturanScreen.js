@@ -42,7 +42,13 @@ import {
 import { getDeviceId } from "../services/licenseService";
 import usePlan from "../hooks/usePlan";
 import { openUpgradeChat, ProLockModal } from "../components/ProLock";
-import { SUPPORT_WHATSAPP } from "../config/planConfig";
+import {
+  SUPPORT_WHATSAPP,
+  PRO_PRICE_ORIGINAL,
+  PRO_PRICE_PROMO,
+  PRO_PRICE_PERIOD,
+} from "../config/planConfig";
+import { formatRupiah } from "../utils/helpers";
 import { refreshPlan } from "../services/planService";
 import { getOfflineQueueCount } from "../utils/offlineQueue";
 import { refreshSyncCounts } from "../services/syncService";
@@ -1509,10 +1515,26 @@ const PengaturanScreen = ({ navigation }) => {
             </View>
           </View>
         ) : (
-          <Text style={styles.planFreeHint}>
-            Jualan, struk, dan sinkronisasi tetap berjalan normal. Beberapa
-            fitur manajemen terkunci pada paket Gratis.
-          </Text>
+          <>
+            <Text style={styles.planFreeHint}>
+              Jualan, struk, dan sinkronisasi tetap berjalan normal. Beberapa
+              fitur manajemen terkunci pada paket Gratis.
+            </Text>
+            <View style={styles.planPriceBox}>
+              <Text style={styles.planPriceLabel}>Upgrade Paket Pro</Text>
+              <View style={styles.planPriceRow}>
+                <Text style={styles.planPriceOriginal}>
+                  {formatRupiah(PRO_PRICE_ORIGINAL)}
+                </Text>
+                <View style={styles.planPricePromoWrap}>
+                  <Text style={styles.planPricePromo}>
+                    {formatRupiah(PRO_PRICE_PROMO)}
+                  </Text>
+                  <Text style={styles.planPricePeriod}>{PRO_PRICE_PERIOD}</Text>
+                </View>
+              </View>
+            </View>
+          </>
         )}
 
         <View style={styles.deviceIdBox}>
@@ -3367,6 +3389,51 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingHorizontal: 14,
     marginTop: 10,
+  },
+  planPriceBox: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    backgroundColor: colors.primaryContainer,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  planPriceLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12.5,
+    color: colors.primaryTextDark,
+  },
+  planPriceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+  },
+  planPriceOriginal: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+    textDecorationLine: "line-through",
+  },
+  planPricePromoWrap: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 2,
+  },
+  planPricePromo: {
+    fontFamily: fonts.extraBold,
+    fontSize: 16,
+    color: colors.primaryDark,
+  },
+  planPricePeriod: {
+    fontFamily: fonts.semiBold,
+    fontSize: 11.5,
+    color: colors.primaryTextDark,
   },
   deviceIdBox: {
     marginHorizontal: 14,

@@ -10,6 +10,11 @@ export const SUPPORT_WHATSAPP = "6285196221716";
 // Nama yang tampil di pesan WhatsApp.
 export const SUPPORT_NAME = "MarketPos";
 
+// Harga resmi paket Pro (dipakai konsisten di ProLock & Pengaturan).
+export const PRO_PRICE_ORIGINAL = 50000;
+export const PRO_PRICE_PROMO = 25000;
+export const PRO_PRICE_PERIOD = "/bulan";
+
 /**
  * Fitur yang dikunci di tier Gratis.
  * Setiap kunci punya judul + penjelasan singkat yang tampil di panel ProLock.

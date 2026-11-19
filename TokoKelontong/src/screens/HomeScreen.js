@@ -348,78 +348,64 @@ const HomeScreen = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ─── Badge Card Pemberitahuan Update OTA (EAS Update) ─── */}
+        {/* ─── Card Pemberitahuan Update OTA (Tetap Muncul Sampai Diperbarui) ─── */}
         {appUpdate.shouldShowBanner && (
           <View style={styles.updateAlertCard}>
-            <View style={styles.updateCardTopRow}>
-              <View style={styles.updateStatusBadge}>
-                <MaterialCommunityIcons
-                  name={
-                    appUpdate.isReadyToInstall
-                      ? "check-decagram-outline"
-                      : "cloud-download-outline"
-                  }
-                  size={13}
-                  color={colors.infoBadgeText}
-                />
-                <Text style={styles.updateStatusBadgeText}>
-                  {appUpdate.isReadyToInstall
-                    ? "SIAP DIPASANG"
-                    : "UPDATE TERSEDIA"}
-                </Text>
-              </View>
-              {!appUpdate.isUpdating && (
-                <TouchableOpacity
-                  onPress={appUpdate.dismissBanner}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Tutup pemberitahuan update sementara"
-                >
-                  <Text style={styles.updateDismissText}>Nanti</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.updateCardBodyRow}>
-              <View style={styles.updateCardTextCol}>
-                <Text style={styles.updateCardTitle}>
-                  {appUpdate.isReadyToInstall
-                    ? "Pembaruan Siap Dipasang"
-                    : "Versi Baru Aplikasi Tersedia"}
-                </Text>
-                <Text style={styles.updateCardSub}>
-                  {appUpdate.isUpdating
-                    ? "Sedang mengunduh & menyiapkan pembaruan..."
-                    : appUpdate.isReadyToInstall
-                      ? "Pembaruan sudah terunduh. Muat ulang sebentar agar fitur & perbaikan terbaru aktif."
-                      : "Pembaruan terbaru sudah dirilis. Perbarui sekarang tanpa install ulang APK."}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.updateActionBtn,
-                  appUpdate.isUpdating && { opacity: 0.75 },
-                ]}
-                onPress={appUpdate.promptApplyUpdate}
-                disabled={appUpdate.isUpdating}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={
+            <View style={styles.updateIconWrap}>
+              <MaterialCommunityIcons
+                name={
                   appUpdate.isReadyToInstall
-                    ? "Pasang pembaruan aplikasi sekarang"
-                    : "Update aplikasi sekarang"
+                    ? "check-decagram-outline"
+                    : "cloud-download-outline"
                 }
-              >
-                {appUpdate.isUpdating ? (
-                  <ActivityIndicator size="small" color={colors.onPrimary} />
-                ) : (
-                  <Text style={styles.updateActionBtnText}>
-                    {appUpdate.isReadyToInstall ? "Pasang" : "Update"}
-                  </Text>
-                )}
-              </TouchableOpacity>
+                size={20}
+                color={colors.infoBadgeText}
+              />
             </View>
+
+            <View style={styles.updateCardTextCol}>
+              <View style={styles.updateTitleRow}>
+                <Text style={styles.updateCardTitle} numberOfLines={1}>
+                  {appUpdate.isReadyToInstall
+                    ? "Update Siap Dipasang"
+                    : "Update Tersedia"}
+                </Text>
+                <View style={styles.updateStatusBadge}>
+                  <Text style={styles.updateStatusBadgeText}>BARU</Text>
+                </View>
+              </View>
+              <Text style={styles.updateCardSub} numberOfLines={2}>
+                {appUpdate.isUpdating
+                  ? "Sedang mengunduh & menyiapkan pembaruan..."
+                  : appUpdate.isReadyToInstall
+                    ? "Sudah terunduh. Ketuk Pasang untuk memuat ulang."
+                    : "Perbaikan & fitur terbaru siap dipasang."}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.updateActionBtn,
+                appUpdate.isUpdating && { opacity: 0.75 },
+              ]}
+              onPress={appUpdate.promptApplyUpdate}
+              disabled={appUpdate.isUpdating}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={
+                appUpdate.isReadyToInstall
+                  ? "Pasang pembaruan aplikasi sekarang"
+                  : "Update aplikasi sekarang"
+              }
+            >
+              {appUpdate.isUpdating ? (
+                <ActivityIndicator size="small" color={colors.onPrimary} />
+              ) : (
+                <Text style={styles.updateActionBtnText}>
+                  {appUpdate.isReadyToInstall ? "Pasang" : "Update"}
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1260,53 +1246,52 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
   },
 
-  // ── Badge Notification Card Update OTA ──
+  // ── Card Pemberitahuan Update OTA (Clean & Selalu Tampil Sampai Diperbarui) ──
   updateAlertCard: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.infoContainer,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.infoBorder,
-    padding: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
     marginBottom: 16,
-    gap: 10,
-  },
-  updateCardTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  updateStatusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: colors.infoBadgeBg,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  updateStatusBadgeText: {
-    fontFamily: fonts.bold,
-    fontSize: 10.5,
-    color: colors.infoBadgeText,
-    letterSpacing: 0.4,
-  },
-  updateDismissText: {
-    fontFamily: fonts.semiBold,
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  updateCardBodyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     gap: 12,
+  },
+  updateIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.infoBadgeBg,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   updateCardTextCol: {
     flex: 1,
+    minWidth: 0,
+  },
+  updateTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  updateStatusBadge: {
+    backgroundColor: colors.infoBadgeBg,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  updateStatusBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: colors.infoBadgeText,
+    letterSpacing: 0.3,
   },
   updateCardTitle: {
     fontFamily: fonts.bold,
-    fontSize: 14,
+    fontSize: 13.5,
     color: colors.text,
   },
   updateCardSub: {
@@ -1314,17 +1299,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.infoText,
     marginTop: 2,
-    lineHeight: 17,
+    lineHeight: 16,
   },
   updateActionBtn: {
     backgroundColor: colors.info,
-    minHeight: 40,
-    minWidth: 82,
+    minHeight: 38,
+    minWidth: 74,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 8,
     borderRadius: 10,
+    flexShrink: 0,
   },
   updateActionBtnText: {
     fontFamily: fonts.bold,
