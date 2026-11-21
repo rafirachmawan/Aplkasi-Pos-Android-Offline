@@ -12,14 +12,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Linking,
   Image,
   Dimensions,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppContext } from "../context/AppContext";
@@ -33,12 +31,9 @@ import {
   parseFlexibleDueDate,
   formatDueDateDisplay,
   getReceiptPaymentSummary,
-  tryOpenWhatsApp,
 } from "../utils/helpers";
 import {
   generateReceiptHTML,
-  generateWAMessage,
-  generateKitchenWAMessage,
   generateKitchenReceiptHTML,
   resolveReceiptProfile,
 } from "../utils/receiptGenerator";
@@ -54,6 +49,9 @@ import { colors, fonts } from "../theme/colors";
 import ConnectionStatusPill from "../components/ConnectionStatusPill";
 import usePlan from "../hooks/usePlan";
 import { ProLockModal } from "../components/ProLock";
+import ReceiptPreviewCard, {
+  resolvePreviewPaperSize,
+} from "../components/ReceiptPreviewCard";
 import { useAuth } from "../context/AuthContext";
 import {
   getScopedStoreProfile,
@@ -541,17 +539,6 @@ const KasirScreen = ({ navigation }) => {
   const kembalian =
     paymentMethod === "kasbon" || isNonCash ? 0 : cashReceived - grandTotal;
 
-  // Tanggal/waktu transaksi untuk pratinjau nota
-  const receiptDateStr = lastTx
-    ? new Date(lastTx.created_at).toLocaleString("id-ID", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "";
-
   const handleBayar = async () => {
     // Kunci ganda: cegah ketukan cepat menghasilkan dua transaksi.
     if (submitting) return;
@@ -772,15 +759,6 @@ const KasirScreen = ({ navigation }) => {
     }
   };
 
-  const handleShareKitchenWA = () => {
-    if (!lastTx) return;
-    const msg = generateKitchenWAMessage(lastTx, lastTxDetails, storeProfile);
-    const url = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-    Linking.openURL(url).catch(() => {
-      Alert.alert("WhatsApp Tidak Terpasang", "Aplikasi WhatsApp tidak ditemukan di perangkat ini.");
-    });
-  };
-
   const handleHoldOrder = () => {
     if (cart.length === 0) {
       Alert.alert("Keranjang Kosong", "Tidak ada barang untuk ditahan.");
@@ -907,35 +885,6 @@ const KasirScreen = ({ navigation }) => {
         "Gagal Cetak",
         e.message || "Terjadi kesalahan saat mencetak ke printer.",
       );
-    } finally {
-      setIsLoadingReceipt(false);
-    }
-  };
-
-  const handleShareFromKasir = async () => {
-    if (Platform.OS === "web" || !lastTx) return;
-    setIsLoadingReceipt(true);
-    try {
-      const storeProfile = await getStoreProfile();
-      const waText = generateWAMessage(lastTx, lastTxDetails, storeProfile);
-      const waUrl = `whatsapp://send?text=${encodeURIComponent(waText)}`;
-      await tryOpenWhatsApp({
-        openUrl: (u) => Linking.openURL(u),
-        whatsappUrl: waUrl,
-        onUnavailable: async () => {
-          const html = generateReceiptHTML(lastTx, lastTxDetails, storeProfile);
-          const { uri } = await Print.printToFileAsync({ html });
-          const canShare = await Sharing.isAvailableAsync();
-          if (canShare) {
-            await Sharing.shareAsync(uri, {
-              mimeType: "application/pdf",
-              dialogTitle: "Kirim Nota via...",
-            });
-          }
-        },
-      });
-    } catch (e) {
-      Alert.alert("Error", "Gagal kirim: " + e.message);
     } finally {
       setIsLoadingReceipt(false);
     }
@@ -2236,309 +2185,124 @@ const KasirScreen = ({ navigation }) => {
           ]}
         >
           <View
-            style={[styles.successModal, { padding: 0, overflow: "hidden" }]}
+            style={[
+              styles.successModal,
+              {
+                padding: 0,
+                overflow: "hidden",
+                maxWidth:
+                  resolvePreviewPaperSize(storeProfile?.paperSize) === "a4"
+                    ? 420
+                    : resolvePreviewPaperSize(storeProfile?.paperSize) ===
+                        "80mm"
+                      ? 380
+                      : 344,
+              },
+            ]}
           >
-            <View
-              style={{
-                backgroundColor: lastTx?.is_offline ? colors.warningText : colors.primary,
-                paddingVertical: 14,
-                alignItems: "center",
-              }}
-            >
-              <MaterialCommunityIcons
-                name={lastTx?.is_offline ? "cloud-off-outline" : "check-circle"}
-                size={36}
-                color={colors.onPrimary}
-              />
-              <Text
-                style={[
-                  styles.successTitle,
-                  { color: colors.onPrimary, marginTop: 6, fontSize: 18 },
-                ]}
-              >
-                {lastTx?.is_offline ? "Disimpan Offline!" : "Transaksi Berhasil!"}
-              </Text>
-              {lastTx?.is_offline && (
-                <Text
-                  style={{
-                    color: colors.warningTextMuted,
-                    fontSize: 12,
-                    fontFamily: fonts.medium,
-                    marginTop: 2,
-                  }}
-                >
-                  Tersimpan di antrean lokal & siap dicetak
-                </Text>
-              )}
-            </View>
-
             <ScrollView
-              style={{ maxHeight: 400 }}
-              contentContainerStyle={{ padding: 16, paddingBottom: 16 }}
+              style={{ maxHeight: 480, backgroundColor: colors.surface }}
+              contentContainerStyle={{ padding: 0 }}
             >
-              {/* ── Pratinjau Nota (format struk termal) ── */}
-              <View style={styles.receiptPaper}>
-                <Text style={styles.receiptStoreName}>
-                  {storeProfile.storeName || "MarketPos"}
-                </Text>
-                {!!storeProfile.storeAddress && (
-                  <Text style={styles.receiptMetaCenter}>
-                    {storeProfile.storeAddress}
-                  </Text>
-                )}
-                {!!storeProfile.storeContact && (
-                  <Text style={styles.receiptMetaCenter}>
-                    Telp: {storeProfile.storeContact}
-                  </Text>
-                )}
-
-                <View style={styles.receiptDash} />
-
-                <View style={styles.receiptMetaRow}>
-                  <Text style={styles.receiptMeta}>
-                    No : {lastTx?.invoice_number}
-                  </Text>
-                  <Text style={styles.receiptMeta}>{receiptDateStr}</Text>
-                </View>
-                {!!(lastTx?.table_number || (lastTx?.order_type && lastTx?.order_type !== "retail")) && (
-                  <View style={styles.receiptMetaRow}>
-                    <Text style={styles.receiptMeta}>
-                      Meja : {lastTx?.table_number || "-"}
-                    </Text>
-                    <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                      {lastTx?.order_type === "dine_in" ? "Dine In" : "Take Away"}
+              {/* ── Pratinjau Nota (1 kertas nota bersih + pill status halus di layar modal) ── */}
+              <ReceiptPreviewCard
+                tx={lastTx}
+                details={lastTxDetails}
+                storeProfile={storeProfile}
+                paymentSummary={
+                  lastTx ? getReceiptPaymentSummary(lastTx) : undefined
+                }
+                seamless
+                headerSlot={
+                  <View style={styles.successStatusPill}>
+                    <MaterialCommunityIcons
+                      name="check-circle"
+                      size={15}
+                      color={colors.successText}
+                    />
+                    <Text style={styles.successStatusText}>
+                      Pembayaran Berhasil
                     </Text>
                   </View>
-                )}
-
-                <View style={styles.receiptDash} />
-
-                {lastTxDetails.map((item, index) => (
-                  <View key={index} style={styles.receiptItem}>
-                    <Text style={styles.receiptItemName}>
-                      {item.product_name}
-                    </Text>
-                    <View style={styles.receiptMetaRow}>
-                      <Text style={styles.receiptMeta}>
-                        {item.quantity} x {formatRupiah(item.price_at_sale)}
-                      </Text>
-                      <Text style={styles.receiptItemTotal}>
-                        {formatRupiah(item.quantity * item.price_at_sale)}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-
-                <View style={styles.receiptDash} />
-
-                <View style={styles.receiptMetaRow}>
-                  <Text style={styles.receiptMeta}>Subtotal</Text>
-                  <Text style={styles.receiptMeta}>
-                    {formatRupiah(lastTx?.total_price || 0)}
-                  </Text>
-                </View>
-                {lastTx?.discount_amount > 0 && (
-                  <View style={styles.receiptMetaRow}>
-                    <Text style={styles.receiptMeta}>Diskon</Text>
-                    <Text style={[styles.receiptMeta, { color: colors.errorDark }]}>
-                      -{formatRupiah(lastTx.discount_amount)}
-                    </Text>
-                  </View>
-                )}
-                <View style={[styles.receiptMetaRow, { marginTop: 6 }]}>
-                  <Text style={styles.receiptTotalLabel}>TOTAL</Text>
-                  <Text style={styles.receiptTotalValue}>
-                    {formatRupiah(lastTx?.grand_total || 0)}
-                  </Text>
-                </View>
-                {(() => {
-                  const payInfo = getReceiptPaymentSummary(lastTx);
-                  if (payInfo.kind === "cash") {
-                    return (
-                      <>
-                        <View style={styles.receiptMetaRow}>
-                          <Text style={styles.receiptMeta}>Tunai</Text>
-                          <Text style={styles.receiptMeta}>
-                            {formatRupiah(payInfo.cashReceived)}
-                          </Text>
-                        </View>
-                        <View style={styles.receiptMetaRow}>
-                          <Text style={styles.receiptMeta}>Kembalian</Text>
-                          <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                            {formatRupiah(payInfo.cashReturn)}
-                          </Text>
-                        </View>
-                      </>
-                    );
-                  }
-                  if (payInfo.kind === "kasbon") {
-                    return (
-                      <>
-                        <View style={styles.receiptMetaRow}>
-                          <Text style={styles.receiptMeta}>Metode Pembayaran</Text>
-                          <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                            {payInfo.methodLabel}
-                          </Text>
-                        </View>
-                        <View style={styles.receiptMetaRow}>
-                          <Text style={styles.receiptMeta}>DP / Dibayar</Text>
-                          <Text style={styles.receiptMeta}>
-                            {formatRupiah(payInfo.dpAmount)}
-                          </Text>
-                        </View>
-                        <View style={styles.receiptMetaRow}>
-                          <Text style={styles.receiptMeta}>Sisa Kasbon</Text>
-                          <Text
-                            style={[
-                              styles.receiptMeta,
-                              {
-                                fontWeight: "bold",
-                                color: payInfo.isPaidOff
-                                  ? colors.successText
-                                  : colors.errorDark,
-                              },
-                            ]}
-                          >
-                            {formatRupiah(payInfo.remainingDebt)}
-                          </Text>
-                        </View>
-                        <View style={styles.receiptMetaRow}>
-                          <Text style={styles.receiptMeta}>Status</Text>
-                          <Text
-                            style={[
-                              styles.receiptMeta,
-                              {
-                                fontWeight: "bold",
-                                color: payInfo.isPaidOff
-                                  ? colors.successText
-                                  : colors.errorDark,
-                              },
-                            ]}
-                          >
-                            {payInfo.statusLabel}
-                          </Text>
-                        </View>
-                      </>
-                    );
-                  }
-                  return (
-                    <>
-                      <View style={styles.receiptMetaRow}>
-                        <Text style={styles.receiptMeta}>Metode Pembayaran</Text>
-                        <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                          {payInfo.methodLabel}
-                        </Text>
-                      </View>
-                      <View style={styles.receiptMetaRow}>
-                        <Text style={styles.receiptMeta}>Status</Text>
-                        <Text
-                          style={[
-                            styles.receiptMeta,
-                            { fontWeight: "bold", color: colors.successText },
-                          ]}
-                        >
-                          {payInfo.statusLabel}
-                        </Text>
-                      </View>
-                    </>
-                  );
-                })()}
-
-                <View style={styles.receiptDash} />
-
-                <Text style={styles.receiptFooter}>
-                  {storeProfile.footerMessage ||
-                    "Terima kasih telah berbelanja!"}
-                </Text>
-              </View>
+                }
+              />
             </ScrollView>
 
             <View style={styles.successActionsWrap}>
               {isLoadingReceipt ? (
                 <ActivityIndicator
                   size="large"
-                  color={colors.primary}
-                  style={{ marginVertical: 12 }}
+                  color={colors.primaryDark}
+                  style={{ marginVertical: 14 }}
                 />
               ) : (
-                <View style={styles.successActions}>
-                  <TouchableOpacity
-                    style={styles.successBtn}
-                    onPress={handlePrintFromKasir}
-                  >
-                    <MaterialCommunityIcons
-                      name="printer"
-                      size={20}
-                      color={colors.onPrimary}
-                    />
-                    <Text style={styles.successBtnText}>Cetak</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.successBtn, { backgroundColor: colors.successButtonDark }]}
-                    onPress={handleShareFromKasir}
-                  >
-                    <MaterialCommunityIcons
-                      name="whatsapp"
-                      size={20}
-                      color={colors.onPrimary}
-                    />
-                    <Text style={styles.successBtnText}>Kirim WA</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+                <>
+                  {btPrinterReady && Platform.OS === "android" && (
+                    <TouchableOpacity
+                      style={styles.successBtBtn}
+                      onPress={handlePrintBluetooth}
+                      activeOpacity={0.88}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cetak langsung ke printer Bluetooth"
+                    >
+                      <MaterialCommunityIcons
+                        name="bluetooth"
+                        size={19}
+                        color={colors.onPrimary}
+                      />
+                      <Text style={styles.successBtnText}>
+                        Cetak Langsung (Printer Bluetooth)
+                      </Text>
+                    </TouchableOpacity>
+                  )}
 
-              {btPrinterReady && Platform.OS === "android" && (
-                <TouchableOpacity
-                  style={[
-                    styles.successBtn,
-                    { backgroundColor: colors.text, marginTop: 10 },
-                  ]}
-                  onPress={handlePrintBluetooth}
-                >
-                  <MaterialCommunityIcons
-                    name="bluetooth"
-                    size={20}
-                    color={colors.onPrimary}
-                  />
-                  <Text style={styles.successBtnText}>
-                    Cetak Langsung (Printer Bluetooth)
-                  </Text>
-                </TouchableOpacity>
-              )}
+                  <View style={styles.successActions}>
+                    <TouchableOpacity
+                      style={styles.successClose}
+                      onPress={() => setShowSuccessModal(false)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel="Tutup nota pembayaran"
+                    >
+                      <Text style={styles.successCloseText}>Tutup</Text>
+                    </TouchableOpacity>
 
-              {isFnbMode && (
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-                  <TouchableOpacity
-                    style={[styles.successBtn, { flex: 1, backgroundColor: colors.warningText }]}
-                    onPress={handlePrintKitchenBluetooth}
-                  >
-                    <MaterialCommunityIcons
-                      name="silverware-fork-knife"
-                      size={18}
-                      color={colors.onPrimary}
-                    />
-                    <Text style={styles.successBtnText}>Struk Dapur</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.successBtn, { flex: 1, backgroundColor: colors.successButtonDark }]}
-                    onPress={handleShareKitchenWA}
-                  >
-                    <MaterialCommunityIcons
-                      name="whatsapp"
-                      size={18}
-                      color={colors.onPrimary}
-                    />
-                    <Text style={styles.successBtnText}>WA Dapur</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+                    <TouchableOpacity
+                      style={styles.successBtn}
+                      onPress={handlePrintFromKasir}
+                      activeOpacity={0.88}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cetak nota transaksi"
+                    >
+                      <MaterialCommunityIcons
+                        name="printer"
+                        size={19}
+                        color={colors.onPrimary}
+                      />
+                      <Text style={styles.successBtnText}>Cetak</Text>
+                    </TouchableOpacity>
+                  </View>
 
-              <TouchableOpacity
-                style={styles.successClose}
-                onPress={() => setShowSuccessModal(false)}
-              >
-                <Text style={styles.successCloseText}>Tutup</Text>
-              </TouchableOpacity>
+                  {isFnbMode && (
+                    <TouchableOpacity
+                      style={styles.successKitchenBtn}
+                      onPress={handlePrintKitchenBluetooth}
+                      activeOpacity={0.88}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cetak struk dapur"
+                    >
+                      <MaterialCommunityIcons
+                        name="silverware-fork-knife"
+                        size={18}
+                        color={colors.warningTextDark}
+                      />
+                      <Text style={styles.successKitchenBtnText}>
+                        Cetak Struk Dapur
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
             </View>
           </View>
         </View>
@@ -3995,127 +3759,105 @@ const styles = StyleSheet.create({
   },
   successModal: {
     backgroundColor: colors.surface,
-    borderRadius: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
     width: "100%",
-    maxWidth: 380,
+    maxWidth: 420,
     alignSelf: "center",
     elevation: 8,
   },
-  successTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 4,
+  successStatusPill: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.successContainer,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  successStatusText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.successText,
+    letterSpacing: 0.2,
   },
   successActions: { flexDirection: "row", gap: 10 },
   successActionsWrap: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     backgroundColor: colors.surfaceMuted,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  successBtn: {
-    flex: 1,
+  successBtBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.primary,
+    backgroundColor: colors.secondary,
+    minHeight: 46,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 10,
+  },
+  successBtn: {
+    flex: 1.4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primaryDark,
+    minHeight: 48,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    gap: 6,
+    gap: 8,
   },
-  successBtnText: { color: colors.onPrimary, fontWeight: "700", fontSize: 14 },
-  successClose: {
-    alignItems: "center",
-    paddingVertical: 10,
-    marginTop: 6,
-  },
-  successCloseText: {
-    color: colors.textSecondary,
+  successBtnText: {
+    fontFamily: fonts.bold,
+    color: colors.onPrimary,
     fontSize: 14,
-    fontWeight: "600",
   },
-
-  // ── Pratinjau Nota (kertas struk termal) ──
-  receiptPaper: {
+  successClose: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 16,
+    borderColor: colors.borderStrong,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
-  receiptStoreName: {
-    fontSize: 15,
-    fontWeight: "800",
-    textAlign: "center",
-    color: colors.text,
-    letterSpacing: 0.5,
-    marginBottom: 2,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  successCloseText: {
+    fontFamily: fonts.semiBold,
+    color: colors.secondary,
+    fontSize: 14,
   },
-  receiptMeta: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: colors.textSecondary,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptMetaCenter: {
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: "center",
-    color: colors.textSecondary,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptMetaRow: {
+  successKitchenBtn: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 4,
+    justifyContent: "center",
+    backgroundColor: colors.warningContainer,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 10,
   },
-  receiptDash: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.receiptDash,
-    borderStyle: "dashed",
-    marginVertical: 10,
-  },
-  receiptItem: {
-    marginBottom: 8,
-  },
-  receiptItemName: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 2,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptItemTotal: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.text,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptTotalLabel: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: colors.text,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptTotalValue: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: colors.text,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptFooter: {
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: "center",
-    color: colors.textSecondary,
-    marginTop: 2,
-    paddingHorizontal: 6,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  successKitchenBtnText: {
+    fontFamily: fonts.bold,
+    color: colors.warningTextDark,
+    fontSize: 13,
   },
 
   // ─── Held Orders & Payment Method Styles ───

@@ -39,6 +39,7 @@ import {
   printReceiptViaBluetooth,
 } from "../utils/bluetoothPrinter";
 import { colors, fonts } from "../theme/colors";
+import ReceiptPreviewCard from "../components/ReceiptPreviewCard";
 import { useAuth } from "../context/AuthContext";
 import {
   getScopedStoreProfile,
@@ -999,186 +1000,24 @@ const LaporanScreen = ({ navigation, route }) => {
             </View>
 
             <ScrollView
-              style={styles.modalBody}
+              style={[
+                styles.modalBody,
+                { padding: 0, backgroundColor: "#FFFFFF" },
+              ]}
+              contentContainerStyle={{ padding: 0 }}
               showsVerticalScrollIndicator={false}
             >
-              {selectedTx && (
-                <View style={styles.receiptPaper}>
-                  <Text style={styles.receiptStoreName}>
-                    {storeProfile.storeName || "MarketPos"}
-                  </Text>
-                  {!!storeProfile.storeAddress && (
-                    <Text style={styles.receiptMetaCenter}>
-                      {storeProfile.storeAddress}
-                    </Text>
-                  )}
-                  {!!storeProfile.storeContact && (
-                    <Text style={styles.receiptMetaCenter}>
-                      Telp: {storeProfile.storeContact}
-                    </Text>
-                  )}
-
-                  <View style={styles.receiptDash} />
-
-                  <View style={styles.receiptMetaRow}>
-                    <Text style={styles.receiptMeta}>
-                      No : {selectedTx.invoice_number}
-                    </Text>
-                    <Text style={styles.receiptMeta}>
-                      {new Date(selectedTx.created_at).toLocaleString("id-ID", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </Text>
-                  </View>
-
-                  <View style={styles.receiptDash} />
-
-                  {txDetails.map((detail, index) => (
-                    <View key={index} style={styles.receiptItem}>
-                      <Text style={styles.receiptItemName}>
-                        {detail.product_name}
-                      </Text>
-                      <View style={styles.receiptMetaRow}>
-                        <Text style={styles.receiptMeta}>
-                          {detail.quantity} x{" "}
-                          {formatRupiah(detail.price_at_sale)}
-                        </Text>
-                        <Text style={styles.receiptItemTotal}>
-                          {formatRupiah(detail.quantity * detail.price_at_sale)}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-
-                  <View style={styles.receiptDash} />
-
-                  <View style={styles.receiptMetaRow}>
-                    <Text style={styles.receiptMeta}>Subtotal</Text>
-                    <Text style={styles.receiptMeta}>
-                      {formatRupiah(selectedTx.total_price)}
-                    </Text>
-                  </View>
-                  {selectedTx.discount_amount > 0 && (
-                    <View style={styles.receiptMetaRow}>
-                      <Text style={styles.receiptMeta}>Diskon</Text>
-                      <Text style={[styles.receiptMeta, { color: "#DC2626" }]}>
-                        -{formatRupiah(selectedTx.discount_amount)}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={[styles.receiptMetaRow, { marginTop: 6 }]}>
-                    <Text style={styles.receiptTotalLabel}>TOTAL</Text>
-                    <Text style={styles.receiptTotalValue}>
-                      {formatRupiah(selectedTx.grand_total)}
-                    </Text>
-                  </View>
-                  {(() => {
-                    const payInfo = getReceiptPaymentSummary(selectedTx);
-                    if (payInfo.kind === "cash") {
-                      return (
-                        <>
-                          <View style={styles.receiptMetaRow}>
-                            <Text style={styles.receiptMeta}>Metode</Text>
-                            <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                              {payInfo.methodLabel}
-                            </Text>
-                          </View>
-                          <View style={styles.receiptMetaRow}>
-                            <Text style={styles.receiptMeta}>Bayar</Text>
-                            <Text style={styles.receiptMeta}>
-                              {formatRupiah(payInfo.cashReceived)}
-                            </Text>
-                          </View>
-                          <View style={styles.receiptMetaRow}>
-                            <Text style={styles.receiptMeta}>Kembalian</Text>
-                            <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                              {formatRupiah(payInfo.cashReturn)}
-                            </Text>
-                          </View>
-                        </>
-                      );
-                    }
-                    if (payInfo.kind === "kasbon") {
-                      return (
-                        <>
-                          <View style={styles.receiptMetaRow}>
-                            <Text style={styles.receiptMeta}>Metode</Text>
-                            <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                              {payInfo.methodLabel}
-                            </Text>
-                          </View>
-                          <View style={styles.receiptMetaRow}>
-                            <Text style={styles.receiptMeta}>DP / Dibayar</Text>
-                            <Text style={styles.receiptMeta}>
-                              {formatRupiah(payInfo.dpAmount)}
-                            </Text>
-                          </View>
-                          <View style={styles.receiptMetaRow}>
-                            <Text style={styles.receiptMeta}>Sisa Kasbon</Text>
-                            <Text
-                              style={[
-                                styles.receiptMeta,
-                                {
-                                  fontWeight: "bold",
-                                  color: payInfo.isPaidOff ? "#059669" : "#DC2626",
-                                },
-                              ]}
-                            >
-                              {formatRupiah(payInfo.remainingDebt)}
-                            </Text>
-                          </View>
-                          <View style={styles.receiptMetaRow}>
-                            <Text style={styles.receiptMeta}>Status</Text>
-                            <Text
-                              style={[
-                                styles.receiptMeta,
-                                {
-                                  fontWeight: "bold",
-                                  color: payInfo.isPaidOff ? "#059669" : "#DC2626",
-                                },
-                              ]}
-                            >
-                              {payInfo.statusLabel}
-                            </Text>
-                          </View>
-                        </>
-                      );
-                    }
-                    return (
-                      <>
-                        <View style={styles.receiptMetaRow}>
-                          <Text style={styles.receiptMeta}>Metode</Text>
-                          <Text style={[styles.receiptMeta, { fontWeight: "bold" }]}>
-                            {payInfo.methodLabel}
-                          </Text>
-                        </View>
-                        <View style={styles.receiptMetaRow}>
-                          <Text style={styles.receiptMeta}>Status</Text>
-                          <Text
-                            style={[
-                              styles.receiptMeta,
-                              { fontWeight: "bold", color: "#059669" },
-                            ]}
-                          >
-                            {payInfo.statusLabel}
-                          </Text>
-                        </View>
-                      </>
-                    );
-                  })()}
-
-                  <View style={styles.receiptDash} />
-
-                  <Text style={styles.receiptFooter}>
-                    {storeProfile.footerMessage ||
-                      "Terima kasih telah berbelanja!"}
-                  </Text>
-                </View>
-              )}
+              <ReceiptPreviewCard
+                tx={selectedTx}
+                details={txDetails}
+                storeProfile={storeProfile}
+                paymentSummary={
+                  selectedTx ? getReceiptPaymentSummary(selectedTx) : undefined
+                }
+                showCashMethodRow
+                cashPaidLabel="Bayar"
+                seamless
+              />
             </ScrollView>
 
             {/* Modal Bottom Actions */}
@@ -1779,83 +1618,6 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     padding: 16,
-  },
-  receiptPaper: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    padding: 16,
-  },
-  receiptStoreName: {
-    fontSize: 14,
-    fontWeight: "800",
-    textAlign: "center",
-    color: "#0F172A",
-    letterSpacing: 0.5,
-    marginBottom: 2,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptMetaCenter: {
-    fontSize: 10,
-    lineHeight: 15,
-    textAlign: "center",
-    color: "#64748B",
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptMetaRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  receiptMeta: {
-    fontSize: 11,
-    lineHeight: 16,
-    color: "#475569",
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptDash: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#CBD5E1",
-    borderStyle: "dashed",
-    marginVertical: 8,
-  },
-  receiptItem: {
-    marginBottom: 6,
-  },
-  receiptItemName: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#0F172A",
-    marginBottom: 2,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptItemTotal: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#0F172A",
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptTotalLabel: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#0F172A",
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptTotalValue: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#0F172A",
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  receiptFooter: {
-    fontSize: 10,
-    lineHeight: 15,
-    textAlign: "center",
-    color: "#94A3B8",
-    marginTop: 4,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
 
   // Modal Actions

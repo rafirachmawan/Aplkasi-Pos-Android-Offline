@@ -830,7 +830,9 @@ const SettingNotaScreen = ({ navigation }) => {
             <View style={styles.receiptDash} />
 
             <View style={styles.receiptMetaRow}>
-              <Text style={styles.receiptMeta}>No : INV/2026/0001</Text>
+              <Text style={[styles.receiptMeta, { flexShrink: 1 }]}>
+                No : INV/2026/0001
+              </Text>
               <Text style={styles.receiptMeta}>
                 {new Date().toLocaleDateString("id-ID", {
                   day: "2-digit",
@@ -1412,8 +1414,11 @@ const styles = StyleSheet.create({
   },
   receiptMetaRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     alignItems: "center",
+    columnGap: 8,
+    rowGap: 2,
     marginTop: 3,
   },
   receiptMeta: {
